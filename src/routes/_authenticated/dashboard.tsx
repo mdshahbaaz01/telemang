@@ -32,6 +32,7 @@ import { toast } from "sonner";
 import { LogOut, Pencil, Plus, RefreshCw, RotateCcw, Trash2 } from "lucide-react";
 import { AdminGate } from "@/components/AdminGate";
 import { AccountIdPaste } from "@/components/AccountIdPaste";
+import { ThemeCustomizer } from "@/components/theme-customizer";
 
 export const Route = createFileRoute("/_authenticated/dashboard")({
   component: () => (
@@ -148,6 +149,7 @@ function Dashboard() {
                 New Task
               </Button>
             </Link>
+            <ThemeCustomizer />
             <Button variant="ghost" size="icon" onClick={signOut} aria-label="Sign out">
               <LogOut className="h-4 w-4" />
             </Button>
