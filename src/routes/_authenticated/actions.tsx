@@ -61,6 +61,30 @@ function parseMessageLink(input: string): { chat: string; msgId: number } | null
   return { chat: m[1], msgId: Number(m[2]) };
 }
 
+// The schedule picker shows "wall clock" time. Users in India expect that to
+// mean IST (Asia/Kolkata) no matter what timezone their browser is set to,
+// so we always interpret the datetime-local value as IST (+05:30) before
+// converting to UTC for the server.
+function istWallClockToDate(local: string): Date {
+  const withSeconds = /T\d{2}:\d{2}:\d{2}/.test(local) ? local : `${local}:00`;
+  return new Date(`${withSeconds}+05:30`);
+}
+
+const IST_FORMATTER = new Intl.DateTimeFormat("en-IN", {
+  timeZone: "Asia/Kolkata",
+  year: "numeric",
+  month: "2-digit",
+  day: "2-digit",
+  hour: "2-digit",
+  minute: "2-digit",
+  second: "2-digit",
+  hour12: true,
+});
+
+function formatIst(d: Date): string {
+  return `${IST_FORMATTER.format(d)} IST`;
+}
+
 function ActionsPage() {
   return <ActionsPageInner />;
 }
@@ -567,8 +591,10 @@ function ActionsPageInner() {
       toast.error("Pick a schedule time (with seconds)");
       return;
     }
-    // datetime-local returns local wall-clock without a timezone — convert to ISO.
-    const when = new Date(scheduledAt);
+    // datetime-local returns a wall-clock string with no timezone. Always
+    // treat it as IST so scheduling works the same whether the user's
+    // device is in India or elsewhere.
+    const when = istWallClockToDate(scheduledAt);
     if (Number.isNaN(when.getTime())) return toast.error("Invalid schedule time");
     if (when.getTime() < Date.now() + 5_000) {
       return toast.error("Schedule at least 5 seconds in the future");
@@ -589,7 +615,7 @@ function ActionsPageInner() {
           maxDelay,
         },
       });
-      toast.success(`Scheduled for ${when.toLocaleString()} (fires within ±1s)`);
+      toast.success(`Scheduled for ${formatIst(when)} (fires within ±1s)`);
       setScheduledAt("");
       await qc.invalidateQueries({ queryKey: ["scheduled-broadcasts"] });
       return res;
@@ -605,7 +631,7 @@ function ActionsPageInner() {
       toast.error("Pick a schedule time (with seconds)");
       return null;
     }
-    const when = new Date(scheduledAt);
+    const when = istWallClockToDate(scheduledAt);
     if (Number.isNaN(when.getTime())) {
       toast.error("Invalid schedule time");
       return null;
@@ -659,7 +685,7 @@ function ActionsPageInner() {
           maxDelay,
         },
       });
-      toast.success(`Scheduled for ${when.toLocaleString()} (fires within ±1s)`);
+      toast.success(`Scheduled for ${formatIst(when)} (fires within ±1s)`);
       setScheduledAt("");
       await qc.invalidateQueries({ queryKey: ["scheduled-broadcasts"] });
     } catch (e) {
@@ -688,7 +714,7 @@ function ActionsPageInner() {
           maxDelay,
         },
       });
-      toast.success(`Scheduled for ${when.toLocaleString()} (fires within ±1s)`);
+      toast.success(`Scheduled for ${formatIst(when)} (fires within ±1s)`);
       setScheduledAt("");
       await qc.invalidateQueries({ queryKey: ["scheduled-broadcasts"] });
     } catch (e) {
@@ -719,7 +745,7 @@ function ActionsPageInner() {
     setScheduling(true);
     try {
       await createSchedFn({ data: { scheduledAt: when.toISOString(), op, minDelay, maxDelay } });
-      toast.success(`Scheduled for ${when.toLocaleString()} (continues automatically)`);
+      toast.success(`Scheduled for ${formatIst(when)} (continues automatically)`);
       setScheduledAt("");
       await qc.invalidateQueries({ queryKey: ["scheduled-broadcasts"] });
     } catch (e) {
@@ -1466,6 +1492,7 @@ function ActionsPageInner() {
                       className="bg-transparent text-sm outline-none"
                       title="Schedule time (with seconds — accurate to ±1s)"
                     />
+                    <span className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">IST</span>
                   </div>
                   <Button
                     type="button"
@@ -1529,14 +1556,7 @@ function ActionsPageInner() {
                       >
                         <Clock className="h-3.5 w-3.5 text-muted-foreground" />
                         <span className="font-mono text-xs">
-                          {when.toLocaleString(undefined, {
-                            year: "numeric",
-                            month: "2-digit",
-                            day: "2-digit",
-                            hour: "2-digit",
-                            minute: "2-digit",
-                            second: "2-digit",
-                          })}
+                          {formatIst(when)}
                         </span>
                         <span className="rounded bg-muted px-1.5 py-0.5 text-[10px] uppercase tracking-wide">
                           {s.kind}
