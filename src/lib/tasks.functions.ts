@@ -382,7 +382,7 @@ export const resetGroupItems = createServerFn({ method: "POST" })
       .from("join_tasks")
       .update({ status: "idle", updated_at: new Date().toISOString() })
       .in("id", ids);
-    return { reset: count ?? 0 };
+    return { reset: updated?.length ?? 0 };
   });
 
 export const getTask = createServerFn({ method: "GET" })
