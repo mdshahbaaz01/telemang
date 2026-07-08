@@ -1,5 +1,4 @@
-import { Moon, Palette, Sun } from "lucide-react";
-import { Button } from "@/components/ui/button";
+import { useEffect, useState } from "react";
 import { themeAccents, useTheme } from "@/components/theme-provider";
 
 const labels = {
@@ -11,18 +10,45 @@ const labels = {
 
 export function ThemeCustomizer() {
   const { theme, accent, setTheme, setAccent } = useTheme();
+  const [isDark, setIsDark] = useState(false);
+  useEffect(() => {
+    if (theme === "dark") setIsDark(true);
+    else if (theme === "light") setIsDark(false);
+    else if (typeof window !== "undefined")
+      setIsDark(window.matchMedia("(prefers-color-scheme: dark)").matches);
+  }, [theme]);
   return (
-    <div className="flex items-center gap-1 rounded-md border border-border bg-background p-1">
-      <Button type="button" variant={theme === "light" ? "secondary" : "ghost"} size="icon" onClick={() => setTheme("light")} aria-label="Light mode">
-        <Sun className="h-4 w-4" />
-      </Button>
-      <Button type="button" variant={theme === "dark" ? "secondary" : "ghost"} size="icon" onClick={() => setTheme("dark")} aria-label="Dark mode">
-        <Moon className="h-4 w-4" />
-      </Button>
-      <Button type="button" variant={theme === "system" ? "secondary" : "ghost"} size="icon" onClick={() => setTheme("system")} aria-label="System theme">
-        <Palette className="h-4 w-4" />
-      </Button>
-      <div className="mx-1 h-5 w-px bg-border" />
+    <div className="flex items-center gap-3 rounded-md border border-border bg-background p-1 pl-2">
+      <label className="theme-switch" aria-label="Toggle dark mode">
+        <input
+          type="checkbox"
+          checked={isDark}
+          onChange={(e) => setTheme(e.target.checked ? "dark" : "light")}
+        />
+        <div className="slider">
+          <div className="sun-moon">
+            <svg className="moon-dot moon-dot-1" viewBox="0 0 100 100"><circle cx="50" cy="50" r="50" /></svg>
+            <svg className="moon-dot moon-dot-2" viewBox="0 0 100 100"><circle cx="50" cy="50" r="50" /></svg>
+            <svg className="moon-dot moon-dot-3" viewBox="0 0 100 100"><circle cx="50" cy="50" r="50" /></svg>
+            <svg className="light-ray light-ray-1" viewBox="0 0 100 100"><circle cx="50" cy="50" r="50" /></svg>
+            <svg className="light-ray light-ray-2" viewBox="0 0 100 100"><circle cx="50" cy="50" r="50" /></svg>
+            <svg className="light-ray light-ray-3" viewBox="0 0 100 100"><circle cx="50" cy="50" r="50" /></svg>
+            <svg className="cloud-dark cloud-1" viewBox="0 0 100 100"><circle cx="50" cy="50" r="50" /></svg>
+            <svg className="cloud-dark cloud-2" viewBox="0 0 100 100"><circle cx="50" cy="50" r="50" /></svg>
+            <svg className="cloud-dark cloud-3" viewBox="0 0 100 100"><circle cx="50" cy="50" r="50" /></svg>
+            <svg className="cloud-light cloud-4" viewBox="0 0 100 100"><circle cx="50" cy="50" r="50" /></svg>
+            <svg className="cloud-light cloud-5" viewBox="0 0 100 100"><circle cx="50" cy="50" r="50" /></svg>
+            <svg className="cloud-light cloud-6" viewBox="0 0 100 100"><circle cx="50" cy="50" r="50" /></svg>
+          </div>
+          <div className="stars">
+            <svg className="star star-1" viewBox="0 0 20 20"><path d="M 0 10 C 10 10,10 10 ,0 10 C 10 10 , 10 10 , 10 20 C 10 10 , 10 10 , 20 10 C 10 10 , 10 10 , 10 0 C 10 10,10 10 ,0 10 Z" /></svg>
+            <svg className="star star-2" viewBox="0 0 20 20"><path d="M 0 10 C 10 10,10 10 ,0 10 C 10 10 , 10 10 , 10 20 C 10 10 , 10 10 , 20 10 C 10 10 , 10 10 , 10 0 C 10 10,10 10 ,0 10 Z" /></svg>
+            <svg className="star star-3" viewBox="0 0 20 20"><path d="M 0 10 C 10 10,10 10 ,0 10 C 10 10 , 10 10 , 10 20 C 10 10 , 10 10 , 20 10 C 10 10 , 10 10 , 10 0 C 10 10,10 10 ,0 10 Z" /></svg>
+            <svg className="star star-4" viewBox="0 0 20 20"><path d="M 0 10 C 10 10,10 10 ,0 10 C 10 10 , 10 10 , 10 20 C 10 10 , 10 10 , 20 10 C 10 10 , 10 10 , 10 0 C 10 10,10 10 ,0 10 Z" /></svg>
+          </div>
+        </div>
+      </label>
+      <div className="h-5 w-px bg-border" />
       {(Object.keys(themeAccents) as Array<keyof typeof themeAccents>).map((key) => (
         <button
           key={key}
