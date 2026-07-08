@@ -591,8 +591,10 @@ function ActionsPageInner() {
       toast.error("Pick a schedule time (with seconds)");
       return;
     }
-    // datetime-local returns local wall-clock without a timezone — convert to ISO.
-    const when = new Date(scheduledAt);
+    // datetime-local returns a wall-clock string with no timezone. Always
+    // treat it as IST so scheduling works the same whether the user's
+    // device is in India or elsewhere.
+    const when = istWallClockToDate(scheduledAt);
     if (Number.isNaN(when.getTime())) return toast.error("Invalid schedule time");
     if (when.getTime() < Date.now() + 5_000) {
       return toast.error("Schedule at least 5 seconds in the future");
@@ -613,7 +615,7 @@ function ActionsPageInner() {
           maxDelay,
         },
       });
-      toast.success(`Scheduled for ${when.toLocaleString()} (fires within ±1s)`);
+      toast.success(`Scheduled for ${formatIst(when)} (fires within ±1s)`);
       setScheduledAt("");
       await qc.invalidateQueries({ queryKey: ["scheduled-broadcasts"] });
       return res;
@@ -629,7 +631,7 @@ function ActionsPageInner() {
       toast.error("Pick a schedule time (with seconds)");
       return null;
     }
-    const when = new Date(scheduledAt);
+    const when = istWallClockToDate(scheduledAt);
     if (Number.isNaN(when.getTime())) {
       toast.error("Invalid schedule time");
       return null;
@@ -683,7 +685,7 @@ function ActionsPageInner() {
           maxDelay,
         },
       });
-      toast.success(`Scheduled for ${when.toLocaleString()} (fires within ±1s)`);
+      toast.success(`Scheduled for ${formatIst(when)} (fires within ±1s)`);
       setScheduledAt("");
       await qc.invalidateQueries({ queryKey: ["scheduled-broadcasts"] });
     } catch (e) {
@@ -712,7 +714,7 @@ function ActionsPageInner() {
           maxDelay,
         },
       });
-      toast.success(`Scheduled for ${when.toLocaleString()} (fires within ±1s)`);
+      toast.success(`Scheduled for ${formatIst(when)} (fires within ±1s)`);
       setScheduledAt("");
       await qc.invalidateQueries({ queryKey: ["scheduled-broadcasts"] });
     } catch (e) {
@@ -743,7 +745,7 @@ function ActionsPageInner() {
     setScheduling(true);
     try {
       await createSchedFn({ data: { scheduledAt: when.toISOString(), op, minDelay, maxDelay } });
-      toast.success(`Scheduled for ${when.toLocaleString()} (continues automatically)`);
+      toast.success(`Scheduled for ${formatIst(when)} (continues automatically)`);
       setScheduledAt("");
       await qc.invalidateQueries({ queryKey: ["scheduled-broadcasts"] });
     } catch (e) {
