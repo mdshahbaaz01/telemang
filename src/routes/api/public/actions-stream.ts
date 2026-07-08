@@ -13,6 +13,8 @@ const reactSchema = z.object({
   kind: z.literal("react"),
   source: msgRefSchema,
   emoji: z.string().min(1).max(20),
+  customEmojiId: z.string().regex(/^\d+$/).optional(),
+  retake: z.boolean().optional(),
 });
 
 const forwardSchema = z.object({
@@ -25,13 +27,25 @@ const voteSchema = z.object({
   kind: z.literal("vote"),
   source: msgRefSchema,
   options: z.array(z.number().int().min(0).max(20)).min(1).max(10),
+  retake: z.boolean().optional(),
+});
+
+const broadcastRowSchema = z.object({
+  accountId: z.string().uuid(),
+  message: z.string().min(1).max(4096),
+  targets: z.array(z.string().min(1).max(200)).min(1).max(500),
+});
+
+const broadcastSchema = z.object({
+  kind: z.literal("broadcast"),
+  rows: z.array(broadcastRowSchema).min(1).max(200),
 });
 
 const bodySchema = z.object({
-  accountIds: z.array(z.string().uuid()).min(1).max(50),
+  accountIds: z.array(z.string().uuid()).min(0).max(200).default([]),
   minDelay: z.number().int().min(0).max(60).default(2),
   maxDelay: z.number().int().min(0).max(60).default(6),
-  op: z.discriminatedUnion("kind", [reactSchema, forwardSchema, voteSchema]),
+  op: z.discriminatedUnion("kind", [reactSchema, forwardSchema, voteSchema, broadcastSchema]),
 });
 
 function sseEncode(event: string, data: unknown): Uint8Array {
