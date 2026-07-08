@@ -1,30 +1,21 @@
 import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
+import { openClientForAccount } from "./cleanup.server";
+
+type CleanupPeer =
+  | { kind: "user"; id: string; accessHash: string }
+  | { kind: "channel"; id: string; accessHash: string }
+  | { kind: "chat"; id: string };
 
 type DialogRow = {
+  key: string;
   id: string;
   type: "user" | "bot" | "chat" | "channel" | "megagroup";
   title: string;
   username: string | null;
+  peer: CleanupPeer;
 };
-
-async function openClientForAccount(supabase: any, accountId: string) {
-  const { decryptString } = await import("./crypto.server");
-  const { createTgClient } = await import("./telegram-client.server");
-  const { data: acct, error } = await supabase
-    .from("telegram_accounts")
-    .select("id, api_id, api_hash_enc, session_enc, status")
-    .eq("id", accountId)
-    .single();
-  if (error || !acct) throw new Error("Account not found");
-  if (acct.status === "disabled") throw new Error("Account disabled");
-  if (!acct.session_enc) throw new Error("Account not logged in");
-  const apiHash = await decryptString(acct.api_hash_enc);
-  const sessionStr = await decryptString(acct.session_enc);
-  const client = await createTgClient(acct.api_id, apiHash, sessionStr);
-  return client;
-}
 
 export const listDialogs = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
@@ -36,9 +27,32 @@ export const listDialogs = createServerFn({ method: "POST" })
     try {
       const dialogs = await client.getDialogs({ limit: 300 });
       const rows: DialogRow[] = [];
+      const serializePeer = (inputPeer: any, entity: any): CleanupPeer | null => {
+        if (inputPeer?.className === "InputPeerUser") {
+          return {
+            kind: "user",
+            id: String(inputPeer.userId),
+            accessHash: String(inputPeer.accessHash),
+          };
+        }
+        if (inputPeer?.className === "InputPeerChannel") {
+          return {
+            kind: "channel",
+            id: String(inputPeer.channelId),
+            accessHash: String(inputPeer.accessHash),
+          };
+        }
+        if (inputPeer?.className === "InputPeerChat") {
+          return { kind: "chat", id: String(inputPeer.chatId) };
+        }
+        if (entity?.className === "Chat") return { kind: "chat", id: String(entity.id) };
+        return null;
+      };
       for (const d of dialogs) {
         const e = d.entity as any;
         if (!e) continue;
+        const peer = serializePeer((d as any).inputEntity, e);
+        if (!peer) continue;
         const idStr = String(e.id);
         let type: DialogRow["type"] = "chat";
         if (e.className === "User") type = e.bot ? "bot" : "user";
@@ -51,10 +65,12 @@ export const listDialogs = createServerFn({ method: "POST" })
           e.username ||
           idStr;
         rows.push({
+          key: `${peer.kind}:${peer.id}`,
           id: idStr,
           type,
           title,
           username: e.username ?? null,
+          peer,
         });
       }
       return rows;
@@ -63,9 +79,26 @@ export const listDialogs = createServerFn({ method: "POST" })
     }
   });
 
+const peerSchema = z.discriminatedUnion("kind", [
+  z.object({ kind: z.literal("user"), id: z.string(), accessHash: z.string() }),
+  z.object({ kind: z.literal("channel"), id: z.string(), accessHash: z.string() }),
+  z.object({ kind: z.literal("chat"), id: z.string() }),
+]);
+
 const runSchema = z.object({
   accountId: z.string().uuid(),
-  targets: z.array(z.string()).min(1).max(500),
+  targets: z
+    .array(
+      z.object({
+        key: z.string(),
+        id: z.string(),
+        type: z.enum(["user", "bot", "chat", "channel", "megagroup"]),
+        title: z.string(),
+        peer: peerSchema,
+      }),
+    )
+    .min(1)
+    .max(500),
   action: z.enum(["leave", "block", "deleteHistory"]),
 });
 
@@ -75,23 +108,37 @@ export const runCleanup = createServerFn({ method: "POST" })
   .handler(async ({ data, context }) => {
     const client = await openClientForAccount(context.supabase, data.accountId);
     const { Api } = await import("telegram");
+    const { default: bigInt } = await import("big-integer");
+    const toInputPeer = (target: (typeof data.targets)[number]) => {
+      if (target.peer.kind === "user") {
+        return new Api.InputPeerUser({
+          userId: bigInt(target.peer.id),
+          accessHash: bigInt(target.peer.accessHash),
+        });
+      }
+      if (target.peer.kind === "channel") {
+        return new Api.InputPeerChannel({
+          channelId: bigInt(target.peer.id),
+          accessHash: bigInt(target.peer.accessHash),
+        });
+      }
+      return new Api.InputPeerChat({ chatId: bigInt(target.peer.id) });
+    };
     const results: { target: string; ok: boolean; error?: string }[] = [];
     try {
       for (const t of data.targets) {
+        const label = `${t.title} (${t.id})`;
         try {
-          const entity = await client.getEntity(
-            /^-?\d+$/.test(t) ? (BigInt(t) as any) : t,
-          );
-          const e = entity as any;
+          const entity = toInputPeer(t);
           if (data.action === "leave") {
-            if (e.className === "Channel") {
+            if (t.peer.kind === "channel") {
               await client.invoke(
                 new Api.channels.LeaveChannel({ channel: entity as any }),
               );
-            } else if (e.className === "Chat") {
+            } else if (t.peer.kind === "chat") {
               await client.invoke(
                 new Api.messages.DeleteChatUser({
-                  chatId: e.id,
+                  chatId: bigInt(t.peer.id),
                   userId: new Api.InputUserSelf(),
                   revokeHistory: false,
                 }),
@@ -100,13 +147,13 @@ export const runCleanup = createServerFn({ method: "POST" })
               throw new Error("Not a group/channel");
             }
           } else if (data.action === "block") {
-            if (e.className !== "User")
+            if (t.peer.kind !== "user")
               throw new Error("Block only applies to users/bots");
             await client.invoke(
               new Api.contacts.Block({ id: entity as any }),
             );
           } else if (data.action === "deleteHistory") {
-            if (e.className === "Channel") {
+            if (t.peer.kind === "channel") {
               await client.invoke(
                 new Api.channels.DeleteHistory({
                   channel: entity as any,
@@ -125,12 +172,12 @@ export const runCleanup = createServerFn({ method: "POST" })
               );
             }
           }
-          results.push({ target: t, ok: true });
+          results.push({ target: label, ok: true });
           // small pause to avoid flood
           await new Promise((r) => setTimeout(r, 400));
         } catch (err) {
           results.push({
-            target: t,
+            target: label,
             ok: false,
             error: (err as Error).message || String(err),
           });
