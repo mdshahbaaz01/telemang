@@ -8,7 +8,6 @@ import { AdminGate } from "@/components/AdminGate";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Textarea } from "@/components/ui/textarea";
 import { toast } from "sonner";
 import { Play, Square, ArrowLeft } from "lucide-react";
 
@@ -32,11 +31,7 @@ function BotFlowPage() {
   const listAcc = useServerFn(listAccounts);
   const accountsQ = useQuery({ queryKey: ["accounts"], queryFn: () => listAcc() });
 
-  const [bot, setBot] = useState("");
-  const [startParam, setStartParam] = useState("");
-  const [steps, setSteps] = useState("text:/start\nwait:3");
-  const [minDelay, setMinDelay] = useState(2);
-  const [maxDelay, setMaxDelay] = useState(5);
+  const [referLink, setReferLink] = useState("");
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [logs, setLogs] = useState<LogEntry[]>([]);
   const [running, setRunning] = useState(false);
@@ -45,6 +40,28 @@ function BotFlowPage() {
 
   const accountList = accountsQ.data ?? [];
   const allIds = useMemo(() => accountList.map((a) => a.id), [accountList]);
+
+  // Parse a bot referral link/handle preview for the user.
+  const parsed = useMemo(() => {
+    const raw = referLink.trim();
+    if (!raw) return null;
+    try {
+      let username = "";
+      let startParam = "";
+      if (raw.startsWith("@")) {
+        username = raw.slice(1);
+      } else if (raw.includes("t.me/") || raw.startsWith("http")) {
+        const url = new URL(raw.startsWith("http") ? raw : `https://${raw}`);
+        username = url.pathname.replace(/^\/+/, "").split("/")[0];
+        startParam = url.searchParams.get("start") || url.searchParams.get("startapp") || "";
+      } else {
+        username = raw;
+      }
+      return { username, startParam };
+    } catch {
+      return { username: raw, startParam: "" };
+    }
+  }, [referLink]);
 
   const addLog = (l: Omit<LogEntry, "ts">) =>
     setLogs((prev) => [{ ...l, ts: Date.now() }, ...prev].slice(0, 500));
@@ -89,9 +106,8 @@ function BotFlowPage() {
   };
 
   const run = async () => {
-    if (!bot.trim()) return toast.error("Enter a bot username or link");
-    const stepList = steps.split(/\r?\n/).map((s) => s.trim()).filter(Boolean);
-    if (!stepList.length) return toast.error("Add at least one step");
+    const link = referLink.trim();
+    if (!link) return toast.error("Paste a bot referral link");
     const accountIds = selectedIds.length ? selectedIds : allIds;
     if (!accountIds.length) return toast.error("Select at least one account");
 
@@ -110,13 +126,15 @@ function BotFlowPage() {
         headers: { "content-type": "application/json", authorization: `Bearer ${token}` },
         body: JSON.stringify({
           accountIds,
-          minDelay,
-          maxDelay,
+          minDelay: 2,
+          maxDelay: 5,
           op: {
             kind: "botflow",
-            bot: bot.trim(),
-            ...(startParam.trim() ? { startParam: startParam.trim() } : {}),
-            steps: stepList,
+            bot: link,
+            // A no-op step keeps the server schema happy; /start (with the ref
+            // param parsed from the link) is fired before steps run, so the
+            // referrer is already credited by then.
+            steps: ["wait:2"],
           },
         }),
         signal: ac.signal,
@@ -148,57 +166,35 @@ function BotFlowPage() {
         <h1 className="text-2xl font-semibold tracking-tight">Bot Flow</h1>
 
         <section className="rounded-lg border border-border bg-card p-4 space-y-4">
-          <h2 className="text-lg font-medium">Run scripted steps</h2>
-
-          <div className="grid gap-3 md:grid-cols-2">
-            <div>
-              <Label>Bot username or link</Label>
-              <Input
-                value={bot}
-                onChange={(e) => setBot(e.target.value)}
-                placeholder="@botname, t.me/botname, or https://t.me/botname?start=REFCODE"
-              />
-              <p className="mt-1 text-xs text-muted-foreground">
-                Paste a full referral link and the <code>start</code>/<code>startapp</code> code is used automatically.
-              </p>
-            </div>
-            <div>
-              <Label>Start parameter (optional override)</Label>
-              <Input
-                value={startParam}
-                onChange={(e) => setStartParam(e.target.value)}
-                placeholder="Leave blank to use the one from the link"
-              />
-            </div>
-          </div>
+          <h2 className="text-lg font-medium">Run a bot with your referral link</h2>
 
           <div>
-            <Label>Steps</Label>
-            <Textarea
-              rows={8}
-              value={steps}
-              onChange={(e) => setSteps(e.target.value)}
-              placeholder="text:/start&#10;wait:3&#10;click:Join&#10;text:Done"
-              className="font-mono text-sm"
+            <Label>Bot referral link</Label>
+            <Input
+              value={referLink}
+              onChange={(e) => setReferLink(e.target.value)}
+              placeholder="https://t.me/somebot?start=YOUR_REF_CODE"
             />
-            <div className="mt-1 text-xs text-muted-foreground space-y-0.5">
-              <div><code>text:&lt;message&gt;</code> — send text</div>
-              <div><code>click:&lt;button label&gt;</code> — tap an inline/reply button matching the label</div>
-              <div><code>wait:&lt;seconds&gt;</code> — pause (max 120s)</div>
-              <div><code>start:&lt;param&gt;</code> — call /start again with a param</div>
-              <div>Lines starting with <code>#</code> are ignored.</div>
-            </div>
-          </div>
-
-          <div className="grid grid-cols-2 gap-3">
-            <div>
-              <Label>Min delay between steps (s)</Label>
-              <Input type="number" value={minDelay} onChange={(e) => setMinDelay(Number(e.target.value))} />
-            </div>
-            <div>
-              <Label>Max delay between steps (s)</Label>
-              <Input type="number" value={maxDelay} onChange={(e) => setMaxDelay(Number(e.target.value))} />
-            </div>
+            <p className="mt-1 text-xs text-muted-foreground">
+              Paste your full referral URL. Every selected account will
+              <code className="mx-1">/start</code>
+              the bot using this link, so the refer count goes to your ref code.
+            </p>
+            {parsed?.username && (
+              <div className="mt-2 text-xs text-muted-foreground">
+                Bot: <span className="font-mono text-foreground">@{parsed.username}</span>
+                {parsed.startParam ? (
+                  <>
+                    {" "}· Ref code:{" "}
+                    <span className="font-mono text-foreground">{parsed.startParam}</span>
+                  </>
+                ) : (
+                  <span className="text-yellow-600 dark:text-yellow-400">
+                    {" "}· No <code>start</code> code found in the link
+                  </span>
+                )}
+              </div>
+            )}
           </div>
 
           <div className="space-y-2">
