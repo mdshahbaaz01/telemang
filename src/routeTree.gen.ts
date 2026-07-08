@@ -15,6 +15,7 @@ import { Route as IndexRouteImport } from './routes/index'
 import { Route as AuthenticatedOwnerRouteImport } from './routes/_authenticated/owner'
 import { Route as AuthenticatedDashboardRouteImport } from './routes/_authenticated/dashboard'
 import { Route as AuthenticatedCleanupRouteImport } from './routes/_authenticated/cleanup'
+import { Route as AuthenticatedButtonsRouteImport } from './routes/_authenticated/buttons'
 import { Route as AuthenticatedBotFlowRouteImport } from './routes/_authenticated/bot-flow'
 import { Route as AuthenticatedAlertsRouteImport } from './routes/_authenticated/alerts'
 import { Route as AuthenticatedActionsRouteImport } from './routes/_authenticated/actions'
@@ -52,6 +53,11 @@ const AuthenticatedDashboardRoute = AuthenticatedDashboardRouteImport.update({
 const AuthenticatedCleanupRoute = AuthenticatedCleanupRouteImport.update({
   id: '/cleanup',
   path: '/cleanup',
+  getParentRoute: () => AuthenticatedRouteRoute,
+} as any)
+const AuthenticatedButtonsRoute = AuthenticatedButtonsRouteImport.update({
+  id: '/buttons',
+  path: '/buttons',
   getParentRoute: () => AuthenticatedRouteRoute,
 } as any)
 const AuthenticatedBotFlowRoute = AuthenticatedBotFlowRouteImport.update({
@@ -107,6 +113,7 @@ export interface FileRoutesByFullPath {
   '/actions': typeof AuthenticatedActionsRoute
   '/alerts': typeof AuthenticatedAlertsRoute
   '/bot-flow': typeof AuthenticatedBotFlowRoute
+  '/buttons': typeof AuthenticatedButtonsRoute
   '/cleanup': typeof AuthenticatedCleanupRoute
   '/dashboard': typeof AuthenticatedDashboardRoute
   '/owner': typeof AuthenticatedOwnerRoute
@@ -123,6 +130,7 @@ export interface FileRoutesByTo {
   '/actions': typeof AuthenticatedActionsRoute
   '/alerts': typeof AuthenticatedAlertsRoute
   '/bot-flow': typeof AuthenticatedBotFlowRoute
+  '/buttons': typeof AuthenticatedButtonsRoute
   '/cleanup': typeof AuthenticatedCleanupRoute
   '/dashboard': typeof AuthenticatedDashboardRoute
   '/owner': typeof AuthenticatedOwnerRoute
@@ -141,6 +149,7 @@ export interface FileRoutesById {
   '/_authenticated/actions': typeof AuthenticatedActionsRoute
   '/_authenticated/alerts': typeof AuthenticatedAlertsRoute
   '/_authenticated/bot-flow': typeof AuthenticatedBotFlowRoute
+  '/_authenticated/buttons': typeof AuthenticatedButtonsRoute
   '/_authenticated/cleanup': typeof AuthenticatedCleanupRoute
   '/_authenticated/dashboard': typeof AuthenticatedDashboardRoute
   '/_authenticated/owner': typeof AuthenticatedOwnerRoute
@@ -159,6 +168,7 @@ export interface FileRouteTypes {
     | '/actions'
     | '/alerts'
     | '/bot-flow'
+    | '/buttons'
     | '/cleanup'
     | '/dashboard'
     | '/owner'
@@ -175,6 +185,7 @@ export interface FileRouteTypes {
     | '/actions'
     | '/alerts'
     | '/bot-flow'
+    | '/buttons'
     | '/cleanup'
     | '/dashboard'
     | '/owner'
@@ -192,6 +203,7 @@ export interface FileRouteTypes {
     | '/_authenticated/actions'
     | '/_authenticated/alerts'
     | '/_authenticated/bot-flow'
+    | '/_authenticated/buttons'
     | '/_authenticated/cleanup'
     | '/_authenticated/dashboard'
     | '/_authenticated/owner'
@@ -254,6 +266,13 @@ declare module '@tanstack/react-router' {
       path: '/cleanup'
       fullPath: '/cleanup'
       preLoaderRoute: typeof AuthenticatedCleanupRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
+    '/_authenticated/buttons': {
+      id: '/_authenticated/buttons'
+      path: '/buttons'
+      fullPath: '/buttons'
+      preLoaderRoute: typeof AuthenticatedButtonsRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
     '/_authenticated/bot-flow': {
@@ -326,6 +345,7 @@ interface AuthenticatedRouteRouteChildren {
   AuthenticatedActionsRoute: typeof AuthenticatedActionsRoute
   AuthenticatedAlertsRoute: typeof AuthenticatedAlertsRoute
   AuthenticatedBotFlowRoute: typeof AuthenticatedBotFlowRoute
+  AuthenticatedButtonsRoute: typeof AuthenticatedButtonsRoute
   AuthenticatedCleanupRoute: typeof AuthenticatedCleanupRoute
   AuthenticatedDashboardRoute: typeof AuthenticatedDashboardRoute
   AuthenticatedOwnerRoute: typeof AuthenticatedOwnerRoute
@@ -338,6 +358,7 @@ const AuthenticatedRouteRouteChildren: AuthenticatedRouteRouteChildren = {
   AuthenticatedActionsRoute: AuthenticatedActionsRoute,
   AuthenticatedAlertsRoute: AuthenticatedAlertsRoute,
   AuthenticatedBotFlowRoute: AuthenticatedBotFlowRoute,
+  AuthenticatedButtonsRoute: AuthenticatedButtonsRoute,
   AuthenticatedCleanupRoute: AuthenticatedCleanupRoute,
   AuthenticatedDashboardRoute: AuthenticatedDashboardRoute,
   AuthenticatedOwnerRoute: AuthenticatedOwnerRoute,
