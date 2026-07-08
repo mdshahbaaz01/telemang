@@ -96,7 +96,7 @@ function NewTaskPage() {
                 <Input value={name} onChange={(e) => setName(e.target.value)} required />
               </div>
               <div>
-                <Label>Targets (one per line, @username or t.me/link)</Label>
+                <Label>Targets (one per line, @username, t.me/+invite, or t.me/joinchat/invite)</Label>
                 <Textarea
                   rows={6}
                   value={targets}

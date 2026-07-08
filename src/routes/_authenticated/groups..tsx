@@ -190,6 +190,7 @@ function TaskColumn({
   const items = taskQ.data?.items ?? [];
   const total = items.length;
   const joined = items.filter((i) => i.status === "joined").length;
+  const requested = items.filter((i) => i.status === "requested").length;
   const failed = items.filter((i) => i.status === "failed").length;
   const pending = items.filter((i) => i.status === "pending").length;
   const current = items.find((i) => i.status === "pending");
@@ -210,7 +211,7 @@ function TaskColumn({
           )}
         </div>
         <div className="text-xs text-muted-foreground">
-          {joined}/{total} joined · {failed} failed · {pending} pending
+          {joined}/{total} joined · {requested} requested · {failed} failed · {pending} pending
         </div>
         {current && (
           <div className="mt-1 truncate text-xs">
@@ -230,7 +231,7 @@ function TaskColumn({
               <span className="truncate">@{i.target}</span>
               <span
                 className={
-                  i.status === "joined"
+                  i.status === "joined" || i.status === "requested"
                     ? "text-green-500"
                     : i.status === "failed"
                       ? "text-destructive"

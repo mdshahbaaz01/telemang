@@ -16,7 +16,12 @@ function parseTargets(raw: string): string[] {
     .split(/\r?\n|,|\s/)
     .map((s) => s.trim())
     .filter(Boolean)
-    .map((s) => s.replace(/^https?:\/\/t\.me\//i, "").replace(/^@/, ""));
+    .map((s) =>
+      s
+        .replace(/^https?:\/\/(?:t\.me|telegram\.me)\//i, "")
+        .replace(/[?#].*$/, "")
+        .replace(/^@/, ""),
+    );
 }
 export { parseTargets };
 
@@ -207,26 +212,90 @@ export const processNextJoin = createServerFn({ method: "POST" })
         `Joining @${item.target}…`,
       );
       try {
-        await client.invoke(
-          new Api.channels.JoinChannel({ channel: item.target }),
-        );
+        const target = item.target.trim().replace(/^@/, "").replace(/[?#].*$/, "");
+        const inviteHash = target.startsWith("+")
+          ? target.slice(1)
+          : target.toLowerCase().startsWith("joinchat/")
+            ? target.slice("joinchat/".length)
+            : null;
+
+        let result: { status: "joined" | "requested"; message: string; note: string | null };
+
+        if (inviteHash) {
+          const invite = await client.invoke(
+            new Api.messages.CheckChatInvite({ hash: inviteHash }),
+          );
+          if (invite.className === "ChatInviteAlready") {
+            result = { status: "joined", message: `Already joined ${item.target}`, note: null };
+          } else {
+            const requestNeeded = Boolean((invite as { requestNeeded?: boolean }).requestNeeded);
+            await client.invoke(new Api.messages.ImportChatInvite({ hash: inviteHash }));
+            result = requestNeeded
+              ? {
+                  status: "requested",
+                  message: `Join request sent for ${item.target}`,
+                  note: "waiting for channel approval",
+                }
+              : { status: "joined", message: `Joined ${item.target}`, note: null };
+          }
+        } else {
+          await client.invoke(new Api.channels.JoinChannel({ channel: target }));
+          result = { status: "joined", message: `Joined @${target}`, note: null };
+        }
+
+        statusUpdate = {
+          status: result.status,
+          error: result.note,
+          processed_at: new Date().toISOString(),
+        };
         await log(
           supabase,
           task.id,
           context.userId,
           "success",
-          `Joined @${item.target}`,
+          result.message,
         );
       } catch (e) {
         const err = e as { message?: string; seconds?: number };
         const msg = err.message || String(e);
-        if (msg.includes("FLOOD_WAIT") || err.seconds) {
-          const seconds = err.seconds ?? 60;
+        if (msg.includes("USER_ALREADY_PARTICIPANT")) {
+          statusUpdate = {
+            status: "joined",
+            error: null,
+            processed_at: new Date().toISOString(),
+          };
+          await log(
+            supabase,
+            task.id,
+            context.userId,
+            "success",
+            `Already joined @${item.target}`,
+          );
+        } else if (msg.includes("INVITE_REQUEST_SENT")) {
+          statusUpdate = {
+            status: "requested",
+            error: "waiting for channel approval",
+            processed_at: new Date().toISOString(),
+          };
+          await log(
+            supabase,
+            task.id,
+            context.userId,
+            "success",
+            `Join request sent for ${item.target}`,
+          );
+        } else if (msg.includes("FLOOD_WAIT") || err.seconds) {
+          const match = msg.match(/FLOOD_WAIT_?(\d+)/i);
+          const seconds = err.seconds ?? (match ? Number(match[1]) : 60);
           const pausedUntil = new Date(Date.now() + seconds * 1000).toISOString();
           await supabase
             .from("telegram_accounts")
             .update({ paused_until: pausedUntil, last_error: msg })
             .eq("id", acct.id);
+          await supabase
+            .from("join_tasks")
+            .update({ status: "paused", updated_at: new Date().toISOString() })
+            .eq("id", task.id);
           statusUpdate = {
             status: "pending",
             error: `FloodWait ${seconds}s`,
@@ -237,7 +306,7 @@ export const processNextJoin = createServerFn({ method: "POST" })
             task.id,
             context.userId,
             "warn",
-            `FloodWait ${seconds}s — account paused`,
+            `FloodWait ${seconds}s — Telegram rate limited this account until ${pausedUntil}`,
           );
           return {
             done: false,

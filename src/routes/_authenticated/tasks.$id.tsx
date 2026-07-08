@@ -103,6 +103,7 @@ function TaskDetail() {
   const items = taskQ.data?.items ?? [];
   const pending = items.filter((i) => i.status === "pending").length;
   const joined = items.filter((i) => i.status === "joined").length;
+  const requested = items.filter((i) => i.status === "requested").length;
   const failed = items.filter((i) => i.status === "failed").length;
 
   return (
@@ -115,7 +116,7 @@ function TaskDetail() {
             </Link>
             <h1 className="text-xl font-semibold">{task?.name ?? "Task"}</h1>
             <p className="text-xs text-muted-foreground">
-              status: {task?.status} · {joined} joined · {failed} failed · {pending} pending
+              status: {task?.status} · {joined} joined · {requested} requested · {failed} failed · {pending} pending
             </p>
           </div>
           <div className="flex gap-2">
@@ -165,7 +166,7 @@ function TaskDetail() {
                 <span>@{i.target}</span>
                 <span
                   className={
-                    i.status === "joined"
+                    i.status === "joined" || i.status === "requested"
                       ? "text-xs text-green-500"
                       : i.status === "failed"
                         ? "text-xs text-destructive"

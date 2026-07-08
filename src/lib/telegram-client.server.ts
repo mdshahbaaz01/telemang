@@ -13,6 +13,8 @@ export async function createTgClient(
     {
       connectionRetries: 2,
       useWSS: true,
+      // Never let GramJS sleep inside a request on FloodWait; surface it so the UI can pause/skip cleanly.
+      floodSleepThreshold: 0,
       // Suppress internal chatty logs
       baseLogger: undefined as unknown as never,
     },
