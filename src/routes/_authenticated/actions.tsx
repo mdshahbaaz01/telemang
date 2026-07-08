@@ -572,8 +572,26 @@ function ActionsPageInner() {
 
             {tab === "broadcast" && (
               <div className="space-y-3">
+                <div className="flex flex-wrap gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setBroadcastMode("per-account")}
+                    className={`rounded border px-3 py-1 text-xs ${broadcastMode === "per-account" ? "border-primary bg-primary/10 font-medium" : "border-border text-muted-foreground"}`}
+                  >
+                    Per-account rows
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setBroadcastMode("all-ids")}
+                    className={`rounded border px-3 py-1 text-xs ${broadcastMode === "all-ids" ? "border-primary bg-primary/10 font-medium" : "border-border text-muted-foreground"}`}
+                  >
+                    Same message from all IDs
+                  </button>
+                </div>
                 <p className="text-xs text-muted-foreground">
-                  Each row: one account sends its message to all listed targets (users, groups, or channels). Rows run in parallel — so multiple accounts can post different messages into the same group at the same time, or one account can spray one message across many groups.
+                  {broadcastMode === "per-account"
+                    ? "Each row: the chosen account sends its message to all listed targets. Rows run in parallel — multiple accounts can post different messages into the same group at the same time, or one account can spray one message across many groups."
+                    : "Every row is sent from every account. Same message goes out from all IDs in parallel."}
                 </p>
                 {rows.map((row, idx) => (
                   <div key={row.id} className="rounded-md border border-border p-3 space-y-2">
@@ -588,6 +606,25 @@ function ActionsPageInner() {
                         Remove
                       </button>
                     </div>
+                    {broadcastMode === "per-account" && (
+                      <div>
+                        <Label>Account</Label>
+                        <select
+                          className="w-full rounded-md border border-border bg-background px-2 py-2 text-sm"
+                          value={row.accountId ?? ""}
+                          onChange={(e) =>
+                            setRows((rs) => rs.map((r) => (r.id === row.id ? { ...r, accountId: e.target.value } : r)))
+                          }
+                        >
+                          <option value="">— Pick account —</option>
+                          {accountList.map((a) => (
+                            <option key={a.id} value={a.id}>
+                              {a.first_name || a.username || a.phone}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                    )}
                     <div>
                       <Label>Message</Label>
                       <Textarea
@@ -634,12 +671,30 @@ function ActionsPageInner() {
 
             {tab === "reply" && (
               <div className="space-y-3">
+                <div className="flex flex-wrap gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setReplyMode("per-account")}
+                    className={`rounded border px-3 py-1 text-xs ${replyMode === "per-account" ? "border-primary bg-primary/10 font-medium" : "border-border text-muted-foreground"}`}
+                  >
+                    Per-account rows
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setReplyMode("all-ids")}
+                    className={`rounded border px-3 py-1 text-xs ${replyMode === "all-ids" ? "border-primary bg-primary/10 font-medium" : "border-border text-muted-foreground"}`}
+                  >
+                    Same message from all IDs
+                  </button>
+                </div>
                 <label className="flex items-center gap-2 text-sm">
                   <input type="checkbox" checked={viaDiscussion} onChange={(e) => setViaDiscussion(e.target.checked)} />
                   Comment under a channel post (reply lands in the channel's linked discussion group)
                 </label>
                 <p className="text-xs text-muted-foreground">
-                  Uncheck to reply directly to a message in a group or DM. Each row runs in parallel — every account sends its own different reply/comment.
+                  {replyMode === "per-account"
+                    ? "Each row: the chosen account sends this reply/comment. Rows run in parallel — different accounts can post different replies on the same post."
+                    : "Same reply text goes out from every account (round-robin if you add multiple rows)."}
                 </p>
                 {replyRows.map((row, idx) => (
                   <div key={row.id} className="rounded-md border border-border p-3 space-y-2">
@@ -654,6 +709,25 @@ function ActionsPageInner() {
                         Remove
                       </button>
                     </div>
+                    {replyMode === "per-account" && (
+                      <div>
+                        <Label>Account</Label>
+                        <select
+                          className="w-full rounded-md border border-border bg-background px-2 py-2 text-sm"
+                          value={row.accountId ?? ""}
+                          onChange={(e) =>
+                            setReplyRows((rs) => rs.map((r) => (r.id === row.id ? { ...r, accountId: e.target.value } : r)))
+                          }
+                        >
+                          <option value="">— Pick account —</option>
+                          {accountList.map((a) => (
+                            <option key={a.id} value={a.id}>
+                              {a.first_name || a.username || a.phone}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                    )}
                     <div>
                       <Label>Message</Label>
                       <Textarea
