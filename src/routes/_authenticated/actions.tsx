@@ -1171,8 +1171,30 @@ function ActionsPageInner() {
               })}
             </div>
           </div>
+
+          <HistorySection
+            runs={runsQ.data ?? []}
+            accountList={accountList}
+            loading={runsQ.isLoading}
+            onRerun={rerunFromParams}
+            onEdit={(r) => setEditingRun(r)}
+            onDelete={deleteRun}
+            onRefresh={() => qc.invalidateQueries({ queryKey: ["action-runs"] })}
+          />
         </section>
       </div>
+
+      {editingRun && (
+        <EditRunDialog
+          run={editingRun}
+          accountList={accountList}
+          onClose={() => setEditingRun(null)}
+          onSave={async (newParams) => {
+            setEditingRun(null);
+            await rerunFromParams(newParams);
+          }}
+        />
+      )}
     </main>
   );
 }
