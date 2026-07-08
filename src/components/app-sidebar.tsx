@@ -2,7 +2,7 @@ import { Link, useRouterState } from "@tanstack/react-router";
 import {
   LayoutDashboard,
   ShieldCheck,
-  Broom,
+  Brush,
   Radio,
   Megaphone,
   Bot,
@@ -32,7 +32,7 @@ type Item = {
 const items: Item[] = [
   { title: "Dashboard", to: "/dashboard", icon: LayoutDashboard },
   { title: "Owner Panel", to: "/owner", icon: ShieldCheck },
-  { title: "Cleanup", to: "/cleanup", icon: Broom },
+  { title: "Cleanup", to: "/cleanup", icon: Brush },
   {
     title: "Actions",
     to: "/actions",
