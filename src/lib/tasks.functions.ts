@@ -732,7 +732,7 @@ export const processBatchJoin = createServerFn({ method: "POST" })
     const sessionStr = await decryptString(acct.session_enc);
     const client = await createTgClient(acct.api_id, apiHash, sessionStr);
 
-    let floodPaused: { seconds: number } | null = null;
+    let floodPaused = null as { seconds: number } | null;
 
     const processOne = async (item: { id: string; target: string }) => {
       let statusUpdate: {
