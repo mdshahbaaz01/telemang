@@ -7,9 +7,11 @@ export type HistoryEntry = {
   id: string;
   expression: string;
   result: string;
+  pinned?: boolean;
 };
 
 const STORAGE_KEY = "calc-history-v1";
+const MAX_UNPINNED = 50;
 
 function compute(a: number, b: number, op: Op): number {
   switch (op) {
@@ -38,6 +40,7 @@ export function Calculator() {
   const [expression, setExpression] = useState("");
   const [history, setHistory] = useState<HistoryEntry[]>([]);
   const [historyQuery, setHistoryQuery] = useState("");
+  const [copiedId, setCopiedId] = useState<string | null>(null);
 
   // Load history from localStorage after mount (avoids SSR hydration mismatch).
   useEffect(() => {
@@ -133,10 +136,19 @@ export function Calculator() {
     setExpression(`${expr} =`);
     setDisplay(resStr);
     if (resStr !== "Error") {
-      setHistory((h) => [
-        { id: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`, expression: expr, result: resStr },
-        ...h,
-      ].slice(0, 50));
+      const entry: HistoryEntry = {
+        id: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+        expression: expr,
+        result: resStr,
+      };
+      setHistory((h) => {
+        const pinned = h.filter((e) => e.pinned);
+        const unpinned = [entry, ...h.filter((e) => !e.pinned)].slice(
+          0,
+          MAX_UNPINNED,
+        );
+        return [...pinned, ...unpinned];
+      });
     }
     setPrevious(null);
     setOp(null);
@@ -189,14 +201,67 @@ export function Calculator() {
 
   const clearHistory = () => setHistory([]);
 
+  const togglePin = (id: string) => {
+    setHistory((h) => h.map((e) => (e.id === id ? { ...e, pinned: !e.pinned } : e)));
+  };
+
+  const copyEntry = async (e: HistoryEntry) => {
+    const text = `${e.expression} = ${e.result}`;
+    try {
+      await navigator.clipboard.writeText(text);
+      setCopiedId(e.id);
+      window.setTimeout(() => setCopiedId((c) => (c === e.id ? null : c)), 1200);
+    } catch {
+      // ignore
+    }
+  };
+
+  const download = (filename: string, mime: string, content: string) => {
+    const blob = new Blob([content], { type: mime });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  };
+
+  const exportJSON = () => {
+    download(
+      `calculator-history-${new Date().toISOString().slice(0, 10)}.json`,
+      "application/json",
+      JSON.stringify(history, null, 2),
+    );
+  };
+
+  const exportCSV = () => {
+    const esc = (s: string) => `"${s.replace(/"/g, '""')}"`;
+    const rows = [
+      ["expression", "result", "pinned"].join(","),
+      ...history.map((h) =>
+        [esc(h.expression), esc(h.result), h.pinned ? "true" : "false"].join(","),
+      ),
+    ].join("\n");
+    download(
+      `calculator-history-${new Date().toISOString().slice(0, 10)}.csv`,
+      "text/csv",
+      rows,
+    );
+  };
+
   const q = historyQuery.trim().toLowerCase();
+  const sortedHistory = [...history].sort(
+    (a, b) => (b.pinned ? 1 : 0) - (a.pinned ? 1 : 0),
+  );
   const filteredHistory = q
-    ? history.filter(
+    ? sortedHistory.filter(
         (h) =>
           h.expression.toLowerCase().includes(q) ||
           h.result.toLowerCase().includes(q),
       )
-    : history;
+    : sortedHistory;
 
   return (
     <div className="flex w-full flex-col gap-4 md:flex-row md:items-start md:justify-center">
