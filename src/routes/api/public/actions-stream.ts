@@ -254,11 +254,17 @@ export const Route = createFileRoute("/api/public/actions-stream")({
             const resolveSource = async (client: any, src: { chat: string; msgId: number }) => {
               let peer: any;
               if (src.chat.startsWith("c/")) {
-                // Private channel numeric id
+                // Private channel numeric id — resolve via PeerChannel so gramjs
+                // treats it as a channel (a raw positive int is interpreted as a
+                // user id and produces "Could not find the input entity … PeerUser").
                 const raw = src.chat.slice(2);
                 const { default: bigInt } = await import("big-integer");
-                // Try full channel resolution — accessHash unknown, so fetch via getEntity is safer
-                peer = await client.getEntity(bigInt(raw));
+                try {
+                  peer = await client.getEntity(new Api.PeerChannel({ channelId: bigInt(raw) }));
+                } catch {
+                  // Fallback: try the full t.me link so gramjs can resolve the invite/join state.
+                  peer = await client.getEntity(`https://t.me/c/${raw}/${src.msgId}`);
+                }
               } else {
                 peer = await client.getEntity(src.chat.replace(/^@/, ""));
               }
@@ -270,7 +276,11 @@ export const Route = createFileRoute("/api/public/actions-stream")({
               if (/^c\/\d+/.test(cleaned)) {
                 const raw = cleaned.split("/")[1];
                 const { default: bigInt } = await import("big-integer");
-                return await client.getEntity(bigInt(raw));
+                try {
+                  return await client.getEntity(new Api.PeerChannel({ channelId: bigInt(raw) }));
+                } catch {
+                  return await client.getEntity(`https://t.me/${cleaned}`);
+                }
               }
               return await client.getEntity(cleaned);
             };
