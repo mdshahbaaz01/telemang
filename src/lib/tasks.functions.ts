@@ -101,12 +101,9 @@ export const setTaskStatus = createServerFn({ method: "POST" })
     return { ok: true };
   });
 
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
 async function log(
-  supabase: {
-    from: (t: string) => {
-      insert: (v: unknown) => Promise<{ error: { message: string } | null }>;
-    };
-  },
+  supabase: any,
   taskId: string,
   userId: string,
   level: "info" | "warn" | "error" | "success",
