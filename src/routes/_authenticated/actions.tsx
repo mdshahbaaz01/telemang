@@ -40,6 +40,43 @@ function parseMessageLink(input: string): { chat: string; msgId: number } | null
 }
 
 function ActionsPage() {
+  return <ActionsPageInner />;
+}
+
+function DelayFields({
+  minDelay,
+  maxDelay,
+  setMin,
+  setMax,
+}: {
+  minDelay: number;
+  maxDelay: number;
+  setMin: (n: number) => void;
+  setMax: (n: number) => void;
+}) {
+  return (
+    <div className="grid grid-cols-2 gap-3">
+      <div>
+        <Label>Min delay (s)</Label>
+        <Input
+          type="number"
+          value={minDelay}
+          onChange={(e) => setMin(Number(e.target.value))}
+        />
+      </div>
+      <div>
+        <Label>Max delay (s)</Label>
+        <Input
+          type="number"
+          value={maxDelay}
+          onChange={(e) => setMax(Number(e.target.value))}
+        />
+      </div>
+    </div>
+  );
+}
+
+function ActionsPageInner() {
   const listAcc = useServerFn(listAccounts);
   const accountsQ = useQuery({ queryKey: ["accounts"], queryFn: () => listAcc() });
 
@@ -267,15 +304,23 @@ function ActionsPage() {
             </div>
 
             {tab === "react" && (
-              <div>
-                <Label>Emoji</Label>
-                <Input
-                  value={emoji}
-                  onChange={(e) => setEmoji(e.target.value)}
-                  maxLength={20}
-                  className="w-24"
+              <>
+                <div>
+                  <Label>Emoji</Label>
+                  <Input
+                    value={emoji}
+                    onChange={(e) => setEmoji(e.target.value)}
+                    maxLength={20}
+                    className="w-24"
+                  />
+                </div>
+                <DelayFields
+                  minDelay={minDelay}
+                  maxDelay={maxDelay}
+                  setMin={setMinDelay}
+                  setMax={setMaxDelay}
                 />
-              </div>
+              </>
             )}
 
             {tab === "forward" && (
@@ -311,14 +356,22 @@ function ActionsPage() {
             )}
 
             {tab === "vote" && (
-              <div>
-                <Label>Option indexes (0-based, comma-separated)</Label>
-                <Input
-                  value={options}
-                  onChange={(e) => setOptions(e.target.value)}
-                  placeholder="0 or 0,2 for multi-select polls"
+              <>
+                <div>
+                  <Label>Option indexes (0-based, comma-separated)</Label>
+                  <Input
+                    value={options}
+                    onChange={(e) => setOptions(e.target.value)}
+                    placeholder="0 or 0,2 for multi-select polls"
+                  />
+                </div>
+                <DelayFields
+                  minDelay={minDelay}
+                  maxDelay={maxDelay}
+                  setMin={setMinDelay}
+                  setMax={setMaxDelay}
                 />
-              </div>
+              </>
             )}
 
             <div className="flex gap-2 pt-2">
