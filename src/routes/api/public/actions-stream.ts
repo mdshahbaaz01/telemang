@@ -202,6 +202,20 @@ export const Route = createFileRoute("/api/public/actions-stream")({
 
                 if (body.op.kind === "react") {
                   try {
+                    await new Promise((r) =>
+                      setTimeout(r, jitter(body.minDelay, body.maxDelay)),
+                    );
+                    // Bump view count like a real user opening the post
+                    try {
+                      await client.invoke(
+                        new Api.messages.GetMessagesViews({
+                          peer: sourcePeer,
+                          id: [src.msgId],
+                          increment: true,
+                        }),
+                      );
+                      send("log", { accountId, level: "info", target: `${src.chat}/${src.msgId}`, message: "Viewed post" });
+                    } catch {}
                     await client.invoke(
                       new Api.messages.SendReaction({
                         peer: sourcePeer,
@@ -223,6 +237,19 @@ export const Route = createFileRoute("/api/public/actions-stream")({
                   }
                 } else if (body.op.kind === "vote") {
                   try {
+                    await new Promise((r) =>
+                      setTimeout(r, jitter(body.minDelay, body.maxDelay)),
+                    );
+                    try {
+                      await client.invoke(
+                        new Api.messages.GetMessagesViews({
+                          peer: sourcePeer,
+                          id: [src.msgId],
+                          increment: true,
+                        }),
+                      );
+                      send("log", { accountId, level: "info", target: `${src.chat}/${src.msgId}`, message: "Viewed post" });
+                    } catch {}
                     const [msg] = await client.getMessages(sourcePeer, { ids: [src.msgId] });
                     if (!msg?.poll) throw new Error("Message is not a poll");
                     const pollObj = (msg.poll as { poll?: { answers?: Array<{ option: Uint8Array }> } }).poll;
