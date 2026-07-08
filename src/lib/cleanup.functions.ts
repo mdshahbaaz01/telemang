@@ -17,13 +17,27 @@ type DialogRow = {
   peer: CleanupPeer;
 };
 
+async function assertAdmin(supabase: any, userId: string) {
+  const { data, error } = await supabase
+    .from("user_roles")
+    .select("role")
+    .eq("user_id", userId);
+  if (error) throw new Error(error.message);
+  if (!(data ?? []).some((r: any) => r.role === "admin")) {
+    throw new Error("Forbidden: admin only");
+  }
+}
+
 export const listDialogs = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .inputValidator((d: unknown) =>
     z.object({ accountId: z.string().uuid() }).parse(d),
   )
   .handler(async ({ data, context }): Promise<DialogRow[]> => {
-    const client = await openClientForAccount(context.supabase, data.accountId);
+    await assertAdmin(context.supabase, context.userId);
+    const client = await openClientForAccount(context.supabase, data.accountId, {
+      requireOwnerId: context.userId,
+    });
     try {
       const dialogs = await client.getDialogs({ limit: 300 });
       const rows: DialogRow[] = [];
@@ -106,7 +120,10 @@ export const runCleanup = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .inputValidator((d: unknown) => runSchema.parse(d))
   .handler(async ({ data, context }) => {
-    const client = await openClientForAccount(context.supabase, data.accountId);
+    await assertAdmin(context.supabase, context.userId);
+    const client = await openClientForAccount(context.supabase, data.accountId, {
+      requireOwnerId: context.userId,
+    });
     const { Api } = await import("telegram");
     const { default: bigInt } = await import("big-integer");
     const toInputPeer = (target: (typeof data.targets)[number]) => {
