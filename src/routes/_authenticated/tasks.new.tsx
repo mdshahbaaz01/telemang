@@ -43,6 +43,8 @@ function NewTaskPage() {
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
     const parsed = parseTargets(targets);
+    const min = Math.max(0, Math.trunc(Number(minDelay) || 0));
+    const max = Math.max(min, Math.trunc(Number(maxDelay) || min));
     if (!parsed.length) return toast.error("Add at least one target");
     if (!selectedIds.length) return toast.error("Pick at least one account");
     setBusy(true);
@@ -57,8 +59,8 @@ function NewTaskPage() {
               accountId,
               name: selectedIds.length > 1 ? `${name} · ${label}` : name,
               targets: parsed,
-              minDelay: Number(minDelay),
-              maxDelay: Number(maxDelay),
+              minDelay: min,
+              maxDelay: max,
               groupId,
             },
           });
