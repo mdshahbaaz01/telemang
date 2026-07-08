@@ -17,6 +17,22 @@ export const Route = createFileRoute("/api/public/hooks/run-scheduled-broadcasts
           auth: { storage: undefined, persistSession: false, autoRefreshToken: false },
         });
 
+        // ── Stale-run watchdog ────────────────────────────────────────────
+        // Any row stuck in "running" for > 5 minutes means the previous
+        // worker request timed out mid-dispatch (Cloudflare Workers cap
+        // request length). Mark it failed so it can be retried and doesn't
+        // block the queue forever.
+        const staleCutoff = new Date(Date.now() - 5 * 60_000).toISOString();
+        await admin
+          .from("scheduled_broadcasts")
+          .update({
+            status: "failed",
+            completed_at: new Date().toISOString(),
+            error: "Worker timed out before finishing (auto-recovered). Use Retry to run again.",
+          })
+          .eq("status", "running")
+          .lt("dispatched_at", staleCutoff);
+
         const now = Date.now();
         const horizon = new Date(now + 90_000).toISOString();
         const { data: due, error } = await admin
