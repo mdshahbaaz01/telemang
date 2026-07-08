@@ -470,7 +470,7 @@ export const addAccountsToGroup = createServerFn({ method: "POST" })
         first_name: string | null;
       }) => [a.id, a]),
     );
-    const baseName = tpl.name.split(" · ")[0];
+    const baseName = (tpl.name ?? "task").split(" · ")[0];
 
     let added = 0;
     for (const accountId of toAdd) {
