@@ -338,13 +338,31 @@ export function Calculator() {
           <h2 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground">
             History
           </h2>
-          <button
-            onClick={clearHistory}
-            disabled={history.length === 0}
-            className="rounded-md px-2 py-1 text-xs text-muted-foreground hover:bg-muted disabled:opacity-40 disabled:hover:bg-transparent"
-          >
-            Clear
-          </button>
+          <div className="flex items-center gap-1">
+            <button
+              onClick={exportCSV}
+              disabled={history.length === 0}
+              title="Export as CSV"
+              className="rounded-md px-2 py-1 text-xs text-muted-foreground hover:bg-muted disabled:opacity-40 disabled:hover:bg-transparent"
+            >
+              CSV
+            </button>
+            <button
+              onClick={exportJSON}
+              disabled={history.length === 0}
+              title="Export as JSON"
+              className="rounded-md px-2 py-1 text-xs text-muted-foreground hover:bg-muted disabled:opacity-40 disabled:hover:bg-transparent"
+            >
+              JSON
+            </button>
+            <button
+              onClick={clearHistory}
+              disabled={history.length === 0}
+              className="rounded-md px-2 py-1 text-xs text-muted-foreground hover:bg-muted disabled:opacity-40 disabled:hover:bg-transparent"
+            >
+              Clear
+            </button>
+          </div>
         </div>
         <div className="relative mb-3">
           <input
@@ -377,19 +395,44 @@ export function Calculator() {
         ) : (
           <ul className="max-h-96 space-y-1 overflow-y-auto pr-1">
             {filteredHistory.map((h) => (
-              <li key={h.id}>
+              <li
+                key={h.id}
+                className={cn(
+                  "group relative flex items-stretch gap-1 rounded-xl transition-colors hover:bg-muted",
+                  h.pinned && "bg-muted/60",
+                )}
+              >
                 <button
                   onClick={() => useHistoryResult(h.result)}
-                  className="w-full rounded-xl px-3 py-2 text-right transition-colors hover:bg-muted"
+                  className="flex-1 min-w-0 rounded-xl px-3 py-2 text-right"
                   title="Use this result"
                 >
-                  <div className="text-xs text-muted-foreground truncate">
-                    {h.expression} =
+                  <div className="flex items-center justify-end gap-1 text-xs text-muted-foreground truncate">
+                    {h.pinned && <span aria-label="Pinned">📌</span>}
+                    <span className="truncate">{h.expression} =</span>
                   </div>
                   <div className="text-lg font-medium text-foreground truncate">
                     {h.result}
                   </div>
                 </button>
+                <div className="flex flex-col items-center justify-center gap-0.5 pr-1 opacity-0 transition-opacity group-hover:opacity-100 focus-within:opacity-100">
+                  <button
+                    onClick={() => copyEntry(h)}
+                    title="Copy to clipboard"
+                    aria-label="Copy to clipboard"
+                    className="rounded-md px-1.5 py-0.5 text-xs text-muted-foreground hover:bg-background"
+                  >
+                    {copiedId === h.id ? "✓" : "⧉"}
+                  </button>
+                  <button
+                    onClick={() => togglePin(h.id)}
+                    title={h.pinned ? "Unpin" : "Pin"}
+                    aria-label={h.pinned ? "Unpin entry" : "Pin entry"}
+                    className="rounded-md px-1.5 py-0.5 text-xs text-muted-foreground hover:bg-background"
+                  >
+                    {h.pinned ? "📍" : "📌"}
+                  </button>
+                </div>
               </li>
             ))}
           </ul>
