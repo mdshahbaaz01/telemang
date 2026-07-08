@@ -156,17 +156,11 @@ export const processNextJoin = createServerFn({ method: "POST" })
 
     const { data: acct, error: aerr } = await supabase
       .from("telegram_accounts")
-      .select("id, api_id, api_hash_enc, session_enc, paused_until, phone")
+      .select("id, api_id, api_hash_enc, session_enc, paused_until, phone, status")
       .eq("id", task.account_id)
       .single();
     if (aerr || !acct) throw new Error("Account not found");
-    // Look up disabled status
-    const { data: acctFull } = await supabase
-      .from("telegram_accounts")
-      .select("status")
-      .eq("id", acct.id)
-      .single();
-    if (acctFull?.status === "disabled") {
+    if (acct.status === "disabled") {
       return { done: false, paused: true, message: "Account disabled" };
     }
     if (acct.paused_until && new Date(acct.paused_until) > new Date()) {
