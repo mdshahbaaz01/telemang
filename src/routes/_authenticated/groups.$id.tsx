@@ -418,8 +418,10 @@ function TaskColumn({
                       ? "text-destructive"
                       : "text-muted-foreground"
                 }
+                title={i.error ?? undefined}
               >
                 {i.status}
+                {i.status === "failed" && i.error ? ` · ${i.error}` : ""}
               </span>
             </div>
           ))
