@@ -67,11 +67,18 @@ const replySchema = z.object({
   rows: z.array(replyRowSchema).min(1).max(200),
 });
 
+const botFlowSchema = z.object({
+  kind: z.literal("botflow"),
+  bot: z.string().min(1).max(200),
+  startParam: z.string().max(200).optional(),
+  steps: z.array(z.string().min(1).max(4096)).min(1).max(50),
+});
+
 const bodySchema = z.object({
   accountIds: z.array(z.string().uuid()).min(0).max(200).default([]),
   minDelay: z.number().int().min(0).max(60).default(2),
   maxDelay: z.number().int().min(0).max(60).default(6),
-  op: z.discriminatedUnion("kind", [reactSchema, forwardSchema, voteSchema, broadcastSchema, replySchema]),
+  op: z.discriminatedUnion("kind", [reactSchema, forwardSchema, voteSchema, broadcastSchema, replySchema, botFlowSchema]),
 });
 
 function sseEncode(event: string, data: unknown): Uint8Array {
