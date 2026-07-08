@@ -414,24 +414,16 @@ function ActionsPageInner() {
       <div className="mx-auto grid max-w-7xl gap-6 px-4 py-6 md:grid-cols-[280px_1fr] md:px-8">
         {/* Accounts column */}
         <aside className="rounded-lg border border-border bg-card p-3">
-          <div className="mb-2 flex items-center justify-between">
-            <div className="text-sm font-medium">Accounts ({selected.size}/{accountList.length})</div>
-            <button className="text-xs underline" onClick={toggleAll}>
-              {allSelected ? "Clear" : "Select all"}
-            </button>
+          <div className="mb-2 text-sm font-medium">
+            All accounts ({accountList.length}) will be used
           </div>
           <div className="max-h-[70vh] space-y-1 overflow-auto">
             {accountList.map((a) => (
-              <label key={a.id} className="flex cursor-pointer items-center gap-2 rounded px-2 py-1 text-sm hover:bg-muted">
-                <input
-                  type="checkbox"
-                  checked={selected.has(a.id)}
-                  onChange={() => toggle(a.id)}
-                />
+              <div key={a.id} className="flex items-center gap-2 rounded px-2 py-1 text-sm">
                 <span className="truncate">
                   {a.first_name || a.username || a.phone}
                 </span>
-              </label>
+              </div>
             ))}
             {accountList.length === 0 && (
               <p className="text-xs text-muted-foreground">No accounts yet.</p>
