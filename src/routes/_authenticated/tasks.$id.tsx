@@ -11,9 +11,14 @@ import {
 } from "@/lib/tasks.functions";
 import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
+import { AdminGate } from "@/components/AdminGate";
 
 export const Route = createFileRoute("/_authenticated/tasks/$id")({
-  component: TaskDetail,
+  component: () => (
+    <AdminGate>
+      <TaskDetail />
+    </AdminGate>
+  ),
 });
 
 type LogRow = {
