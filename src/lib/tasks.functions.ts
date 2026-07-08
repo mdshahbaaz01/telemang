@@ -851,22 +851,6 @@ export const processBatchJoin = createServerFn({ method: "POST" })
     return { done: false, paused: false, processed: items.length };
   });
 
-const _recentLogs_marker = createServerFn({ method: "GET" })
-  .middleware([requireSupabaseAuth])
-  .inputValidator((d: unknown) =>
-    z.object({ taskId: z.string().uuid() }).parse(d),
-  )
-  .handler(async ({ data, context }) => {
-    const { data: rows, error } = await context.supabase
-      .from("task_logs")
-      .select("id, level, message, created_at")
-      .eq("task_id", data.taskId)
-      .order("created_at", { ascending: false })
-      .limit(200);
-    if (error) throw new Error(error.message);
-    return rows ?? [];
-  });
-
 export const groupLogs = createServerFn({ method: "GET" })
   .middleware([requireSupabaseAuth])
   .inputValidator((d: unknown) =>
