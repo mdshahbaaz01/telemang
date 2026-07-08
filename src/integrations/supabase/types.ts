@@ -14,7 +14,213 @@ export type Database = {
   }
   public: {
     Tables: {
-      [_ in never]: never
+      join_task_items: {
+        Row: {
+          error: string | null
+          id: string
+          position: number
+          processed_at: string | null
+          status: string
+          target: string
+          task_id: string
+          user_id: string
+        }
+        Insert: {
+          error?: string | null
+          id?: string
+          position?: number
+          processed_at?: string | null
+          status?: string
+          target: string
+          task_id: string
+          user_id: string
+        }
+        Update: {
+          error?: string | null
+          id?: string
+          position?: number
+          processed_at?: string | null
+          status?: string
+          target?: string
+          task_id?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "join_task_items_task_id_fkey"
+            columns: ["task_id"]
+            isOneToOne: false
+            referencedRelation: "join_tasks"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      join_tasks: {
+        Row: {
+          account_id: string
+          created_at: string
+          id: string
+          max_delay: number
+          min_delay: number
+          name: string | null
+          status: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          account_id: string
+          created_at?: string
+          id?: string
+          max_delay?: number
+          min_delay?: number
+          name?: string | null
+          status?: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          account_id?: string
+          created_at?: string
+          id?: string
+          max_delay?: number
+          min_delay?: number
+          name?: string | null
+          status?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "join_tasks_account_id_fkey"
+            columns: ["account_id"]
+            isOneToOne: false
+            referencedRelation: "telegram_accounts"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      login_attempts: {
+        Row: {
+          api_hash_enc: string
+          api_id: number
+          created_at: string
+          id: string
+          phone: string
+          phone_code_hash: string | null
+          session_enc: string | null
+          stage: string
+          user_id: string
+        }
+        Insert: {
+          api_hash_enc: string
+          api_id: number
+          created_at?: string
+          id?: string
+          phone: string
+          phone_code_hash?: string | null
+          session_enc?: string | null
+          stage?: string
+          user_id: string
+        }
+        Update: {
+          api_hash_enc?: string
+          api_id?: number
+          created_at?: string
+          id?: string
+          phone?: string
+          phone_code_hash?: string | null
+          session_enc?: string | null
+          stage?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
+      task_logs: {
+        Row: {
+          created_at: string
+          id: string
+          level: string
+          message: string
+          task_id: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          level?: string
+          message: string
+          task_id: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          level?: string
+          message?: string
+          task_id?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "task_logs_task_id_fkey"
+            columns: ["task_id"]
+            isOneToOne: false
+            referencedRelation: "join_tasks"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      telegram_accounts: {
+        Row: {
+          api_hash_enc: string
+          api_id: number
+          created_at: string
+          first_name: string | null
+          id: string
+          last_error: string | null
+          last_name: string | null
+          paused_until: string | null
+          phone: string
+          session_enc: string | null
+          status: string
+          updated_at: string
+          user_id: string
+          username: string | null
+        }
+        Insert: {
+          api_hash_enc: string
+          api_id: number
+          created_at?: string
+          first_name?: string | null
+          id?: string
+          last_error?: string | null
+          last_name?: string | null
+          paused_until?: string | null
+          phone: string
+          session_enc?: string | null
+          status?: string
+          updated_at?: string
+          user_id: string
+          username?: string | null
+        }
+        Update: {
+          api_hash_enc?: string
+          api_id?: number
+          created_at?: string
+          first_name?: string | null
+          id?: string
+          last_error?: string | null
+          last_name?: string | null
+          paused_until?: string | null
+          phone?: string
+          session_enc?: string | null
+          status?: string
+          updated_at?: string
+          user_id?: string
+          username?: string | null
+        }
+        Relationships: []
+      }
     }
     Views: {
       [_ in never]: never
