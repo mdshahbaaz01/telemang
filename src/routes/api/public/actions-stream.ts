@@ -12,9 +12,10 @@ const msgRefSchema = z.object({
 const reactSchema = z.object({
   kind: z.literal("react"),
   source: msgRefSchema,
-  emoji: z.string().min(1).max(20),
+  emoji: z.string().min(0).max(20).default(""),
   customEmojiId: z.string().regex(/^\d+$/).optional(),
   retake: z.boolean().optional(),
+  mode: z.enum(["apply", "clear"]).optional(),
 });
 
 const forwardSchema = z.object({
@@ -26,8 +27,9 @@ const forwardSchema = z.object({
 const voteSchema = z.object({
   kind: z.literal("vote"),
   source: msgRefSchema,
-  options: z.array(z.number().int().min(0).max(20)).min(1).max(10),
+  options: z.array(z.number().int().min(0).max(20)).max(10).default([]),
   retake: z.boolean().optional(),
+  mode: z.enum(["apply", "clear"]).optional(),
 });
 
 const attachmentSchema = z.object({
