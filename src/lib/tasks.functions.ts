@@ -649,6 +649,37 @@ export const recentLogs = createServerFn({ method: "GET" })
     return rows ?? [];
   });
 
+export const groupLogs = createServerFn({ method: "GET" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((d: unknown) =>
+    z.object({ groupId: z.string().uuid() }).parse(d),
+  )
+  .handler(async ({ data, context }) => {
+    const { data: tasks } = await context.supabase
+      .from("join_tasks")
+      .select("id, name")
+      .eq("group_id", data.groupId);
+    const ids = (tasks ?? []).map((t) => t.id as string);
+    if (!ids.length) return [];
+    const labelMap = new Map(
+      (tasks ?? []).map((t) => [
+        t.id as string,
+        ((t.name ?? "").split(" · ")[1] ?? "").trim(),
+      ]),
+    );
+    const { data: rows, error } = await context.supabase
+      .from("task_logs")
+      .select("id, task_id, level, message, created_at")
+      .in("task_id", ids)
+      .order("created_at", { ascending: false })
+      .limit(500);
+    if (error) throw new Error(error.message);
+    return (rows ?? []).map((r) => ({
+      ...r,
+      account: labelMap.get(r.task_id as string) ?? "",
+    }));
+  });
+
 // ---- Editing tasks: add/remove target items, add/remove accounts in a group ----
 
 export const addTaskItems = createServerFn({ method: "POST" })

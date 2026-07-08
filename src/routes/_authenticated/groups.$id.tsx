@@ -10,6 +10,7 @@ import {
   setTaskStatus,
   addAccountsToGroup,
   deleteJoinTask,
+  groupLogs,
 } from "@/lib/tasks.functions";
 import { listAccounts } from "@/lib/accounts.functions";
 import { Button } from "@/components/ui/button";
@@ -38,9 +39,15 @@ function GroupRunner() {
   const qc = useQueryClient();
   const listFn = useServerFn(getGroup);
   const delTask = useServerFn(deleteJoinTask);
+  const logsFn = useServerFn(groupLogs);
   const groupQ = useQuery({
     queryKey: ["group", id],
     queryFn: () => listFn({ data: { groupId: id } }),
+  });
+  const logsQ = useQuery({
+    queryKey: ["group-logs", id],
+    queryFn: () => logsFn({ data: { groupId: id } }),
+    refetchInterval: 3000,
   });
 
   const [allRunning, setAllRunning] = useState(false);
@@ -103,7 +110,7 @@ function GroupRunner() {
         {groupQ.isLoading ? (
           <p className="text-sm text-muted-foreground">Loading…</p>
         ) : (
-          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
             {tasks.map((t) => (
               <TaskColumn
                 key={t.id}
@@ -121,6 +128,41 @@ function GroupRunner() {
             ))}
           </div>
         )}
+
+        <section className="mt-8 rounded-lg border border-border bg-card p-4">
+          <div className="mb-2 flex items-center justify-between">
+            <h2 className="text-sm font-semibold">Live logs</h2>
+            <span className="text-xs text-muted-foreground">
+              {(logsQ.data ?? []).length} entries
+            </span>
+          </div>
+          <div className="max-h-96 overflow-auto rounded bg-muted/40 p-3 font-mono text-xs leading-relaxed">
+            {(logsQ.data ?? []).length === 0 ? (
+              <div className="text-muted-foreground">No activity yet</div>
+            ) : (
+              [...(logsQ.data ?? [])].reverse().map((l) => (
+                <div
+                  key={l.id}
+                  className={
+                    l.level === "error"
+                      ? "text-destructive"
+                      : l.level === "warn"
+                        ? "text-yellow-500"
+                        : l.level === "success"
+                          ? "text-green-500"
+                          : "text-foreground"
+                  }
+                >
+                  {new Date(l.created_at).toLocaleTimeString()} [{l.level}]
+                  {l.account ? (
+                    <span className="font-semibold"> {l.account}</span>
+                  ) : null}{" "}
+                  {l.message}
+                </div>
+              ))
+            )}
+          </div>
+        </section>
       </div>
     </main>
   );
@@ -376,8 +418,10 @@ function TaskColumn({
                       ? "text-destructive"
                       : "text-muted-foreground"
                 }
+                title={i.error ?? undefined}
               >
                 {i.status}
+                {i.status === "failed" && i.error ? ` · ${i.error}` : ""}
               </span>
             </div>
           ))
