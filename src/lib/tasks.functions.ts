@@ -8,6 +8,7 @@ const createTaskSchema = z.object({
   targets: z.array(z.string().min(1).max(200)).min(1).max(2000),
   minDelay: z.number().int().min(5).max(600).default(15),
   maxDelay: z.number().int().min(5).max(600).default(45),
+  groupId: z.string().uuid().optional(),
 });
 
 function parseTargets(raw: string): string[] {
@@ -32,6 +33,7 @@ export const createJoinTask = createServerFn({ method: "POST" })
         status: "idle",
         min_delay: data.minDelay,
         max_delay: data.maxDelay,
+        group_id: data.groupId ?? null,
       })
       .select("id")
       .single();
@@ -47,6 +49,23 @@ export const createJoinTask = createServerFn({ method: "POST" })
       .insert(items);
     if (ierr) throw new Error(ierr.message);
     return { taskId: task.id as string };
+  });
+
+export const getGroup = createServerFn({ method: "GET" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((d: unknown) =>
+    z.object({ groupId: z.string().uuid() }).parse(d),
+  )
+  .handler(async ({ data, context }) => {
+    const { data: tasks, error } = await context.supabase
+      .from("join_tasks")
+      .select(
+        "id, name, status, min_delay, max_delay, account_id, telegram_accounts(id, phone, username, first_name, status, paused_until)",
+      )
+      .eq("group_id", data.groupId)
+      .order("created_at");
+    if (error) throw new Error(error.message);
+    return tasks ?? [];
   });
 
 export const listTasks = createServerFn({ method: "GET" })
@@ -137,10 +156,13 @@ export const processNextJoin = createServerFn({ method: "POST" })
 
     const { data: acct, error: aerr } = await supabase
       .from("telegram_accounts")
-      .select("id, api_id, api_hash_enc, session_enc, paused_until, phone")
+      .select("id, api_id, api_hash_enc, session_enc, paused_until, phone, status")
       .eq("id", task.account_id)
       .single();
     if (aerr || !acct) throw new Error("Account not found");
+    if (acct.status === "disabled") {
+      return { done: false, paused: true, message: "Account disabled" };
+    }
     if (acct.paused_until && new Date(acct.paused_until) > new Date()) {
       return {
         done: false,

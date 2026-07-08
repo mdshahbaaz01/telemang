@@ -11,9 +11,14 @@ import { Textarea } from "@/components/ui/textarea";
 import { Checkbox } from "@/components/ui/checkbox";
 import { toast } from "sonner";
 import { ArrowLeft } from "lucide-react";
+import { AdminGate } from "@/components/AdminGate";
 
 export const Route = createFileRoute("/_authenticated/tasks/new")({
-  component: NewTaskPage,
+  component: () => (
+    <AdminGate>
+      <NewTaskPage />
+    </AdminGate>
+  ),
 });
 
 function NewTaskPage() {
@@ -40,6 +45,7 @@ function NewTaskPage() {
     if (!parsed.length) return toast.error("Add at least one target");
     if (!selectedIds.length) return toast.error("Pick at least one account");
     setBusy(true);
+    const groupId = crypto.randomUUID();
     try {
       const results = await Promise.allSettled(
         selectedIds.map((accountId) => {
@@ -52,6 +58,7 @@ function NewTaskPage() {
               targets: parsed,
               minDelay: Number(minDelay),
               maxDelay: Number(maxDelay),
+              groupId,
             },
           });
         }),
@@ -60,7 +67,7 @@ function NewTaskPage() {
       const failed = results.length - ok;
       if (ok) toast.success(`${ok} task${ok > 1 ? "s" : ""} created`);
       if (failed) toast.error(`${failed} failed`);
-      if (ok) nav({ to: "/dashboard" });
+      if (ok) nav({ to: "/groups/$id", params: { id: groupId } });
     } catch (err) {
       toast.error((err as Error).message);
     } finally {
