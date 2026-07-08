@@ -37,6 +37,7 @@ export function Calculator() {
   const [waiting, setWaiting] = useState(false);
   const [expression, setExpression] = useState("");
   const [history, setHistory] = useState<HistoryEntry[]>([]);
+  const [historyQuery, setHistoryQuery] = useState("");
 
   // Load history from localStorage after mount (avoids SSR hydration mismatch).
   useEffect(() => {
@@ -188,6 +189,15 @@ export function Calculator() {
 
   const clearHistory = () => setHistory([]);
 
+  const q = historyQuery.trim().toLowerCase();
+  const filteredHistory = q
+    ? history.filter(
+        (h) =>
+          h.expression.toLowerCase().includes(q) ||
+          h.result.toLowerCase().includes(q),
+      )
+    : history;
+
   return (
     <div className="flex w-full flex-col gap-4 md:flex-row md:items-start md:justify-center">
       <div className="w-full max-w-sm rounded-3xl bg-card p-5 shadow-2xl border border-border">
@@ -271,13 +281,37 @@ export function Calculator() {
             Clear
           </button>
         </div>
+        <div className="relative mb-3">
+          <input
+            type="text"
+            value={historyQuery}
+            onChange={(e) => setHistoryQuery(e.target.value)}
+            disabled={history.length === 0}
+            placeholder="Search history…"
+            aria-label="Search history"
+            className="w-full rounded-xl border border-border bg-background/50 px-3 py-2 pr-8 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring disabled:opacity-50"
+          />
+          {historyQuery && (
+            <button
+              onClick={() => setHistoryQuery("")}
+              aria-label="Clear search"
+              className="absolute right-2 top-1/2 -translate-y-1/2 rounded-md px-1.5 text-sm text-muted-foreground hover:bg-muted"
+            >
+              ×
+            </button>
+          )}
+        </div>
         {history.length === 0 ? (
           <p className="py-8 text-center text-sm text-muted-foreground">
             No calculations yet.
           </p>
+        ) : filteredHistory.length === 0 ? (
+          <p className="py-8 text-center text-sm text-muted-foreground">
+            No matches for "{historyQuery}".
+          </p>
         ) : (
           <ul className="max-h-96 space-y-1 overflow-y-auto pr-1">
-            {history.map((h) => (
+            {filteredHistory.map((h) => (
               <li key={h.id}>
                 <button
                   onClick={() => useHistoryResult(h.result)}
