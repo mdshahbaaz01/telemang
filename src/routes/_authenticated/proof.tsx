@@ -1,7 +1,7 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useServerFn } from "@tanstack/react-start";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { listAccounts } from "@/lib/accounts.functions";
 import {
   createProofTask,
@@ -24,6 +24,69 @@ import {
 import { toast } from "sonner";
 import { AdminGate } from "@/components/AdminGate";
 import { Camera, Play, RefreshCw } from "lucide-react";
+import {
+  buildChannelViewSvg,
+  buildChatListSvg,
+  SAMPLE_OTHERS,
+} from "@/lib/proof-render";
+
+function ProofPreview({
+  format,
+  channelLink,
+}: {
+  format: "auto" | "chat_list" | "channel_view";
+  channelLink: string;
+}) {
+  const svg = useMemo(() => {
+    const cleaned = (channelLink || "")
+      .trim()
+      .replace(/^https?:\/\/(?:www\.)?(?:t\.me|telegram\.me)\//i, "")
+      .replace(/^@/, "")
+      .replace(/^\+/, "")
+      .replace(/[?#].*$/, "")
+      .replace(/^joinchat\//i, "");
+    const title =
+      cleaned
+        .split(/[-_.\s/]+/)
+        .filter(Boolean)
+        .map((w) => w[0].toUpperCase() + w.slice(1))
+        .join(" ") || "Sample Channel";
+    const info = { title, username: cleaned || null, subscribers: 12_500 };
+    const isPrivateLike = /^[+]|^joinchat\//i.test(channelLink.trim());
+    const effective =
+      format === "auto" ? (isPrivateLike ? "chat_list" : "channel_view") : format;
+    return effective === "chat_list"
+      ? buildChatListSvg(info, SAMPLE_OTHERS)
+      : buildChannelViewSvg(info);
+  }, [format, channelLink]);
+
+  const dataUrl = `data:image/svg+xml;utf8,${encodeURIComponent(svg)}`;
+  const label =
+    format === "auto"
+      ? "Auto — preview shows chat list for private links, channel view otherwise"
+      : format === "chat_list"
+        ? "Chat list style"
+        : "Channel view style";
+
+  return (
+    <section className="rounded-lg border border-border bg-card p-4 md:p-6">
+      <div className="mb-3 flex items-center justify-between">
+        <h2 className="text-lg font-semibold">Live preview</h2>
+        <span className="text-xs text-muted-foreground">{label}</span>
+      </div>
+      <div className="flex justify-center rounded-md bg-[#0a1826] p-4">
+        <img
+          src={dataUrl}
+          alt="Screenshot preview"
+          className="max-h-[480px] w-auto rounded-md shadow-lg"
+        />
+      </div>
+      <p className="mt-2 text-center text-xs text-muted-foreground">
+        Preview uses sample data. Real screenshot uses the actual channel title, subscribers, and (for chat list) the account's recent chats.
+      </p>
+    </section>
+  );
+}
 
 export const Route = createFileRoute("/_authenticated/proof")({
   component: () => (
@@ -49,6 +112,7 @@ function ProofPage() {
   const [target, setTarget] = useState("");
   const [caption, setCaption] = useState("");
   const [format, setFormat] = useState<"auto" | "chat_list" | "channel_view">("auto");
+  const [parallel, setParallel] = useState<number>(1);
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [busy, setBusy] = useState(false);
   const [openTask, setOpenTask] = useState<string | null>(null);
@@ -70,6 +134,7 @@ function ProofPage() {
           target: target.trim(),
           caption: caption.trim() || null,
           format,
+          parallel: Math.max(1, Math.min(20, Math.trunc(parallel) || 1)),
           accountIds: selectedIds,
         },
       });
@@ -142,8 +207,23 @@ function ProofPage() {
                   </SelectContent>
                 </Select>
               </div>
+              <div>
+                <Label>Parallel accounts</Label>
+                <Input
+                  type="number"
+                  min={1}
+                  max={20}
+                  value={parallel}
+                  onChange={(e) => setParallel(Number(e.target.value) || 1)}
+                />
+                <p className="mt-1 text-xs text-muted-foreground">
+                  How many accounts run at the same time (1–20). Higher = faster, more Telegram rate-limit risk.
+                </p>
+              </div>
             </div>
           </section>
+
+          <ProofPreview format={format} channelLink={channelLink} />
 
           <section className="rounded-lg border border-border bg-card p-4 md:p-6">
             <h2 className="mb-4 text-lg font-semibold">Accounts</h2>
