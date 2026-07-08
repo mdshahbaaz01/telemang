@@ -77,17 +77,17 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
     meta: [
       { charSet: "utf-8" },
       { name: "viewport", content: "width=device-width, initial-scale=1" },
-      { title: "Calculator — Fast, Keyboard-Friendly Web Calculator" },
+      { title: "TeleManager Pro — Telegram Account & Join Task Dashboard" },
       {
         name: "description",
         content:
-          "A clean, fast online calculator with keyboard support. Add, subtract, multiply, divide, percent, and more — right in your browser.",
+          "Manage multiple Telegram user accounts and automate channel joins with delays, FloodWait handling, and live logs.",
       },
-      { property: "og:title", content: "Calculator — Fast, Keyboard-Friendly Web Calculator" },
+      { property: "og:title", content: "TeleManager Pro" },
       {
         property: "og:description",
         content:
-          "A clean, fast online calculator with keyboard support. Add, subtract, multiply, divide, percent, and more.",
+          "Manage multiple Telegram user accounts and automate channel joins.",
       },
       { property: "og:type", content: "website" },
       { name: "twitter:card", content: "summary_large_image" },
