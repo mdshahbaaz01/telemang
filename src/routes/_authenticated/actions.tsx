@@ -1,4 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
+import { z } from "zod";
 import { useServerFn } from "@tanstack/react-start";
 import { useQuery } from "@tanstack/react-query";
 import { useMemo, useRef, useState } from "react";
@@ -13,6 +14,12 @@ import { AdminGate } from "@/components/AdminGate";
 import { Square, Play } from "lucide-react";
 
 export const Route = createFileRoute("/_authenticated/actions")({
+  validateSearch: (s: Record<string, unknown>) =>
+    z
+      .object({
+        tab: z.enum(["react", "forward", "vote", "broadcast", "reply"]).optional(),
+      })
+      .parse(s),
   component: () => (
     <AdminGate>
       <ActionsPage />
@@ -80,10 +87,11 @@ function DelayFields({
 }
 
 function ActionsPageInner() {
+  const search = Route.useSearch();
   const listAcc = useServerFn(listAccounts);
   const accountsQ = useQuery({ queryKey: ["accounts"], queryFn: () => listAcc() });
 
-  const [tab, setTab] = useState<Tab>("react");
+  const [tab, setTab] = useState<Tab>(search.tab ?? "react");
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [source, setSource] = useState("");
   const [emoji, setEmoji] = useState("👍");
