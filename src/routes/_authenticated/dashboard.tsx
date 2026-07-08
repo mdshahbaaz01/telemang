@@ -31,6 +31,7 @@ import {
 import { toast } from "sonner";
 import { LogOut, Pencil, Plus, RefreshCw, RotateCcw, Trash2 } from "lucide-react";
 import { AdminGate } from "@/components/AdminGate";
+import { AccountIdPaste } from "@/components/AccountIdPaste";
 
 export const Route = createFileRoute("/_authenticated/dashboard")({
   component: () => (
