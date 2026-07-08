@@ -144,12 +144,17 @@ function ActionsPageInner() {
   const [options, setOptions] = useState("0");
   const [pollInfo, setPollInfo] = useState<{
     question: string;
-    answers: string[];
+    answers: { text: string; voters: number; chosen: boolean }[];
     multipleChoice: boolean;
     closed: boolean;
+    totalVoters: number;
+    alreadyVoted: boolean;
+    checkedAccountId: string;
   } | null>(null);
   const [pollSelected, setPollSelected] = useState<number[]>([]);
   const [pollLoading, setPollLoading] = useState(false);
+  const [pollCheckAccountId, setPollCheckAccountId] = useState<string>("");
+  const [showResults, setShowResults] = useState(false);
   const loadPollFn = useServerFn(loadPoll);
   const [minDelay, setMinDelay] = useState(2);
   const [maxDelay, setMaxDelay] = useState(6);
@@ -163,6 +168,7 @@ function ActionsPageInner() {
   const [broadcastMode, setBroadcastMode] = useState<SendMode>("per-account");
   const [replyMode, setReplyMode] = useState<SendMode>("per-account");
   const [broadcastSelectedIds, setBroadcastSelectedIds] = useState<string[]>([]);
+  const [replySelectedIds, setReplySelectedIds] = useState<string[]>([]);
 
   const [logs, setLogs] = useState<LogEntry[]>([]);
   const [running, setRunning] = useState(false);
