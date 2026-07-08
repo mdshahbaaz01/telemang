@@ -12,7 +12,14 @@ async function ensureWasm() {
       const res = await fetch(WASM_URL);
       if (!res.ok) throw new Error(`Failed to fetch resvg wasm: ${res.status}`);
       const buf = await res.arrayBuffer();
-      await initWasm(buf);
+      try {
+        await initWasm(buf);
+      } catch (e) {
+        const msg = (e as Error)?.message || String(e);
+        // resvg-wasm throws when initWasm runs twice in the same isolate.
+        // That means wasm is already ready — safe to ignore.
+        if (!/already initialized/i.test(msg)) throw e;
+      }
     })().catch((e) => {
       wasmReady = null;
       throw e;
