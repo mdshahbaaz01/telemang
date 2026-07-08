@@ -243,6 +243,13 @@ export const Route = createFileRoute("/api/public/actions-stream")({
               }
             };
 
+            const alertLog = async (event: string, title: string, bodyText: string) => {
+              await supabase
+                .from("notification_logs")
+                .insert({ user_id: userId, channel: "app", event, title, body: bodyText })
+                .then(() => undefined, () => undefined);
+            };
+
             let stopRequested = false;
             abortSignal.addEventListener("abort", () => {
               stopRequested = true;
@@ -343,6 +350,7 @@ export const Route = createFileRoute("/api/public/actions-stream")({
                 .from("telegram_accounts")
                 .update({ paused_until: pausedUntil, last_error: message })
                 .eq("id", accountId);
+              await alertLog("account", "FloodWait detected", `Account ${accountId.slice(0, 8)} paused for ${secs}s: ${message}`);
               return secs;
             };
 
@@ -926,6 +934,7 @@ export const Route = createFileRoute("/api/public/actions-stream")({
                   updated_at: new Date().toISOString(),
                 })
                 .eq("id", runId);
+              await alertLog(totalFail ? "failure" : "success", totalFail ? "Action finished with failures" : "Action completed", `${body.op.kind}: ok ${totalOk}, fail ${totalFail}`);
               send("end", { ok: totalOk, fail: totalFail, status: finalStatus });
               close();
             }
