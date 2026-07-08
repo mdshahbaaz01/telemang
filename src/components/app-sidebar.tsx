@@ -72,14 +72,19 @@ export function AppSidebar() {
             <SidebarMenu>
               {items.map((item) => (
                 <SidebarMenuItem key={item.title}>
-                  <SidebarMenuButton asChild isActive={isActive(item)} tooltip={item.title}>
+                  <SidebarMenuButton
+                    asChild
+                    isActive={isActive(item)}
+                    tooltip={item.title}
+                    className="group/nav transition-all duration-300 ease-out hover:!bg-[#5353ff] hover:!text-white hover:translate-x-[1px] hover:-translate-y-[1px] active:scale-[0.99]"
+                  >
                     <Link
                       to={item.to}
                       search={item.search as never}
                       className="flex items-center gap-2"
                     >
-                      <item.icon className="h-4 w-4" />
-                      <span>{item.title}</span>
+                      <item.icon className="h-4 w-4 transition-all duration-300 ease-out group-hover/nav:stroke-white" />
+                      <span className="font-semibold">{item.title}</span>
                     </Link>
                   </SidebarMenuButton>
                 </SidebarMenuItem>
@@ -92,10 +97,15 @@ export function AppSidebar() {
           <SidebarGroupContent>
             <SidebarMenu>
               <SidebarMenuItem>
-                <SidebarMenuButton asChild tooltip="New Task" isActive={pathname === "/tasks/new"}>
+                <SidebarMenuButton
+                  asChild
+                  tooltip="New Task"
+                  isActive={pathname === "/tasks/new"}
+                  className="group/nav text-[#bd89ff] transition-all duration-300 ease-out hover:!bg-[rgba(56,45,71,0.836)] hover:!text-[#bd89ff] hover:translate-x-[1px] hover:-translate-y-[1px] active:scale-[0.99]"
+                >
                   <Link to="/tasks/new" className="flex items-center gap-2">
-                    <Plus className="h-4 w-4" />
-                    <span>New Task</span>
+                    <Plus className="h-4 w-4 stroke-[#bd89ff]" />
+                    <span className="font-semibold">New Task</span>
                   </Link>
                 </SidebarMenuButton>
               </SidebarMenuItem>
