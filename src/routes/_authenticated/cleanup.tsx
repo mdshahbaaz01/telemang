@@ -1,6 +1,6 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useServerFn } from "@tanstack/react-start";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { listAccounts } from "@/lib/accounts.functions";
 import { listDialogs } from "@/lib/cleanup.functions";
@@ -86,7 +86,7 @@ function Cleanup() {
 
 function CleanupPanel({ mode }: { mode: "chats" | "personal" }) {
   const listAcc = useServerFn(listAccounts);
-  const listDlg = useServerFn(listDialogs);
+  const queryClient = useQueryClient();
   const accountsQ = useQuery({ queryKey: ["accounts"], queryFn: () => listAcc() });
 
   const [accountIds, setAccountIds] = useState<Set<string>>(new Set());
@@ -127,7 +127,8 @@ function CleanupPanel({ mode }: { mode: "chats" | "personal" }) {
     const jobs: { accountId: string; targets: Dialog[] }[] = [];
     for (const id of accountIds) {
       const sel = selectedByAcc[id];
-      const dialogs = dialogsByAcc[id]?.data ?? [];
+      const dialogs =
+        (queryClient.getQueryData<Dialog[]>(["dialogs", id]) as Dialog[] | undefined) ?? [];
       const targets = dialogs.filter((d) => sel?.has(d.key));
       if (targets.length) jobs.push({ accountId: id, targets });
     }
@@ -210,17 +211,7 @@ function CleanupPanel({ mode }: { mode: "chats" | "personal" }) {
     appendLog({ kind: "info", message: "Stop requested." });
   };
 
-  // Fetch dialogs for each selected account
   const idsArr = Array.from(accountIds);
-  const dialogsByAcc: Record<string, ReturnType<typeof useQuery<Dialog[]>>> = {};
-  for (const id of idsArr) {
-    // eslint-disable-next-line react-hooks/rules-of-hooks
-    dialogsByAcc[id] = useQuery({
-      queryKey: ["dialogs", id],
-      queryFn: () => listDlg({ data: { accountId: id } }) as Promise<Dialog[]>,
-      enabled: !!id,
-    });
-  }
 
   return (
     <div className="space-y-4">
@@ -299,7 +290,6 @@ function CleanupPanel({ mode }: { mode: "chats" | "personal" }) {
               mode={mode}
               action={mode === "personal" ? "deletePersonal" : action}
               query={query}
-              dialogs={dialogsByAcc[id]}
               selected={selectedByAcc[id] ?? new Set()}
               setSelected={(next) => setSelectedByAcc((p) => ({ ...p, [id]: next }))}
               done={doneByAcc[id]}
