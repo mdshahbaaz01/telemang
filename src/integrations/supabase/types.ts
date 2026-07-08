@@ -209,6 +209,51 @@ export type Database = {
         }
         Relationships: []
       }
+      scheduled_broadcasts: {
+        Row: {
+          completed_at: string | null
+          created_at: string
+          dispatched_at: string | null
+          error: string | null
+          id: string
+          label: string | null
+          payload: Json
+          run_id: string | null
+          scheduled_at: string
+          status: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          completed_at?: string | null
+          created_at?: string
+          dispatched_at?: string | null
+          error?: string | null
+          id?: string
+          label?: string | null
+          payload: Json
+          run_id?: string | null
+          scheduled_at: string
+          status?: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          completed_at?: string | null
+          created_at?: string
+          dispatched_at?: string | null
+          error?: string | null
+          id?: string
+          label?: string | null
+          payload?: Json
+          run_id?: string | null
+          scheduled_at?: string
+          status?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       task_logs: {
         Row: {
           created_at: string

@@ -6,6 +6,11 @@ import { useMemo, useRef, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { listAccounts } from "@/lib/accounts.functions";
 import { loadPoll, listActionRuns, deleteActionRun, clearActionRuns } from "@/lib/actions.functions";
+import {
+  createScheduledBroadcast,
+  listScheduledBroadcasts,
+  cancelScheduledBroadcast,
+} from "@/lib/schedule.functions";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -13,7 +18,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { toast } from "sonner";
 import { AdminGate } from "@/components/AdminGate";
 import { AccountIdPaste } from "@/components/AccountIdPaste";
-import { Square, Play, Paperclip, X, AlertTriangle, Copy, Trash2, RotateCw, Pencil } from "lucide-react";
+import { Square, Play, Paperclip, X, AlertTriangle, Copy, Trash2, RotateCw, Pencil, Clock, CalendarClock } from "lucide-react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { useQueryClient } from "@tanstack/react-query";
 
@@ -182,6 +187,17 @@ function ActionsPageInner() {
   const [running, setRunning] = useState(false);
   const [totals, setTotals] = useState<{ ok: number; fail: number } | null>(null);
   const abortRef = useRef<AbortController | null>(null);
+
+  const [scheduledAt, setScheduledAt] = useState<string>("");
+  const [scheduling, setScheduling] = useState(false);
+  const listSchedFn = useServerFn(listScheduledBroadcasts);
+  const createSchedFn = useServerFn(createScheduledBroadcast);
+  const cancelSchedFn = useServerFn(cancelScheduledBroadcast);
+  const schedulesQ = useQuery({
+    queryKey: ["scheduled-broadcasts"],
+    queryFn: () => listSchedFn(),
+    refetchInterval: 15_000,
+  });
 
   const uploadAttachment = async (file: File) => {
     const ext = file.name.includes(".") ? file.name.slice(file.name.lastIndexOf(".")) : "";
@@ -422,11 +438,9 @@ function ActionsPageInner() {
     });
   };
 
-  const runBroadcast = async () => {
-    if (allAccountIds.length === 0) {
-      toast.error("No accounts available");
-      return;
-    }
+  const buildBroadcastCleaned = async (): Promise<
+    { accountId: string; message: string; targets: string[]; attachment?: { path: string; filename: string; mimeType?: string } }[] | null
+  > => {
     const baseRows = rows
       .map((r) => ({
         accountId: r.accountId ?? "",
@@ -440,11 +454,9 @@ function ActionsPageInner() {
       .filter((r) => (r.message || r.file) && r.targets.length);
     if (!baseRows.length) {
       toast.error("Add at least one row with message/file and targets");
-      return;
+      return null;
     }
-    let cleaned: { accountId: string; message: string; targets: string[]; attachment?: { path: string; filename: string; mimeType?: string } }[] = [];
     try {
-      // Upload each unique file once.
       const uploaded = await Promise.all(
         baseRows.map(async (r) => (r.file ? await uploadAttachment(r.file) : undefined)),
       );
@@ -455,18 +467,35 @@ function ActionsPageInner() {
         attachment: uploaded[i],
       }));
       if (broadcastMode === "per-account") {
-        cleaned = withAtt.filter((r) => r.accountId);
-        if (!cleaned.length) return toast.error("Pick an account for each row");
-      } else {
-        const targetIds = broadcastSelectedIds.length ? broadcastSelectedIds : allAccountIds;
-        if (!targetIds.length) return toast.error("Select at least one account");
-        cleaned = targetIds.flatMap((accountId) =>
-          withAtt.map((r) => ({ accountId, message: r.message, targets: r.targets, attachment: r.attachment })),
-        );
+        const c = withAtt.filter((r) => r.accountId);
+        if (!c.length) {
+          toast.error("Pick an account for each row");
+          return null;
+        }
+        return c;
       }
+      const targetIds = broadcastSelectedIds.length ? broadcastSelectedIds : allAccountIds;
+      if (!targetIds.length) {
+        toast.error("Select at least one account");
+        return null;
+      }
+      return targetIds.flatMap((accountId) =>
+        withAtt.map((r) => ({ accountId, message: r.message, targets: r.targets, attachment: r.attachment })),
+      );
     } catch (e) {
-      return toast.error((e as Error).message);
+      toast.error((e as Error).message);
+      return null;
     }
+  };
+
+  const runBroadcast = async () => {
+    if (allAccountIds.length === 0) {
+      toast.error("No accounts available");
+      return;
+    }
+    const cleaned = await buildBroadcastCleaned();
+    if (!cleaned) return;
+
     const { data: sess } = await supabase.auth.getSession();
     const token = sess.session?.access_token;
     if (!token) return toast.error("Not signed in");
@@ -500,6 +529,46 @@ function ActionsPageInner() {
       abortRef.current = null;
     }
   };
+
+  const scheduleBroadcast = async () => {
+    if (!scheduledAt) {
+      toast.error("Pick a schedule time (with seconds)");
+      return;
+    }
+    // datetime-local returns local wall-clock without a timezone — convert to ISO.
+    const when = new Date(scheduledAt);
+    if (Number.isNaN(when.getTime())) return toast.error("Invalid schedule time");
+    if (when.getTime() < Date.now() + 5_000) {
+      return toast.error("Schedule at least 5 seconds in the future");
+    }
+    if (allAccountIds.length === 0) {
+      toast.error("No accounts available");
+      return;
+    }
+    const cleaned = await buildBroadcastCleaned();
+    if (!cleaned) return;
+    setScheduling(true);
+    try {
+      const res = await createSchedFn({
+        data: {
+          scheduledAt: when.toISOString(),
+          rows: cleaned,
+          minDelay,
+          maxDelay,
+        },
+      });
+      toast.success(`Scheduled for ${when.toLocaleString()} (fires within ±1s)`);
+      setScheduledAt("");
+      await qc.invalidateQueries({ queryKey: ["scheduled-broadcasts"] });
+      return res;
+    } catch (e) {
+      toast.error((e as Error).message);
+    } finally {
+      setScheduling(false);
+    }
+  };
+
+
 
   return (
     <main className="min-h-screen bg-background">
@@ -1106,9 +1175,31 @@ function ActionsPageInner() {
 
             <div className="flex gap-2 pt-2">
               {tab === "broadcast" ? (
-                <Button onClick={runBroadcast} disabled={running}>
-                  <Play className="mr-1 h-4 w-4" /> Run broadcast ({rows.length} row{rows.length === 1 ? "" : "s"})
-                </Button>
+                <>
+                  <Button onClick={runBroadcast} disabled={running || scheduling}>
+                    <Play className="mr-1 h-4 w-4" /> Run broadcast ({rows.length} row{rows.length === 1 ? "" : "s"})
+                  </Button>
+                  <div className="flex items-center gap-1 rounded-md border border-border bg-background px-2 py-1">
+                    <Clock className="h-4 w-4 text-muted-foreground" />
+                    <input
+                      type="datetime-local"
+                      step={1}
+                      value={scheduledAt}
+                      onChange={(e) => setScheduledAt(e.target.value)}
+                      className="bg-transparent text-sm outline-none"
+                      title="Schedule time (with seconds — accurate to ±1s)"
+                    />
+                  </div>
+                  <Button
+                    type="button"
+                    variant="secondary"
+                    onClick={scheduleBroadcast}
+                    disabled={scheduling || running || !scheduledAt}
+                  >
+                    <CalendarClock className="mr-1 h-4 w-4" />
+                    {scheduling ? "Scheduling…" : "Schedule"}
+                  </Button>
+                </>
               ) : (tab === "reply" || tab === "comment") ? (
                 <Button onClick={runReply} disabled={running}>
                   <Play className="mr-1 h-4 w-4" /> Send {replyRows.length} {tab}{replyRows.length === 1 ? "" : "s"}
@@ -1146,6 +1237,79 @@ function ActionsPageInner() {
               )}
             </div>
           </div>
+
+          {tab === "broadcast" && (
+            <div className="rounded-lg border border-border bg-card p-4">
+              <div className="mb-2 flex items-center gap-2">
+                <CalendarClock className="h-4 w-4 text-muted-foreground" />
+                <div className="text-sm font-medium">Scheduled broadcasts</div>
+                <span className="ml-auto text-xs text-muted-foreground">
+                  {schedulesQ.data?.length ?? 0} total · fires within ±1s of the target second
+                </span>
+              </div>
+              {(schedulesQ.data ?? []).length === 0 ? (
+                <p className="text-xs text-muted-foreground">No schedules yet.</p>
+              ) : (
+                <div className="max-h-64 space-y-1 overflow-auto text-sm">
+                  {(schedulesQ.data ?? []).map((s) => {
+                    const when = new Date(s.scheduledAt);
+                    const statusColor =
+                      s.status === "pending"
+                        ? "text-primary"
+                        : s.status === "running"
+                        ? "text-yellow-500"
+                        : s.status === "done"
+                        ? "text-emerald-500"
+                        : s.status === "cancelled"
+                        ? "text-muted-foreground"
+                        : "text-destructive";
+                    return (
+                      <div
+                        key={s.id}
+                        className="flex flex-wrap items-center gap-2 rounded border border-border/50 px-2 py-1.5"
+                      >
+                        <Clock className="h-3.5 w-3.5 text-muted-foreground" />
+                        <span className="font-mono text-xs">
+                          {when.toLocaleString(undefined, {
+                            year: "numeric",
+                            month: "2-digit",
+                            day: "2-digit",
+                            hour: "2-digit",
+                            minute: "2-digit",
+                            second: "2-digit",
+                          })}
+                        </span>
+                        <span className={`text-xs uppercase tracking-wide ${statusColor}`}>{s.status}</span>
+                        <span className="text-xs text-muted-foreground">· {s.rowCount} row(s)</span>
+                        {s.error && (
+                          <span className="text-xs text-destructive truncate max-w-[40ch]" title={s.error}>
+                            {s.error}
+                          </span>
+                        )}
+                        {s.status === "pending" && (
+                          <button
+                            type="button"
+                            className="ml-auto text-xs text-destructive underline"
+                            onClick={async () => {
+                              try {
+                                await cancelSchedFn({ data: { id: s.id } });
+                                toast.success("Cancelled");
+                                await qc.invalidateQueries({ queryKey: ["scheduled-broadcasts"] });
+                              } catch (e) {
+                                toast.error((e as Error).message);
+                              }
+                            }}
+                          >
+                            Cancel
+                          </button>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          )}
 
           {errorLogs.length > 0 && (
             <div className="rounded-lg border border-destructive/40 bg-destructive/5 p-4">

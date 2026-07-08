@@ -22,6 +22,7 @@ import { Route as ApiPublicActionsStreamRouteImport } from './routes/api/public/
 import { Route as AuthenticatedTasksNewRouteImport } from './routes/_authenticated/tasks.new'
 import { Route as AuthenticatedTasksIdRouteImport } from './routes/_authenticated/tasks.$id'
 import { Route as AuthenticatedGroupsIdRouteImport } from './routes/_authenticated/groups.$id'
+import { Route as ApiPublicHooksRunScheduledBroadcastsRouteImport } from './routes/api/public/hooks/run-scheduled-broadcasts'
 
 const AuthRoute = AuthRouteImport.update({
   id: '/auth',
@@ -87,6 +88,12 @@ const AuthenticatedGroupsIdRoute = AuthenticatedGroupsIdRouteImport.update({
   path: '/groups/$id',
   getParentRoute: () => AuthenticatedRouteRoute,
 } as any)
+const ApiPublicHooksRunScheduledBroadcastsRoute =
+  ApiPublicHooksRunScheduledBroadcastsRouteImport.update({
+    id: '/api/public/hooks/run-scheduled-broadcasts',
+    path: '/api/public/hooks/run-scheduled-broadcasts',
+    getParentRoute: () => rootRouteImport,
+  } as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
@@ -101,6 +108,7 @@ export interface FileRoutesByFullPath {
   '/tasks/new': typeof AuthenticatedTasksNewRoute
   '/api/public/actions-stream': typeof ApiPublicActionsStreamRoute
   '/api/public/cleanup-stream': typeof ApiPublicCleanupStreamRoute
+  '/api/public/hooks/run-scheduled-broadcasts': typeof ApiPublicHooksRunScheduledBroadcastsRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
@@ -115,6 +123,7 @@ export interface FileRoutesByTo {
   '/tasks/new': typeof AuthenticatedTasksNewRoute
   '/api/public/actions-stream': typeof ApiPublicActionsStreamRoute
   '/api/public/cleanup-stream': typeof ApiPublicCleanupStreamRoute
+  '/api/public/hooks/run-scheduled-broadcasts': typeof ApiPublicHooksRunScheduledBroadcastsRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
@@ -131,6 +140,7 @@ export interface FileRoutesById {
   '/_authenticated/tasks/new': typeof AuthenticatedTasksNewRoute
   '/api/public/actions-stream': typeof ApiPublicActionsStreamRoute
   '/api/public/cleanup-stream': typeof ApiPublicCleanupStreamRoute
+  '/api/public/hooks/run-scheduled-broadcasts': typeof ApiPublicHooksRunScheduledBroadcastsRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
@@ -147,6 +157,7 @@ export interface FileRouteTypes {
     | '/tasks/new'
     | '/api/public/actions-stream'
     | '/api/public/cleanup-stream'
+    | '/api/public/hooks/run-scheduled-broadcasts'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
@@ -161,6 +172,7 @@ export interface FileRouteTypes {
     | '/tasks/new'
     | '/api/public/actions-stream'
     | '/api/public/cleanup-stream'
+    | '/api/public/hooks/run-scheduled-broadcasts'
   id:
     | '__root__'
     | '/'
@@ -176,6 +188,7 @@ export interface FileRouteTypes {
     | '/_authenticated/tasks/new'
     | '/api/public/actions-stream'
     | '/api/public/cleanup-stream'
+    | '/api/public/hooks/run-scheduled-broadcasts'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -184,6 +197,7 @@ export interface RootRouteChildren {
   AuthRoute: typeof AuthRoute
   ApiPublicActionsStreamRoute: typeof ApiPublicActionsStreamRoute
   ApiPublicCleanupStreamRoute: typeof ApiPublicCleanupStreamRoute
+  ApiPublicHooksRunScheduledBroadcastsRoute: typeof ApiPublicHooksRunScheduledBroadcastsRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -279,6 +293,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedGroupsIdRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
+    '/api/public/hooks/run-scheduled-broadcasts': {
+      id: '/api/public/hooks/run-scheduled-broadcasts'
+      path: '/api/public/hooks/run-scheduled-broadcasts'
+      fullPath: '/api/public/hooks/run-scheduled-broadcasts'
+      preLoaderRoute: typeof ApiPublicHooksRunScheduledBroadcastsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
   }
 }
 
@@ -313,6 +334,8 @@ const rootRouteChildren: RootRouteChildren = {
   AuthRoute: AuthRoute,
   ApiPublicActionsStreamRoute: ApiPublicActionsStreamRoute,
   ApiPublicCleanupStreamRoute: ApiPublicCleanupStreamRoute,
+  ApiPublicHooksRunScheduledBroadcastsRoute:
+    ApiPublicHooksRunScheduledBroadcastsRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
