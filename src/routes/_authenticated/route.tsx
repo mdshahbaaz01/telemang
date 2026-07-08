@@ -5,6 +5,7 @@ import { SidebarProvider, SidebarTrigger, SidebarInset } from "@/components/ui/s
 import { AppSidebar } from "@/components/app-sidebar";
 import { ThemeCustomizer } from "@/components/theme-customizer";
 import { Button } from "@/components/ui/button";
+import { ChatViewerHost } from "@/components/chat/ChatViewerDrawer";
 
 export const Route = createFileRoute("/_authenticated")({
   ssr: false,
@@ -39,6 +40,7 @@ function AuthenticatedLayout() {
           <div className="flex-1">
             <Outlet />
           </div>
+          <ChatViewerHost />
         </SidebarInset>
       </div>
     </SidebarProvider>

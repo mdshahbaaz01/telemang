@@ -14,6 +14,66 @@ export type Database = {
   }
   public: {
     Tables: {
+      account_group_members: {
+        Row: {
+          account_id: string
+          created_at: string
+          group_id: string
+        }
+        Insert: {
+          account_id: string
+          created_at?: string
+          group_id: string
+        }
+        Update: {
+          account_id?: string
+          created_at?: string
+          group_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "account_group_members_account_id_fkey"
+            columns: ["account_id"]
+            isOneToOne: false
+            referencedRelation: "telegram_accounts"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "account_group_members_group_id_fkey"
+            columns: ["group_id"]
+            isOneToOne: false
+            referencedRelation: "account_groups"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      account_groups: {
+        Row: {
+          color: string | null
+          created_at: string
+          id: string
+          name: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          color?: string | null
+          created_at?: string
+          id?: string
+          name: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          color?: string | null
+          created_at?: string
+          id?: string
+          name?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       action_logs: {
         Row: {
           account_id: string | null
@@ -129,6 +189,7 @@ export type Database = {
       join_tasks: {
         Row: {
           account_id: string
+          auto_leave_after_days: number | null
           created_at: string
           group_id: string | null
           id: string
@@ -141,6 +202,7 @@ export type Database = {
         }
         Insert: {
           account_id: string
+          auto_leave_after_days?: number | null
           created_at?: string
           group_id?: string | null
           id?: string
@@ -153,6 +215,7 @@ export type Database = {
         }
         Update: {
           account_id?: string
+          auto_leave_after_days?: number | null
           created_at?: string
           group_id?: string | null
           id?: string

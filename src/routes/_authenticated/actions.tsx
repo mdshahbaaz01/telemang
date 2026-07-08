@@ -23,6 +23,7 @@ import { AccountIdPaste } from "@/components/AccountIdPaste";
 import { Square, Play, Paperclip, X, AlertTriangle, Copy, Trash2, RotateCw, Pencil, Clock, CalendarClock, Eye, EyeOff } from "lucide-react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { useQueryClient } from "@tanstack/react-query";
+import { ChatIdChip } from "@/components/chat/ChatIdChip";
 
 export const Route = createFileRoute("/_authenticated/actions")({
   validateSearch: (s: Record<string, unknown>) =>
@@ -1671,8 +1672,12 @@ function ActionsPageInner() {
                               <div className="font-medium">{it.accountLabel}</div>
                               {it.accountPhone && <div className="text-muted-foreground">{it.accountPhone}</div>}
                             </td>
-                            <td className="px-2 py-1.5 font-mono max-w-[16ch] truncate" title={it.target ?? ""}>
-                              {it.target ?? "—"}
+                            <td className="px-2 py-1.5 max-w-[20ch]">
+                              {it.target ? (
+                                <ChatIdChip id={it.target} accountId={it.accountId} />
+                              ) : (
+                                "—"
+                              )}
                             </td>
                             <td className="px-2 py-1.5 font-mono">{formatIst(new Date(it.scheduledFor))}</td>
                             <td className="px-2 py-1.5 font-mono">
