@@ -1672,8 +1672,12 @@ function ActionsPageInner() {
                               <div className="font-medium">{it.accountLabel}</div>
                               {it.accountPhone && <div className="text-muted-foreground">{it.accountPhone}</div>}
                             </td>
-                            <td className="px-2 py-1.5 font-mono max-w-[16ch] truncate" title={it.target ?? ""}>
-                              {it.target ?? "—"}
+                            <td className="px-2 py-1.5 max-w-[20ch]">
+                              {it.target ? (
+                                <ChatIdChip id={it.target} accountId={it.accountId} />
+                              ) : (
+                                "—"
+                              )}
                             </td>
                             <td className="px-2 py-1.5 font-mono">{formatIst(new Date(it.scheduledFor))}</td>
                             <td className="px-2 py-1.5 font-mono">
