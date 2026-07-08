@@ -14,13 +14,6 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Checkbox } from "@/components/ui/checkbox";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
 import { toast } from "sonner";
 import { AdminGate } from "@/components/AdminGate";
 import { Camera, Play, RefreshCw } from "lucide-react";
@@ -112,7 +105,7 @@ function ProofPage() {
   const [channelLink, setChannelLink] = useState("");
   const [target, setTarget] = useState("");
   const [caption, setCaption] = useState("");
-  const [format, setFormat] = useState<"auto" | "chat_list" | "channel_view">("auto");
+  const format = "channel_view" as const;
   const [parallel, setParallel] = useState<number>(1);
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [busy, setBusy] = useState(false);
@@ -194,19 +187,6 @@ function ProofPage() {
                   value={caption}
                   onChange={(e) => setCaption(e.target.value)}
                 />
-              </div>
-              <div>
-                <Label>Screenshot format</Label>
-                <Select value={format} onValueChange={(v) => setFormat(v as typeof format)}>
-                  <SelectTrigger>
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="auto">Auto (private → chat list, public → channel view)</SelectItem>
-                    <SelectItem value="chat_list">Chat list (private-style, image 1)</SelectItem>
-                    <SelectItem value="channel_view">Channel view (public-style, image 2)</SelectItem>
-                  </SelectContent>
-                </Select>
               </div>
               <div>
                 <Label>Parallel accounts</Label>
