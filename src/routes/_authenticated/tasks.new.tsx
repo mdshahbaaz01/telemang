@@ -1,6 +1,6 @@
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useServerFn } from "@tanstack/react-start";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 import { listAccounts } from "@/lib/accounts.functions";
 import { createJoinTask, parseTargets } from "@/lib/tasks.functions";
@@ -23,6 +23,7 @@ export const Route = createFileRoute("/_authenticated/tasks/new")({
 
 function NewTaskPage() {
   const nav = useNavigate();
+  const qc = useQueryClient();
   const listAcc = useServerFn(listAccounts);
   const create = useServerFn(createJoinTask);
   const accountsQ = useQuery({ queryKey: ["accounts"], queryFn: () => listAcc() });
@@ -65,9 +66,14 @@ function NewTaskPage() {
       );
       const ok = results.filter((r) => r.status === "fulfilled").length;
       const failed = results.length - ok;
+      const firstErr = results.find((r) => r.status === "rejected") as PromiseRejectedResult | undefined;
       if (ok) toast.success(`${ok} task${ok > 1 ? "s" : ""} created`);
-      if (failed) toast.error(`${failed} failed`);
-      if (ok) nav({ to: "/groups/$id", params: { id: groupId } });
+      if (failed) toast.error(`${failed} failed${firstErr ? `: ${(firstErr.reason as Error)?.message ?? ""}` : ""}`);
+      if (ok) {
+        await qc.invalidateQueries({ queryKey: ["task-groups"] });
+        await nav({ to: "/groups/$id", params: { id: groupId }, replace: true });
+        return;
+      }
     } catch (err) {
       toast.error((err as Error).message);
     } finally {
