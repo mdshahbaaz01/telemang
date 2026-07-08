@@ -489,7 +489,7 @@ export const Route = createFileRoute("/api/public/actions-stream")({
             };
 
             const runReplyRow = async (
-              row: { accountId: string; message: string },
+              row: { accountId: string; message: string; attachment?: { path: string; filename: string; mimeType?: string } },
               src: { chat: string; msgId: number },
               viaDiscussion: boolean,
             ) => {
@@ -541,13 +541,23 @@ export const Route = createFileRoute("/api/public/actions-stream")({
                     );
                   } catch {}
                 }
-                await client.sendMessage(replyPeer, {
-                  message: row.message,
-                  replyTo: new Api.InputReplyToMessage({
-                    replyToMsgId: replyToId,
-                    ...(topMsgId ? { topMsgId } : {}),
-                  }) as any,
-                });
+                const replyTo = new Api.InputReplyToMessage({
+                  replyToMsgId: replyToId,
+                  ...(topMsgId ? { topMsgId } : {}),
+                }) as any;
+                if (row.attachment) {
+                  const att = await loadAttachment(row.attachment);
+                  await client.sendFile(replyPeer, {
+                    file: buildCustomFile(att),
+                    caption: row.message || undefined,
+                    replyTo,
+                  });
+                } else {
+                  await client.sendMessage(replyPeer, {
+                    message: row.message,
+                    replyTo,
+                  });
+                }
                 ok++;
                 const label = viaDiscussion ? "Commented" : "Replied";
                 const m = `${label} on ${src.chat}/${src.msgId}`;
