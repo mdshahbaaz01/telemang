@@ -20,9 +20,10 @@ export const Route = createFileRoute("/_authenticated/actions")({
   ),
 });
 
-type Tab = "react" | "forward" | "vote" | "broadcast";
+type Tab = "react" | "forward" | "vote" | "broadcast" | "reply";
 
 type BroadcastRow = { id: string; accountId: string; message: string; targets: string };
+type ReplyRow = { id: string; accountId: string; message: string };
 
 type LogEntry = {
   accountId?: string;
@@ -95,6 +96,10 @@ function ActionsPageInner() {
   const [rows, setRows] = useState<BroadcastRow[]>([
     { id: crypto.randomUUID(), accountId: "", message: "", targets: "" },
   ]);
+  const [replyRows, setReplyRows] = useState<ReplyRow[]>([
+    { id: crypto.randomUUID(), accountId: "", message: "" },
+  ]);
+  const [viaDiscussion, setViaDiscussion] = useState(true);
 
   const [logs, setLogs] = useState<LogEntry[]>([]);
   const [running, setRunning] = useState(false);
@@ -249,6 +254,73 @@ function ActionsPageInner() {
     setRunning(false);
   };
 
+  const streamRun = async (payload: unknown) => {
+    const { data: sess } = await supabase.auth.getSession();
+    const token = sess.session?.access_token;
+    if (!token) return toast.error("Not signed in");
+    setLogs([]);
+    setTotals(null);
+    setRunning(true);
+    const ac = new AbortController();
+    abortRef.current = ac;
+    try {
+      const res = await fetch("/api/public/actions-stream", {
+        method: "POST",
+        headers: { "content-type": "application/json", authorization: `Bearer ${token}` },
+        body: JSON.stringify(payload),
+        signal: ac.signal,
+      });
+      if (!res.ok || !res.body) {
+        const t = await res.text().catch(() => "");
+        toast.error(`Stream failed: ${res.status} ${t}`);
+        setRunning(false);
+        return;
+      }
+      const reader = res.body.getReader();
+      const dec = new TextDecoder();
+      let buf = "";
+      while (true) {
+        const { value, done } = await reader.read();
+        if (done) break;
+        buf += dec.decode(value, { stream: true });
+        const chunks = buf.split("\n\n");
+        buf = chunks.pop() ?? "";
+        for (const chunk of chunks) {
+          const evLine = chunk.split("\n").find((l) => l.startsWith("event: "));
+          const dataLine = chunk.split("\n").find((l) => l.startsWith("data: "));
+          if (!evLine || !dataLine) continue;
+          const event = evLine.slice(7).trim();
+          let data: any = {};
+          try { data = JSON.parse(dataLine.slice(6)); } catch {}
+          if (event === "log") addLog({ accountId: data.accountId, level: data.level ?? "info", target: data.target, message: data.message ?? "" });
+          else if (event === "done") addLog({ accountId: data.accountId, level: "info", message: `Account done — ok ${data.ok}, fail ${data.fail}` });
+          else if (event === "end") { setTotals({ ok: data.ok ?? 0, fail: data.fail ?? 0 }); toast.success(`Finished — ok ${data.ok}, fail ${data.fail}`); }
+          else if (event === "aborted") addLog({ level: "warn", message: data.message ?? "Stopped" });
+        }
+      }
+    } catch (e) {
+      if ((e as Error).name !== "AbortError") toast.error((e as Error).message);
+    } finally {
+      setRunning(false);
+      abortRef.current = null;
+    }
+  };
+
+  const runReply = async () => {
+    const src = parseMessageLink(source);
+    if (!src) return toast.error("Enter a valid message link");
+    const cleaned = replyRows
+      .map((r) => ({ accountId: r.accountId, message: r.message.trim() }))
+      .filter((r) => r.accountId && r.message);
+    if (!cleaned.length) return toast.error("Add at least one row with account + message");
+    await streamRun({
+      accountIds: [],
+      minDelay,
+      maxDelay,
+      op: { kind: "reply", source: src, viaDiscussion, rows: cleaned },
+    });
+  };
+
   const runBroadcast = async () => {
     const cleaned = rows
       .map((r) => ({
@@ -369,7 +441,7 @@ function ActionsPageInner() {
         {/* Main panel */}
         <section className="space-y-4">
           <div className="flex gap-2 border-b border-border">
-            {(["react", "forward", "vote", "broadcast"] as Tab[]).map((t) => (
+            {(["react", "forward", "vote", "broadcast", "reply"] as Tab[]).map((t) => (
               <button
                 key={t}
                 onClick={() => setTab(t)}
@@ -379,7 +451,7 @@ function ActionsPageInner() {
                     : "text-muted-foreground"
                 }`}
               >
-                {t === "react" ? "Reactions" : t === "forward" ? "Forwarder" : t === "vote" ? "Poll voter" : "Broadcast"}
+                {t === "react" ? "Reactions" : t === "forward" ? "Forwarder" : t === "vote" ? "Poll voter" : t === "broadcast" ? "Broadcast" : "Reply / Comment"}
               </button>
             ))}
           </div>
@@ -584,10 +656,89 @@ function ActionsPageInner() {
               </div>
             )}
 
+            {tab === "reply" && (
+              <div className="space-y-3">
+                <label className="flex items-center gap-2 text-sm">
+                  <input type="checkbox" checked={viaDiscussion} onChange={(e) => setViaDiscussion(e.target.checked)} />
+                  Comment under a channel post (reply lands in the channel's linked discussion group)
+                </label>
+                <p className="text-xs text-muted-foreground">
+                  Uncheck to reply directly to a message in a group or DM. Each row runs in parallel — every account sends its own different reply/comment.
+                </p>
+                {replyRows.map((row, idx) => (
+                  <div key={row.id} className="rounded-md border border-border p-3 space-y-2">
+                    <div className="flex items-center gap-2">
+                      <div className="text-xs font-medium text-muted-foreground">Row {idx + 1}</div>
+                      <button
+                        type="button"
+                        className="ml-auto text-xs text-destructive underline"
+                        onClick={() => setReplyRows((rs) => rs.filter((r) => r.id !== row.id))}
+                        disabled={replyRows.length === 1}
+                      >
+                        Remove
+                      </button>
+                    </div>
+                    <div>
+                      <Label>Account</Label>
+                      <select
+                        className="mt-1 w-full rounded-md border border-input bg-background px-2 py-2 text-sm"
+                        value={row.accountId}
+                        onChange={(e) =>
+                          setReplyRows((rs) => rs.map((r) => (r.id === row.id ? { ...r, accountId: e.target.value } : r)))
+                        }
+                      >
+                        <option value="">— pick account —</option>
+                        {accountList.map((a) => (
+                          <option key={a.id} value={a.id}>
+                            {a.first_name || a.username || a.phone}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                    <div>
+                      <Label>Message</Label>
+                      <Textarea
+                        rows={2}
+                        value={row.message}
+                        onChange={(e) =>
+                          setReplyRows((rs) => rs.map((r) => (r.id === row.id ? { ...r, message: e.target.value } : r)))
+                        }
+                        placeholder="Reply text…"
+                      />
+                    </div>
+                  </div>
+                ))}
+                <div className="flex flex-wrap gap-2">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={() => setReplyRows((rs) => [...rs, { id: crypto.randomUUID(), accountId: "", message: "" }])}
+                  >
+                    + Add row
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={() => {
+                      if (selected.size === 0) return toast.error("Select accounts on the left first");
+                      setReplyRows([...selected].map((id) => ({ id: crypto.randomUUID(), accountId: id, message: "" })));
+                    }}
+                  >
+                    Fill rows from selected accounts
+                  </Button>
+                </div>
+                <DelayFields minDelay={minDelay} maxDelay={maxDelay} setMin={setMinDelay} setMax={setMaxDelay} />
+              </div>
+            )}
+
             <div className="flex gap-2 pt-2">
               {tab === "broadcast" ? (
                 <Button onClick={runBroadcast} disabled={running}>
                   <Play className="mr-1 h-4 w-4" /> Run broadcast ({rows.length} row{rows.length === 1 ? "" : "s"})
+                </Button>
+              ) : tab === "reply" ? (
+                <Button onClick={runReply} disabled={running}>
+                  <Play className="mr-1 h-4 w-4" /> Send {replyRows.length} {viaDiscussion ? "comment" : "reply"}{replyRows.length === 1 ? "" : "s"}
                 </Button>
               ) : (
                 <Button onClick={run} disabled={running || selected.size === 0}>
