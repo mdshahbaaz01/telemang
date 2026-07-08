@@ -12,7 +12,7 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { toast } from "sonner";
 import { AdminGate } from "@/components/AdminGate";
-import { Square, Play, Paperclip, X } from "lucide-react";
+import { Square, Play, Paperclip, X, AlertTriangle, Copy, Trash2 } from "lucide-react";
 
 export const Route = createFileRoute("/_authenticated/actions")({
   validateSearch: (s: Record<string, unknown>) =>
@@ -159,10 +159,10 @@ function ActionsPageInner() {
   const [minDelay, setMinDelay] = useState(2);
   const [maxDelay, setMaxDelay] = useState(6);
   const [rows, setRows] = useState<BroadcastRow[]>([
-    { id: crypto.randomUUID(), message: "", targets: "" },
+    { id: "broadcast-row-1", message: "", targets: "" },
   ]);
   const [replyRows, setReplyRows] = useState<ReplyRow[]>([
-    { id: crypto.randomUUID(), message: "" },
+    { id: "reply-row-1", message: "" },
   ]);
   const [viaDiscussion, setViaDiscussion] = useState(true);
   const [broadcastMode, setBroadcastMode] = useState<SendMode>("per-account");
@@ -187,9 +187,48 @@ function ActionsPageInner() {
 
   const accountList = accountsQ.data ?? [];
   const allAccountIds = useMemo(() => accountList.map((a) => a.id), [accountList]);
+  const errorLogs = useMemo(() => logs.filter((l) => l.level === "error" || l.level === "warn"), [logs]);
 
   const addLog = (l: Omit<LogEntry, "ts">) =>
     setLogs((prev) => [{ ...l, ts: Date.now() }, ...prev].slice(0, 500));
+
+  const readStream = async (res: Response) => {
+    if (!res.ok || !res.body) {
+      const t = await res.text().catch(() => "");
+      const message = `Stream failed: ${res.status}${t ? ` — ${t}` : ""}`;
+      addLog({ level: "error", message });
+      toast.error(message);
+      return;
+    }
+    const reader = res.body.getReader();
+    const dec = new TextDecoder();
+    let buf = "";
+    while (true) {
+      const { value, done } = await reader.read();
+      if (done) break;
+      buf += dec.decode(value, { stream: true });
+      const chunks = buf.split("\n\n");
+      buf = chunks.pop() ?? "";
+      for (const chunk of chunks) {
+        const evLine = chunk.split("\n").find((l) => l.startsWith("event: "));
+        const dataLine = chunk.split("\n").find((l) => l.startsWith("data: "));
+        if (!evLine || !dataLine) continue;
+        const event = evLine.slice(7).trim();
+        let data: any = {};
+        try { data = JSON.parse(dataLine.slice(6)); } catch {}
+        if (event === "start") addLog({ level: "info", message: `Run started: ${data.kind ?? "action"}` });
+        else if (event === "log") addLog({ accountId: data.accountId, level: data.level ?? "info", target: data.target, message: data.message ?? "" });
+        else if (event === "done") addLog({ accountId: data.accountId, level: data.fail ? "warn" : "info", message: `Account done — ok ${data.ok}, fail ${data.fail}` });
+        else if (event === "end") {
+          setTotals({ ok: data.ok ?? 0, fail: data.fail ?? 0 });
+          const message = `Finished — ok ${data.ok}, fail ${data.fail}`;
+          if (data.fail) toast.warning(message);
+          else toast.success(message);
+        }
+        else if (event === "aborted") addLog({ level: "warn", message: data.message ?? "Stopped" });
+      }
+    }
+  };
 
   const run = async () => {
     const src = parseMessageLink(source);
@@ -205,6 +244,7 @@ function ActionsPageInner() {
     let op: unknown;
     if (tab === "react") {
       if (!emoji.trim() && !customEmojiId.trim()) return toast.error("Pick an emoji or custom emoji id");
+      if (customEmojiId.trim() && !/^\d+$/.test(customEmojiId.trim())) return toast.error("Custom emoji document id must contain only digits");
       op = {
         kind: "react",
         source: src,
@@ -258,54 +298,12 @@ function ActionsPageInner() {
         }),
         signal: ac.signal,
       });
-      if (!res.ok || !res.body) {
-        const t = await res.text().catch(() => "");
-        toast.error(`Stream failed: ${res.status} ${t}`);
-        setRunning(false);
-        return;
-      }
-      const reader = res.body.getReader();
-      const dec = new TextDecoder();
-      let buf = "";
-      while (true) {
-        const { value, done } = await reader.read();
-        if (done) break;
-        buf += dec.decode(value, { stream: true });
-        const chunks = buf.split("\n\n");
-        buf = chunks.pop() ?? "";
-        for (const chunk of chunks) {
-          const evLine = chunk.split("\n").find((l) => l.startsWith("event: "));
-          const dataLine = chunk.split("\n").find((l) => l.startsWith("data: "));
-          if (!evLine || !dataLine) continue;
-          const event = evLine.slice(7).trim();
-          let data: any = {};
-          try {
-            data = JSON.parse(dataLine.slice(6));
-          } catch {}
-          if (event === "log") {
-            addLog({
-              accountId: data.accountId,
-              level: data.level ?? "info",
-              target: data.target,
-              message: data.message ?? "",
-            });
-          } else if (event === "done") {
-            addLog({
-              accountId: data.accountId,
-              level: "info",
-              message: `Account done — ok ${data.ok}, fail ${data.fail}`,
-            });
-          } else if (event === "end") {
-            setTotals({ ok: data.ok ?? 0, fail: data.fail ?? 0 });
-            toast.success(`Finished — ok ${data.ok}, fail ${data.fail}`);
-          } else if (event === "aborted") {
-            addLog({ level: "warn", message: data.message ?? "Stopped" });
-          }
-        }
-      }
+      await readStream(res);
     } catch (e) {
       if ((e as Error).name !== "AbortError") {
-        toast.error((e as Error).message);
+        const message = (e as Error).message;
+        addLog({ level: "error", message });
+        toast.error(message);
       }
     } finally {
       setRunning(false);
@@ -334,36 +332,13 @@ function ActionsPageInner() {
         body: JSON.stringify(payload),
         signal: ac.signal,
       });
-      if (!res.ok || !res.body) {
-        const t = await res.text().catch(() => "");
-        toast.error(`Stream failed: ${res.status} ${t}`);
-        setRunning(false);
-        return;
-      }
-      const reader = res.body.getReader();
-      const dec = new TextDecoder();
-      let buf = "";
-      while (true) {
-        const { value, done } = await reader.read();
-        if (done) break;
-        buf += dec.decode(value, { stream: true });
-        const chunks = buf.split("\n\n");
-        buf = chunks.pop() ?? "";
-        for (const chunk of chunks) {
-          const evLine = chunk.split("\n").find((l) => l.startsWith("event: "));
-          const dataLine = chunk.split("\n").find((l) => l.startsWith("data: "));
-          if (!evLine || !dataLine) continue;
-          const event = evLine.slice(7).trim();
-          let data: any = {};
-          try { data = JSON.parse(dataLine.slice(6)); } catch {}
-          if (event === "log") addLog({ accountId: data.accountId, level: data.level ?? "info", target: data.target, message: data.message ?? "" });
-          else if (event === "done") addLog({ accountId: data.accountId, level: "info", message: `Account done — ok ${data.ok}, fail ${data.fail}` });
-          else if (event === "end") { setTotals({ ok: data.ok ?? 0, fail: data.fail ?? 0 }); toast.success(`Finished — ok ${data.ok}, fail ${data.fail}`); }
-          else if (event === "aborted") addLog({ level: "warn", message: data.message ?? "Stopped" });
-        }
-      }
+      await readStream(res);
     } catch (e) {
-      if ((e as Error).name !== "AbortError") toast.error((e as Error).message);
+      if ((e as Error).name !== "AbortError") {
+        const message = (e as Error).message;
+        addLog({ level: "error", message });
+        toast.error(message);
+      }
     } finally {
       setRunning(false);
       abortRef.current = null;
@@ -473,42 +448,13 @@ function ActionsPageInner() {
         }),
         signal: ac.signal,
       });
-      if (!res.ok || !res.body) {
-        const t = await res.text().catch(() => "");
-        toast.error(`Stream failed: ${res.status} ${t}`);
-        setRunning(false);
-        return;
-      }
-      const reader = res.body.getReader();
-      const dec = new TextDecoder();
-      let buf = "";
-      while (true) {
-        const { value, done } = await reader.read();
-        if (done) break;
-        buf += dec.decode(value, { stream: true });
-        const chunks = buf.split("\n\n");
-        buf = chunks.pop() ?? "";
-        for (const chunk of chunks) {
-          const evLine = chunk.split("\n").find((l) => l.startsWith("event: "));
-          const dataLine = chunk.split("\n").find((l) => l.startsWith("data: "));
-          if (!evLine || !dataLine) continue;
-          const event = evLine.slice(7).trim();
-          let data: any = {};
-          try { data = JSON.parse(dataLine.slice(6)); } catch {}
-          if (event === "log") {
-            addLog({ accountId: data.accountId, level: data.level ?? "info", target: data.target, message: data.message ?? "" });
-          } else if (event === "done") {
-            addLog({ accountId: data.accountId, level: "info", message: `Account done — ok ${data.ok}, fail ${data.fail}` });
-          } else if (event === "end") {
-            setTotals({ ok: data.ok ?? 0, fail: data.fail ?? 0 });
-            toast.success(`Finished — ok ${data.ok}, fail ${data.fail}`);
-          } else if (event === "aborted") {
-            addLog({ level: "warn", message: data.message ?? "Stopped" });
-          }
-        }
-      }
+      await readStream(res);
     } catch (e) {
-      if ((e as Error).name !== "AbortError") toast.error((e as Error).message);
+      if ((e as Error).name !== "AbortError") {
+        const message = (e as Error).message;
+        addLog({ level: "error", message });
+        toast.error(message);
+      }
     } finally {
       setRunning(false);
       abortRef.current = null;
@@ -1128,6 +1074,50 @@ function ActionsPageInner() {
               )}
             </div>
           </div>
+
+          {errorLogs.length > 0 && (
+            <div className="rounded-lg border border-destructive/40 bg-destructive/5 p-4">
+              <div className="mb-3 flex flex-wrap items-center gap-2">
+                <AlertTriangle className="h-4 w-4 text-destructive" />
+                <div className="mr-auto text-sm font-medium">Error log ({errorLogs.length})</div>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={() => {
+                    const text = errorLogs
+                      .map((l) => {
+                        const acc = accountList.find((a) => a.id === l.accountId);
+                        const who = acc ? acc.first_name || acc.username || acc.phone : l.accountId ?? "—";
+                        return `${new Date(l.ts).toLocaleString()} [${l.level}] [${who}]${l.target ? ` ${l.target}` : ""} — ${l.message}`;
+                      })
+                      .join("\n");
+                    void navigator.clipboard.writeText(text);
+                    toast.success("Error log copied");
+                  }}
+                >
+                  <Copy className="mr-1 h-4 w-4" /> Copy
+                </Button>
+                <Button type="button" variant="outline" size="sm" onClick={() => setLogs([])}>
+                  <Trash2 className="mr-1 h-4 w-4" /> Clear
+                </Button>
+              </div>
+              <div className="max-h-52 space-y-1 overflow-auto font-mono text-xs">
+                {errorLogs.map((l, i) => {
+                  const acc = accountList.find((a) => a.id === l.accountId);
+                  const who = acc ? acc.first_name || acc.username || acc.phone : l.accountId ? l.accountId.slice(0, 8) : "—";
+                  return (
+                    <div key={`${l.ts}-${i}`} className={l.level === "error" ? "text-destructive" : "text-yellow-600 dark:text-yellow-400"}>
+                      <span className="text-muted-foreground">
+                        {new Date(l.ts).toLocaleTimeString()} [{who}]
+                      </span>{" "}
+                      {l.target ? <span className="text-muted-foreground">{l.target} —</span> : null} {l.message}
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          )}
 
           <div className="rounded-lg border border-border bg-card p-4">
             <div className="mb-2 text-sm font-medium">Live logs</div>

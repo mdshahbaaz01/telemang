@@ -84,6 +84,29 @@ function jitter(min: number, max: number) {
   return lo * 1000 + Math.random() * (hi - lo) * 1000;
 }
 
+function errorText(error: unknown) {
+  if (error instanceof Error) return error.message || error.name;
+  return String(error);
+}
+
+function floodWaitSeconds(message: string) {
+  const floodMatch = message.match(/FLOOD_WAIT_?(\d+)/i);
+  return floodMatch ? Number(floodMatch[1]) : null;
+}
+
+async function runWithConcurrency<T, R>(items: T[], limit: number, worker: (item: T) => Promise<R>) {
+  const results: R[] = new Array(items.length);
+  let nextIndex = 0;
+  const workers = Array.from({ length: Math.min(limit, items.length) }, async () => {
+    while (nextIndex < items.length) {
+      const current = nextIndex++;
+      results[current] = await worker(items[current]);
+    }
+  });
+  await Promise.all(workers);
+  return results;
+}
+
 export const Route = createFileRoute("/api/public/actions-stream")({
   server: {
     handlers: {
@@ -177,9 +200,13 @@ export const Route = createFileRoute("/api/public/actions-stream")({
               level: "info" | "success" | "warn" | "error",
               message: string,
             ) => {
-              await supabase
+              const { error } = await supabase
                 .from("action_logs")
                 .insert({ run_id: runId, account_id: accountId, target, level, message });
+              if (error) {
+                console.error("action log insert failed:", error.message);
+                send("log", { accountId, target: target ?? undefined, level: "warn", message: `Log save failed: ${error.message}` });
+              }
             };
 
             let stopRequested = false;
@@ -248,6 +275,28 @@ export const Route = createFileRoute("/api/public/actions-stream")({
               return await client.getEntity(cleaned);
             };
 
+            const pickDiscussionChat = (disc: any) => {
+              const chats = (disc?.chats ?? []) as any[];
+              const rootMsg = disc?.messages?.[0];
+              const peerId = rootMsg?.peerId?.channelId ?? rootMsg?.peerId?.chatId;
+              if (peerId) {
+                const match = chats.find((chat) => String(chat?.id) === String(peerId));
+                if (match) return match;
+              }
+              return chats.find((chat) => chat?.megagroup || chat?.gigagroup || chat?.forum) ?? chats.find((chat) => !chat?.broadcast) ?? chats[0];
+            };
+
+            const pauseAccountOnFlood = async (accountId: string, message: string) => {
+              const secs = floodWaitSeconds(message);
+              if (!secs) return false;
+              const pausedUntil = new Date(Date.now() + secs * 1000).toISOString();
+              await supabase
+                .from("telegram_accounts")
+                .update({ paused_until: pausedUntil, last_error: message })
+                .eq("id", accountId);
+              return secs;
+            };
+
             const buildReaction = async (emoji: string, customEmojiId?: string) => {
               if (customEmojiId) {
                 const { default: bigInt } = await import("big-integer");
@@ -264,9 +313,10 @@ export const Route = createFileRoute("/api/public/actions-stream")({
               try {
                 client = await openClientForAccount(supabase, accountId);
               } catch (e) {
-                const msg = `Connect failed: ${(e as Error).message}`;
+                const msg = `Connect failed: ${errorText(e)}`;
                 send("log", { accountId, level: "error", message: msg });
                 await logDb(accountId, null, "error", msg);
+                send("done", { accountId, ok: 0, fail: 1 });
                 return { ok: 0, fail: 1 };
               }
               let ok = 0;
@@ -374,6 +424,16 @@ export const Route = createFileRoute("/api/public/actions-stream")({
                     await logDb(accountId, `${src.chat}/${src.msgId}`, "error", m);
                   }
                 } else if (op.kind === "forward") {
+                  try {
+                    await client.invoke(
+                      new Api.messages.GetMessagesViews({
+                        peer: sourcePeer,
+                        id: [src.msgId],
+                        increment: true,
+                      }),
+                    );
+                    send("log", { accountId, level: "info", target: `${src.chat}/${src.msgId}`, message: "Viewed source post" });
+                  } catch {}
                   for (const t of op.targets) {
                     if (stopRequested) break;
                     try {
@@ -393,15 +453,9 @@ export const Route = createFileRoute("/api/public/actions-stream")({
                       await logDb(accountId, t, "success", m);
                     } catch (e) {
                       fail++;
-                      const em = (e as Error).message || String(e);
-                      const floodMatch = em.match(/FLOOD_WAIT_?(\d+)/i);
-                      if (floodMatch) {
-                        const secs = Number(floodMatch[1]);
-                        const pausedUntil = new Date(Date.now() + secs * 1000).toISOString();
-                        await supabase
-                          .from("telegram_accounts")
-                          .update({ paused_until: pausedUntil, last_error: em })
-                          .eq("id", accountId);
+                      const em = errorText(e);
+                      const secs = await pauseAccountOnFlood(accountId, em);
+                      if (secs) {
                         send("log", { accountId, level: "warn", target: t, message: `FloodWait ${secs}s — account paused` });
                         await logDb(accountId, t, "warn", `FloodWait ${secs}s`);
                         break;
@@ -421,71 +475,67 @@ export const Route = createFileRoute("/api/public/actions-stream")({
               return { ok, fail };
             };
 
-            const runBroadcastRow = async (row: { accountId: string; message: string; targets: string[]; attachment?: { path: string; filename: string; mimeType?: string } }) => {
-              const accountId = row.accountId;
+            const runBroadcastRowsForAccount = async (accountId: string, rows: Array<{ accountId: string; message: string; targets: string[]; attachment?: { path: string; filename: string; mimeType?: string } }>) => {
               send("log", { accountId, level: "info", message: "Connecting…" });
               let client;
               try {
                 client = await openClientForAccount(supabase, accountId);
               } catch (e) {
-                const msg = `Connect failed: ${(e as Error).message}`;
+                const msg = `Connect failed: ${errorText(e)}`;
                 send("log", { accountId, level: "error", message: msg });
                 await logDb(accountId, null, "error", msg);
-                return { ok: 0, fail: 1 };
+                const fail = rows.reduce((n, row) => n + row.targets.length, 0);
+                send("done", { accountId, ok: 0, fail });
+                return { ok: 0, fail };
               }
               let ok = 0;
               let fail = 0;
-              let attData: { buf: Buffer; filename: string; mimeType?: string } | null = null;
-              if (row.attachment) {
-                try {
-                  attData = await loadAttachment(row.attachment);
-                } catch (e) {
-                  const em = (e as Error).message;
-                  send("log", { accountId, level: "error", message: em });
-                  await logDb(accountId, null, "error", em);
-                  await client.disconnect().catch(() => {});
-                  send("done", { accountId, ok: 0, fail: row.targets.length });
-                  return { ok: 0, fail: row.targets.length };
-                }
-              }
               try {
-                for (const t of row.targets) {
-                  if (stopRequested) break;
-                  try {
-                    const dest = await resolveTarget(client, t);
-                    if (attData) {
-                      await client.sendFile(dest, {
-                        file: buildCustomFile(attData),
-                        caption: row.message || undefined,
-                      });
-                    } else {
-                      await client.sendMessage(dest, { message: row.message });
+                for (const row of rows) {
+                  let attData: { buf: Buffer; filename: string; mimeType?: string } | null = null;
+                  if (row.attachment) {
+                    try {
+                      attData = await loadAttachment(row.attachment);
+                    } catch (e) {
+                      const em = errorText(e);
+                      fail += row.targets.length;
+                      send("log", { accountId, level: "error", message: em });
+                      await logDb(accountId, null, "error", em);
+                      continue;
                     }
-                    ok++;
-                    const m = `Sent to ${t}`;
-                    send("log", { accountId, level: "success", target: t, message: m });
-                    await logDb(accountId, t, "success", m);
-                  } catch (e) {
-                    fail++;
-                    const em = (e as Error).message || String(e);
-                    const floodMatch = em.match(/FLOOD_WAIT_?(\d+)/i);
-                    if (floodMatch) {
-                      const secs = Number(floodMatch[1]);
-                      const pausedUntil = new Date(Date.now() + secs * 1000).toISOString();
-                      await supabase
-                        .from("telegram_accounts")
-                        .update({ paused_until: pausedUntil, last_error: em })
-                        .eq("id", accountId);
-                      send("log", { accountId, level: "warn", target: t, message: `FloodWait ${secs}s — account paused` });
-                      await logDb(accountId, t, "warn", `FloodWait ${secs}s`);
-                      break;
-                    }
-                    send("log", { accountId, level: "error", target: t, message: em });
-                    await logDb(accountId, t, "error", em);
                   }
-                  await new Promise((r) =>
-                    setTimeout(r, jitter(body.minDelay, body.maxDelay)),
-                  );
+                  for (const t of row.targets) {
+                    if (stopRequested) break;
+                    try {
+                      const dest = await resolveTarget(client, t);
+                      if (attData) {
+                        await client.sendFile(dest, {
+                          file: buildCustomFile(attData),
+                          caption: row.message || undefined,
+                        });
+                      } else {
+                        await client.sendMessage(dest, { message: row.message });
+                      }
+                      ok++;
+                      const m = `Sent to ${t}`;
+                      send("log", { accountId, level: "success", target: t, message: m });
+                      await logDb(accountId, t, "success", m);
+                    } catch (e) {
+                      fail++;
+                      const em = errorText(e);
+                      const secs = await pauseAccountOnFlood(accountId, em);
+                      if (secs) {
+                        send("log", { accountId, level: "warn", target: t, message: `FloodWait ${secs}s — account paused` });
+                        await logDb(accountId, t, "warn", `FloodWait ${secs}s`);
+                        break;
+                      }
+                      send("log", { accountId, level: "error", target: t, message: em });
+                      await logDb(accountId, t, "error", em);
+                    }
+                    await new Promise((r) =>
+                      setTimeout(r, jitter(body.minDelay, body.maxDelay)),
+                    );
+                  }
                 }
               } finally {
                 await client.disconnect().catch(() => {});
@@ -505,9 +555,10 @@ export const Route = createFileRoute("/api/public/actions-stream")({
               try {
                 client = await openClientForAccount(supabase, accountId);
               } catch (e) {
-                const msg = `Connect failed: ${(e as Error).message}`;
+                const msg = `Connect failed: ${errorText(e)}`;
                 send("log", { accountId, level: "error", message: msg });
                 await logDb(accountId, null, "error", msg);
+                send("done", { accountId, ok: 0, fail: 1 });
                 return { ok: 0, fail: 1 };
               }
               let ok = 0;
@@ -530,8 +581,7 @@ export const Route = createFileRoute("/api/public/actions-stream")({
                   const rootMsg = disc?.messages?.[0];
                   if (!rootMsg) throw new Error("No discussion group linked to this channel");
                   // Resolve discussion group peer from the returned chats
-                  const chats = (disc?.chats ?? []) as any[];
-                  const discChat = chats[0];
+                  const discChat = pickDiscussionChat(disc);
                   if (!discChat) throw new Error("Discussion chat missing");
                   replyPeer = await client.getEntity(discChat);
                   replyToId = rootMsg.id;
@@ -571,20 +621,15 @@ export const Route = createFileRoute("/api/public/actions-stream")({
                 await logDb(accountId, `${src.chat}/${src.msgId}`, "success", m);
               } catch (e) {
                 fail++;
-                const em = (e as Error).message || String(e);
-                const floodMatch = em.match(/FLOOD_WAIT_?(\d+)/i);
-                if (floodMatch) {
-                  const secs = Number(floodMatch[1]);
-                  const pausedUntil = new Date(Date.now() + secs * 1000).toISOString();
-                  await supabase
-                    .from("telegram_accounts")
-                    .update({ paused_until: pausedUntil, last_error: em })
-                    .eq("id", accountId);
+                const em = errorText(e);
+                const target = `${src.chat}/${src.msgId}`;
+                const secs = await pauseAccountOnFlood(accountId, em);
+                if (secs) {
                   send("log", { accountId, level: "warn", message: `FloodWait ${secs}s — account paused` });
-                  await logDb(accountId, null, "warn", `FloodWait ${secs}s`);
+                  await logDb(accountId, target, "warn", `FloodWait ${secs}s`);
                 } else {
-                  send("log", { accountId, level: "error", message: em });
-                  await logDb(accountId, null, "error", em);
+                  send("log", { accountId, level: "error", target, message: em });
+                  await logDb(accountId, target, "error", em);
                 }
               } finally {
                 await client.disconnect().catch(() => {});
@@ -596,22 +641,40 @@ export const Route = createFileRoute("/api/public/actions-stream")({
             let totalOk = 0;
             let totalFail = 0;
             try {
+              const groupByAccount = <T extends { accountId: string }>(rows: T[]) => {
+                const grouped = new Map<string, T[]>();
+                for (const row of rows) grouped.set(row.accountId, [...(grouped.get(row.accountId) ?? []), row]);
+                return Array.from(grouped.entries());
+              };
               const results =
                 body.op.kind === "broadcast"
-                  ? await Promise.all(body.op.rows.map((r) => runBroadcastRow(r)))
+                  ? await runWithConcurrency(groupByAccount(body.op.rows), 5, ([accountId, rows]) => runBroadcastRowsForAccount(accountId, rows))
                   : body.op.kind === "reply"
-                    ? await Promise.all(
-                        body.op.rows.map((r) =>
-                          runReplyRow(r, (body.op as any).source, !!(body.op as any).viaDiscussion),
-                        ),
+                    ? await runWithConcurrency(
+                        groupByAccount(body.op.rows),
+                        5,
+                        async ([, rows]) => {
+                          let ok = 0;
+                          let fail = 0;
+                          for (const row of rows) {
+                            if (stopRequested) break;
+                            const result = await runReplyRow(row, (body.op as any).source, !!(body.op as any).viaDiscussion);
+                            ok += result.ok;
+                            fail += result.fail;
+                          }
+                          return { ok, fail };
+                        },
                       )
-                    : await Promise.all(body.accountIds.map((id) => runOne(id)));
+                    : await runWithConcurrency(body.accountIds, 8, (id) => runOne(id));
               for (const r of results) {
                 totalOk += r.ok;
                 totalFail += r.fail;
               }
             } catch (e) {
-              send("log", { level: "error", message: (e as Error).message });
+              totalFail++;
+              const message = errorText(e);
+              send("log", { level: "error", message });
+              await logDb(null, null, "error", message);
             } finally {
               clearInterval(stopPoll);
               const finalStatus = stopRequested ? "stopped" : "done";
