@@ -1,0 +1,108 @@
+import { Link, useRouterState } from "@tanstack/react-router";
+import {
+  LayoutDashboard,
+  ShieldCheck,
+  Brush,
+  Radio,
+  Megaphone,
+  Bot,
+  BellRing,
+  Plus,
+} from "lucide-react";
+import {
+  Sidebar,
+  SidebarContent,
+  SidebarGroup,
+  SidebarGroupContent,
+  SidebarGroupLabel,
+  SidebarHeader,
+  SidebarMenu,
+  SidebarMenuButton,
+  SidebarMenuItem,
+} from "@/components/ui/sidebar";
+
+type Item = {
+  title: string;
+  to: string;
+  search?: Record<string, string>;
+  icon: React.ComponentType<{ className?: string }>;
+  match?: (pathname: string, search: string) => boolean;
+};
+
+const items: Item[] = [
+  { title: "Dashboard", to: "/dashboard", icon: LayoutDashboard },
+  { title: "Owner Panel", to: "/owner", icon: ShieldCheck },
+  { title: "Cleanup", to: "/cleanup", icon: Brush },
+  {
+    title: "Actions",
+    to: "/actions",
+    icon: Radio,
+    match: (p, s) => p === "/actions" && !s.includes("tab=broadcast"),
+  },
+  {
+    title: "Broadcast",
+    to: "/actions",
+    search: { tab: "broadcast" },
+    icon: Megaphone,
+    match: (p, s) => p === "/actions" && s.includes("tab=broadcast"),
+  },
+  { title: "Bot Flow", to: "/bot-flow", icon: Bot },
+  { title: "Alerts", to: "/alerts", icon: BellRing },
+];
+
+export function AppSidebar() {
+  const { pathname, search } = useRouterState({
+    select: (r) => ({ pathname: r.location.pathname, search: r.location.searchStr }),
+  });
+
+  const isActive = (item: Item) =>
+    item.match ? item.match(pathname, search) : pathname === item.to;
+
+  return (
+    <Sidebar collapsible="icon">
+      <SidebarHeader>
+        <div className="px-2 py-1.5 text-sm font-semibold tracking-tight">
+          TeleManager Pro
+        </div>
+      </SidebarHeader>
+      <SidebarContent>
+        <SidebarGroup>
+          <SidebarGroupLabel>Navigation</SidebarGroupLabel>
+          <SidebarGroupContent>
+            <SidebarMenu>
+              {items.map((item) => (
+                <SidebarMenuItem key={item.title}>
+                  <SidebarMenuButton asChild isActive={isActive(item)} tooltip={item.title}>
+                    <Link
+                      to={item.to}
+                      search={item.search as never}
+                      className="flex items-center gap-2"
+                    >
+                      <item.icon className="h-4 w-4" />
+                      <span>{item.title}</span>
+                    </Link>
+                  </SidebarMenuButton>
+                </SidebarMenuItem>
+              ))}
+            </SidebarMenu>
+          </SidebarGroupContent>
+        </SidebarGroup>
+        <SidebarGroup>
+          <SidebarGroupLabel>Create</SidebarGroupLabel>
+          <SidebarGroupContent>
+            <SidebarMenu>
+              <SidebarMenuItem>
+                <SidebarMenuButton asChild tooltip="New Task" isActive={pathname === "/tasks/new"}>
+                  <Link to="/tasks/new" className="flex items-center gap-2">
+                    <Plus className="h-4 w-4" />
+                    <span>New Task</span>
+                  </Link>
+                </SidebarMenuButton>
+              </SidebarMenuItem>
+            </SidebarMenu>
+          </SidebarGroupContent>
+        </SidebarGroup>
+      </SidebarContent>
+    </Sidebar>
+  );
+}

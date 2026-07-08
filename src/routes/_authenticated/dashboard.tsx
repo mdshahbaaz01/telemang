@@ -1,4 +1,4 @@
-import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
+import { createFileRoute, Link } from "@tanstack/react-router";
 import { useServerFn } from "@tanstack/react-start";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useState } from "react";
@@ -29,10 +29,9 @@ import {
   DialogTrigger,
 } from "@/components/ui/dialog";
 import { toast } from "sonner";
-import { LogOut, Pencil, Plus, RefreshCw, RotateCcw, Trash2 } from "lucide-react";
+import { Pencil, Plus, RefreshCw, RotateCcw, Trash2 } from "lucide-react";
 import { AdminGate } from "@/components/AdminGate";
 import { AccountIdPaste } from "@/components/AccountIdPaste";
-import { ThemeCustomizer } from "@/components/theme-customizer";
 
 export const Route = createFileRoute("/_authenticated/dashboard")({
   component: () => (
@@ -45,7 +44,6 @@ export const Route = createFileRoute("/_authenticated/dashboard")({
 const NAV: string[] = [];
 
 function Dashboard() {
-  const nav = useNavigate();
   const qc = useQueryClient();
   const listAcc = useServerFn(listAccounts);
   const listGroupsFn = useServerFn(listTaskGroups);
@@ -64,11 +62,6 @@ function Dashboard() {
     queryFn: () => listGroupsFn(),
     refetchInterval: 5000,
   });
-
-  const signOut = async () => {
-    await supabase.auth.signOut();
-    nav({ to: "/auth" });
-  };
 
   const del = useMutation({
     mutationFn: (id: string) => delAcc({ data: { id } }),
@@ -110,57 +103,14 @@ function Dashboard() {
 
   return (
     <main className="min-h-screen bg-background">
-      <header className="border-b border-border bg-card">
-        <div className="mx-auto flex max-w-7xl flex-wrap items-center gap-3 px-4 py-3 md:px-8">
-          <h1 className="mr-auto text-xl font-semibold tracking-tight">TeleManager Pro</h1>
-          <nav className="flex flex-wrap items-center gap-1">
-            <Link to="/owner">
-              <Button variant="ghost" size="sm">
-                Owner Panel
-              </Button>
-            </Link>
-            <Link to="/cleanup">
-              <Button variant="ghost" size="sm">
-                Cleanup
-              </Button>
-            </Link>
-            <Link to="/actions">
-              <Button variant="ghost" size="sm">
-                Actions
-              </Button>
-            </Link>
-            <Link to="/actions" search={{ tab: "broadcast" }}>
-              <Button variant="ghost" size="sm">
-                Broadcast
-              </Button>
-            </Link>
-            <Link to="/bot-flow">
-              <Button variant="ghost" size="sm">
-                Bot Flow
-              </Button>
-            </Link>
-            <Link to="/alerts">
-              <Button variant="ghost" size="sm">
-                Alerts
-              </Button>
-            </Link>
-            {NAV.map((n) => (
-              <Button key={n} variant="ghost" size="sm" onClick={soon}>
-                {n}
-              </Button>
-            ))}
-            <Link to="/tasks/new">
-              <Button size="sm" disabled={!accountsQ.data?.length}>
-                New Task
-              </Button>
-            </Link>
-            <ThemeCustomizer />
-            <Button variant="ghost" size="icon" onClick={signOut} aria-label="Sign out">
-              <LogOut className="h-4 w-4" />
-            </Button>
-          </nav>
-        </div>
-      </header>
+      <div className="mx-auto flex max-w-7xl items-center justify-between gap-3 px-4 pt-6 md:px-8">
+        <h1 className="text-2xl font-semibold tracking-tight">TeleManager Pro</h1>
+        <Link to="/tasks/new">
+          <Button size="sm" disabled={!accountsQ.data?.length}>
+            <Plus className="mr-1 h-4 w-4" /> New Task
+          </Button>
+        </Link>
+      </div>
 
       <div className="mx-auto max-w-7xl space-y-10 px-4 py-8 md:px-8">
         <section>
