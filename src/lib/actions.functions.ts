@@ -103,12 +103,32 @@ export const loadPoll = createServerFn({ method: "POST" })
     const client = await openClientForAccount(context.supabase, accountId);
     try {
       let peer: any;
+      const resolveEntity = async (target: any) => {
+        try {
+          return await client.getEntity(target);
+        } catch (e) {
+          const msg = (e as Error).message || "";
+          if (!/Could not find the input entity/i.test(msg)) throw e;
+          // Warm the entity cache by iterating dialogs, then retry once.
+          for await (const _ of client.iterDialogs({ limit: 200 })) {
+            void _;
+          }
+          return await client.getEntity(target);
+        }
+      };
       if (data.chat.startsWith("c/")) {
         const raw = data.chat.slice(2);
         const { default: bigInt } = await import("big-integer");
-        peer = await client.getEntity(bigInt(raw));
+        const { Api } = await import("telegram");
+        try {
+          peer = await resolveEntity(new Api.PeerChannel({ channelId: bigInt(raw) }));
+        } catch (e) {
+          throw new Error(
+            `Account can't access this private chat (t.me/c/${raw}). The account must be a member of the group/channel first. Original: ${(e as Error).message}`,
+          );
+        }
       } else {
-        peer = await client.getEntity(data.chat.replace(/^@/, ""));
+        peer = await resolveEntity(data.chat.replace(/^@/, ""));
       }
       const [msg] = await client.getMessages(peer, { ids: [data.msgId] });
       if (!msg?.poll) throw new Error("Message is not a poll");
