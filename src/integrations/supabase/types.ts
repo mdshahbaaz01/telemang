@@ -257,6 +257,7 @@ export type Database = {
           phone: string
           session_enc: string | null
           status: string
+          telegram_user_id: number | null
           updated_at: string
           user_id: string
           username: string | null
@@ -273,6 +274,7 @@ export type Database = {
           phone: string
           session_enc?: string | null
           status?: string
+          telegram_user_id?: number | null
           updated_at?: string
           user_id: string
           username?: string | null
@@ -289,6 +291,7 @@ export type Database = {
           phone?: string
           session_enc?: string | null
           status?: string
+          telegram_user_id?: number | null
           updated_at?: string
           user_id?: string
           username?: string | null
