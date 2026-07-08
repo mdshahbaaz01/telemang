@@ -196,6 +196,26 @@ export const Route = createFileRoute("/api/public/actions-stream")({
 
             const { openClientForAccount } = await import("@/lib/cleanup.server");
             const { Api } = await import("telegram");
+            const { CustomFile } = await import("telegram/client/uploads");
+
+            const attachmentCache = new Map<string, { buf: Buffer; filename: string; mimeType?: string }>();
+            const loadAttachment = async (att: { path: string; filename: string; mimeType?: string }) => {
+              const key = att.path;
+              const cached = attachmentCache.get(key);
+              if (cached) return cached;
+              const { data, error } = await supabase.storage
+                .from("action-attachments")
+                .createSignedUrl(att.path, 300);
+              if (error || !data?.signedUrl) throw new Error(`Attachment fetch failed: ${error?.message ?? "no url"}`);
+              const res = await fetch(data.signedUrl);
+              if (!res.ok) throw new Error(`Attachment download failed: ${res.status}`);
+              const buf = Buffer.from(await res.arrayBuffer());
+              const val = { buf, filename: att.filename, mimeType: att.mimeType };
+              attachmentCache.set(key, val);
+              return val;
+            };
+            const buildCustomFile = (att: { buf: Buffer; filename: string; mimeType?: string }) =>
+              new CustomFile(att.filename, att.buf.length, att.filename, att.buf);
 
             // Resolve source peer & get message once per account (needed for react/vote/forward source)
             const resolveSource = async (client: any, src: { chat: string; msgId: number }) => {
