@@ -568,46 +568,7 @@ function ActionsPageInner() {
     }
   };
 
-  const _oldRunBroadcastStub = async () => {
-    if (allAccountIds.length === 0) {
-      toast.error("No accounts available");
-      return;
-    }
-    const cleaned = await buildBroadcastCleaned();
-    if (!cleaned) return;
-    const { data: sess } = await supabase.auth.getSession();
-    const token = sess.session?.access_token;
-    if (!token) return toast.error("Not signed in");
 
-    setLogs([]);
-    setTotals(null);
-    setRunning(true);
-    const ac = new AbortController();
-    abortRef.current = ac;
-    try {
-      const res = await fetch("/api/public/actions-stream", {
-        method: "POST",
-        headers: { "content-type": "application/json", authorization: `Bearer ${token}` },
-        body: JSON.stringify({
-          accountIds: [],
-          minDelay,
-          maxDelay,
-          op: { kind: "broadcast", rows: cleaned },
-        }),
-        signal: ac.signal,
-      });
-      await readStream(res);
-    } catch (e) {
-      if ((e as Error).name !== "AbortError") {
-        const message = (e as Error).message;
-        addLog({ level: "error", message });
-        toast.error(message);
-      }
-    } finally {
-      setRunning(false);
-      abortRef.current = null;
-    }
-  };
 
   return (
     <main className="min-h-screen bg-background">
