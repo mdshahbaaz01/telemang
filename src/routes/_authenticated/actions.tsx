@@ -136,6 +136,11 @@ function ActionsPageInner() {
   const search = Route.useSearch();
   const listAcc = useServerFn(listAccounts);
   const accountsQ = useQuery({ queryKey: ["accounts"], queryFn: () => listAcc() });
+  const listRunsFn = useServerFn(listActionRuns);
+  const deleteRunFn = useServerFn(deleteActionRun);
+  const qc = useQueryClient();
+  const runsQ = useQuery({ queryKey: ["action-runs"], queryFn: () => listRunsFn() });
+  const [editingRun, setEditingRun] = useState<any | null>(null);
 
   const [tab, setTab] = useState<Tab>(search.tab ?? "react");
   const [source, setSource] = useState("");
@@ -316,6 +321,23 @@ function ActionsPageInner() {
   const stop = () => {
     abortRef.current?.abort();
     setRunning(false);
+  };
+
+  const rerunFromParams = async (params: any) => {
+    if (!params || !params.op) return toast.error("Run has no saved params");
+    await streamRun(params);
+    qc.invalidateQueries({ queryKey: ["action-runs"] });
+  };
+
+  const deleteRun = async (runId: string) => {
+    if (!confirm("Delete this run and its logs?")) return;
+    try {
+      await deleteRunFn({ data: { runId } });
+      qc.invalidateQueries({ queryKey: ["action-runs"] });
+      toast.success("Run deleted");
+    } catch (e) {
+      toast.error((e as Error).message);
+    }
   };
 
   const streamRun = async (payload: unknown) => {
