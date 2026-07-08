@@ -229,7 +229,8 @@ export const Route = createFileRoute("/api/public/actions-stream")({
                     const answers = pollObj?.answers ?? [];
                     const chosen = body.op.options
                       .map((i) => answers[i]?.option)
-                      .filter((x: unknown): x is Uint8Array => !!x);
+                      .filter((x): x is Uint8Array => !!x)
+                      .map((x) => Buffer.from(x));
                     if (chosen.length === 0) throw new Error("No matching poll options");
                     await client.invoke(
                       new Api.messages.SendVote({
