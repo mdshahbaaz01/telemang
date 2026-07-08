@@ -230,3 +230,146 @@ function OwnerPanel() {
     </main>
   );
 }
+
+type AccountLite = { id: string; first_name?: string | null; username?: string | null; phone?: string | null };
+
+function AccountGroupsSection({ accounts }: { accounts: AccountLite[] }) {
+  const qc = useQueryClient();
+  const listFn = useServerFn(listAccountGroups);
+  const createFn = useServerFn(createAccountGroup);
+  const renameFn = useServerFn(renameAccountGroup);
+  const deleteFn = useServerFn(deleteAccountGroup);
+  const setMembersFn = useServerFn(setGroupMembers);
+
+  const q = useQuery({ queryKey: ["account-groups"], queryFn: () => listFn() });
+  const [newName, setNewName] = useState("");
+
+  const create = useMutation({
+    mutationFn: (name: string) => createFn({ data: { name } }),
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ["account-groups"] }); setNewName(""); },
+    onError: (e) => toast.error((e as Error).message),
+  });
+  const rename = useMutation({
+    mutationFn: (v: { id: string; name: string }) => renameFn({ data: v }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["account-groups"] }),
+    onError: (e) => toast.error((e as Error).message),
+  });
+  const del = useMutation({
+    mutationFn: (id: string) => deleteFn({ data: { id } }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["account-groups"] }),
+    onError: (e) => toast.error((e as Error).message),
+  });
+  const setMembers = useMutation({
+    mutationFn: (v: { groupId: string; accountIds: string[] }) => setMembersFn({ data: v }),
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ["account-groups"] }); toast.success("Group updated"); },
+    onError: (e) => toast.error((e as Error).message),
+  });
+
+  const [expanded, setExpanded] = useState<string | null>(null);
+  const [pendingMembers, setPendingMembers] = useState<Record<string, string[]>>({});
+
+  const label = (a: AccountLite) => a.first_name || a.username || a.phone || a.id;
+
+  return (
+    <section className="rounded-lg border border-border bg-card p-4 md:p-6">
+      <div className="mb-4 flex items-center gap-2">
+        <Users className="h-4 w-4 text-muted-foreground" />
+        <h2 className="text-lg font-semibold">Account groups ({q.data?.length ?? 0})</h2>
+        <span className="ml-2 text-xs text-muted-foreground">Reusable tags — pick a whole group in any action</span>
+      </div>
+      <div className="flex gap-2 mb-4">
+        <Input
+          value={newName}
+          onChange={(e) => setNewName(e.target.value)}
+          placeholder="e.g. India warm, Aged 2024, Test5"
+          className="max-w-xs"
+        />
+        <Button
+          size="sm"
+          disabled={!newName.trim() || create.isPending}
+          onClick={() => create.mutate(newName.trim())}
+        >
+          <Plus className="h-3.5 w-3.5 mr-1" /> Add group
+        </Button>
+      </div>
+      {q.isLoading && <p className="text-sm text-muted-foreground">Loading…</p>}
+      {q.data?.length === 0 && <p className="text-sm text-muted-foreground">No groups yet.</p>}
+      <div className="space-y-2">
+        {(q.data ?? []).map((g) => {
+          const currentMembers = pendingMembers[g.id] ?? g.accountIds;
+          const isOpen = expanded === g.id;
+          const dirty = pendingMembers[g.id] && (pendingMembers[g.id].length !== g.accountIds.length ||
+            pendingMembers[g.id].some((id) => !g.accountIds.includes(id)));
+          return (
+            <div key={g.id} className="rounded border border-border/70">
+              <div className="flex items-center gap-2 px-3 py-2">
+                <Input
+                  defaultValue={g.name}
+                  onBlur={(e) => {
+                    const v = e.target.value.trim();
+                    if (v && v !== g.name) rename.mutate({ id: g.id, name: v });
+                  }}
+                  className="max-w-xs h-8 text-sm"
+                />
+                <span className="text-xs text-muted-foreground">{g.accountIds.length} account(s)</span>
+                <Button size="sm" variant="ghost" onClick={() => setExpanded(isOpen ? null : g.id)}>
+                  {isOpen ? "Hide" : "Members"}
+                </Button>
+                <Button size="sm" variant="ghost" className="text-destructive" onClick={() => {
+                  if (confirm(`Delete group "${g.name}"?`)) del.mutate(g.id);
+                }}>
+                  <Trash2 className="h-3.5 w-3.5" />
+                </Button>
+              </div>
+              {isOpen && (
+                <div className="border-t border-border/50 px-3 py-2 space-y-2">
+                  <div className="flex flex-wrap gap-1.5 max-h-48 overflow-auto">
+                    {accounts.map((a) => {
+                      const on = currentMembers.includes(a.id);
+                      return (
+                        <button
+                          key={a.id}
+                          type="button"
+                          onClick={() => {
+                            const next = on
+                              ? currentMembers.filter((id) => id !== a.id)
+                              : [...currentMembers, a.id];
+                            setPendingMembers({ ...pendingMembers, [g.id]: next });
+                          }}
+                          className={
+                            "text-xs rounded-full px-2 py-1 border transition-colors " +
+                            (on
+                              ? "bg-primary text-primary-foreground border-primary"
+                              : "bg-background border-border hover:border-primary/50")
+                          }
+                        >
+                          {label(a)}
+                        </button>
+                      );
+                    })}
+                    {!accounts.length && <p className="text-xs text-muted-foreground">No accounts.</p>}
+                  </div>
+                  {dirty && (
+                    <div className="flex gap-2">
+                      <Button
+                        size="sm"
+                        onClick={() => setMembers.mutate({ groupId: g.id, accountIds: currentMembers })}
+                        disabled={setMembers.isPending}
+                      >
+                        Save {currentMembers.length} member(s)
+                      </Button>
+                      <Button size="sm" variant="ghost" onClick={() => {
+                        const { [g.id]: _drop, ...rest } = pendingMembers;
+                        setPendingMembers(rest);
+                      }}>Cancel</Button>
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+          );
+        })}
+      </div>
+    </section>
+  );
+}
