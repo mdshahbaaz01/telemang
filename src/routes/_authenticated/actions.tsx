@@ -5,14 +5,16 @@ import { useQuery } from "@tanstack/react-query";
 import { useMemo, useRef, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { listAccounts } from "@/lib/accounts.functions";
-import { loadPoll } from "@/lib/actions.functions";
+import { loadPoll, listActionRuns, deleteActionRun } from "@/lib/actions.functions";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { toast } from "sonner";
 import { AdminGate } from "@/components/AdminGate";
-import { Square, Play, Paperclip, X, AlertTriangle, Copy, Trash2 } from "lucide-react";
+import { Square, Play, Paperclip, X, AlertTriangle, Copy, Trash2, RotateCw, Pencil } from "lucide-react";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { useQueryClient } from "@tanstack/react-query";
 
 export const Route = createFileRoute("/_authenticated/actions")({
   validateSearch: (s: Record<string, unknown>) =>
