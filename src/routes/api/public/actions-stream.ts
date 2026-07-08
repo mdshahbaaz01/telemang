@@ -415,7 +415,7 @@ export const Route = createFileRoute("/api/public/actions-stream")({
               return { ok, fail };
             };
 
-            const runBroadcastRow = async (row: { accountId: string; message: string; targets: string[] }) => {
+            const runBroadcastRow = async (row: { accountId: string; message: string; targets: string[]; attachment?: { path: string; filename: string; mimeType?: string } }) => {
               const accountId = row.accountId;
               send("log", { accountId, level: "info", message: "Connecting…" });
               let client;
@@ -429,12 +429,32 @@ export const Route = createFileRoute("/api/public/actions-stream")({
               }
               let ok = 0;
               let fail = 0;
+              let attData: { buf: Buffer; filename: string; mimeType?: string } | null = null;
+              if (row.attachment) {
+                try {
+                  attData = await loadAttachment(row.attachment);
+                } catch (e) {
+                  const em = (e as Error).message;
+                  send("log", { accountId, level: "error", message: em });
+                  await logDb(accountId, null, "error", em);
+                  await client.disconnect().catch(() => {});
+                  send("done", { accountId, ok: 0, fail: row.targets.length });
+                  return { ok: 0, fail: row.targets.length };
+                }
+              }
               try {
                 for (const t of row.targets) {
                   if (stopRequested) break;
                   try {
                     const dest = await resolveTarget(client, t);
-                    await client.sendMessage(dest, { message: row.message });
+                    if (attData) {
+                      await client.sendFile(dest, {
+                        file: buildCustomFile(attData),
+                        caption: row.message || undefined,
+                      });
+                    } else {
+                      await client.sendMessage(dest, { message: row.message });
+                    }
                     ok++;
                     const m = `Sent to ${t}`;
                     send("log", { accountId, level: "success", target: t, message: m });
