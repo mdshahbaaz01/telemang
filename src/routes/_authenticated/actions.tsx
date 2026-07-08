@@ -1238,6 +1238,79 @@ function ActionsPageInner() {
             </div>
           </div>
 
+          {tab === "broadcast" && (
+            <div className="rounded-lg border border-border bg-card p-4">
+              <div className="mb-2 flex items-center gap-2">
+                <CalendarClock className="h-4 w-4 text-muted-foreground" />
+                <div className="text-sm font-medium">Scheduled broadcasts</div>
+                <span className="ml-auto text-xs text-muted-foreground">
+                  {schedulesQ.data?.length ?? 0} total · fires within ±1s of the target second
+                </span>
+              </div>
+              {(schedulesQ.data ?? []).length === 0 ? (
+                <p className="text-xs text-muted-foreground">No schedules yet.</p>
+              ) : (
+                <div className="max-h-64 space-y-1 overflow-auto text-sm">
+                  {(schedulesQ.data ?? []).map((s) => {
+                    const when = new Date(s.scheduledAt);
+                    const statusColor =
+                      s.status === "pending"
+                        ? "text-primary"
+                        : s.status === "running"
+                        ? "text-yellow-500"
+                        : s.status === "done"
+                        ? "text-emerald-500"
+                        : s.status === "cancelled"
+                        ? "text-muted-foreground"
+                        : "text-destructive";
+                    return (
+                      <div
+                        key={s.id}
+                        className="flex flex-wrap items-center gap-2 rounded border border-border/50 px-2 py-1.5"
+                      >
+                        <Clock className="h-3.5 w-3.5 text-muted-foreground" />
+                        <span className="font-mono text-xs">
+                          {when.toLocaleString(undefined, {
+                            year: "numeric",
+                            month: "2-digit",
+                            day: "2-digit",
+                            hour: "2-digit",
+                            minute: "2-digit",
+                            second: "2-digit",
+                          })}
+                        </span>
+                        <span className={`text-xs uppercase tracking-wide ${statusColor}`}>{s.status}</span>
+                        <span className="text-xs text-muted-foreground">· {s.rowCount} row(s)</span>
+                        {s.error && (
+                          <span className="text-xs text-destructive truncate max-w-[40ch]" title={s.error}>
+                            {s.error}
+                          </span>
+                        )}
+                        {s.status === "pending" && (
+                          <button
+                            type="button"
+                            className="ml-auto text-xs text-destructive underline"
+                            onClick={async () => {
+                              try {
+                                await cancelSchedFn({ data: { id: s.id } });
+                                toast.success("Cancelled");
+                                await qc.invalidateQueries({ queryKey: ["scheduled-broadcasts"] });
+                              } catch (e) {
+                                toast.error((e as Error).message);
+                              }
+                            }}
+                          >
+                            Cancel
+                          </button>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          )}
+
           {errorLogs.length > 0 && (
             <div className="rounded-lg border border-destructive/40 bg-destructive/5 p-4">
               <div className="mb-3 flex flex-wrap items-center gap-2">
