@@ -83,14 +83,18 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
         content:
           "Manage multiple Telegram user accounts and automate channel joins with delays, FloodWait handling, and live logs.",
       },
-      { property: "og:title", content: "TeleManager Pro" },
+      { property: "og:title", content: "TeleManager Pro — Telegram Account & Join Task Dashboard" },
       {
         property: "og:description",
         content:
-          "Manage multiple Telegram user accounts and automate channel joins.",
+          "Manage multiple Telegram user accounts and automate channel joins with delays, FloodWait handling, and live logs.",
       },
       { property: "og:type", content: "website" },
       { name: "twitter:card", content: "summary_large_image" },
+      { name: "twitter:title", content: "TeleManager Pro — Telegram Account & Join Task Dashboard" },
+      { name: "twitter:description", content: "Manage multiple Telegram user accounts and automate channel joins with delays, FloodWait handling, and live logs." },
+      { property: "og:image", content: "https://storage.googleapis.com/gpt-engineer-file-uploads/attachments/og-images/24981c38-d47e-42a7-91ed-884df366eca9" },
+      { name: "twitter:image", content: "https://storage.googleapis.com/gpt-engineer-file-uploads/attachments/og-images/24981c38-d47e-42a7-91ed-884df366eca9" },
     ],
     links: [
       {
