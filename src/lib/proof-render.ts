@@ -52,7 +52,33 @@ export type OtherDialog = {
   unread?: number;
 };
 
-export function buildChannelViewSvg(info: ChannelInfo): string {
+export type ChannelMessage = {
+  text: string;
+  time: string;
+  views?: number;
+};
+
+function wrapText(text: string, maxChars: number, maxLines: number): string[] {
+  const words = text.replace(/\s+/g, " ").trim().split(" ");
+  const lines: string[] = [];
+  let cur = "";
+  for (const w of words) {
+    if ((cur + " " + w).trim().length > maxChars) {
+      if (cur) lines.push(cur);
+      cur = w;
+      if (lines.length >= maxLines) break;
+    } else {
+      cur = (cur ? cur + " " : "") + w;
+    }
+  }
+  if (cur && lines.length < maxLines) lines.push(cur);
+  if (lines.length === maxLines && words.join(" ").length > lines.join(" ").length) {
+    lines[maxLines - 1] = lines[maxLines - 1].replace(/.{0,3}$/, "…");
+  }
+  return lines;
+}
+
+export function buildChannelViewSvg(info: ChannelInfo, messages: ChannelMessage[] = []): string {
   const W = 720;
   const H = 1280;
   const title = esc(info.title);
@@ -60,6 +86,32 @@ export function buildChannelViewSvg(info: ChannelInfo): string {
   const avColor = avatarColor(info.title);
   const av = esc(initials(info.title));
   const time = esc(nowTime());
+
+  // Message bubbles rendered from bottom-up, above the "You joined" pill
+  const bubbleAreaBottom = H - 300; // above joined pill (which sits at H - 260)
+  const bubbleAreaTop = 330;
+  const bubbleMaxW = W - 80;
+  const lineH = 30;
+  const padX = 22;
+  const padY = 18;
+  const gap = 12;
+  const bubbles: string[] = [];
+  let y = bubbleAreaBottom;
+  const msgs = messages.slice(-6);
+  for (let i = msgs.length - 1; i >= 0; i--) {
+    const m = msgs[i];
+    const lines = wrapText(m.text || "…", 40, 4);
+    const bh = padY * 2 + lines.length * lineH + 26; // extra for footer time
+    const bw = Math.min(bubbleMaxW, Math.max(220, ...lines.map((l) => l.length * 12 + padX * 2)));
+    const top = y - bh;
+    if (top < bubbleAreaTop) break;
+    const textEls = lines
+      .map((l, li) => `<text x="${padX}" y="${padY + (li + 1) * lineH - 6}" font-family="Helvetica, Arial, sans-serif" font-size="22" fill="#ffffff">${esc(l)}</text>`)
+      .join("");
+    const footer = `<text x="${bw - padX}" y="${bh - 12}" text-anchor="end" font-family="Helvetica, Arial, sans-serif" font-size="16" fill="#7d95a8">${m.views ? `👁 ${m.views >= 1000 ? (m.views / 1000).toFixed(1).replace(/\.0$/, "") + "K" : m.views}  ` : ""}${esc(m.time)}</text>`;
+    bubbles.push(`<g transform="translate(40, ${top})"><rect width="${bw}" height="${bh}" rx="14" ry="14" fill="#182533"/>${textEls}${footer}</g>`);
+    y = top - gap;
+  }
 
   return `<?xml version="1.0" encoding="UTF-8"?>
 <svg xmlns="http://www.w3.org/2000/svg" width="${W}" height="${H}" viewBox="0 0 ${W} ${H}">
@@ -79,6 +131,7 @@ export function buildChannelViewSvg(info: ChannelInfo): string {
   <rect x="0" y="210" width="${W}" height="${H - 210 - 200}" fill="#0e1621"/>
   <text x="${W/2}" y="252" text-anchor="middle" font-family="Helvetica, Arial, sans-serif" font-size="30" font-weight="700" fill="#ffffff">${title}</text>
   <text x="${W/2}" y="286" text-anchor="middle" font-family="Helvetica, Arial, sans-serif" font-size="20" fill="#7d8e9c">${subs}</text>
+  ${bubbles.join("\n")}
   <g transform="translate(${W/2}, ${H - 260})">
     <rect x="-180" y="-30" width="360" height="60" rx="30" ry="30" fill="rgba(0,0,0,0.5)"/>
     <text x="0" y="8" text-anchor="middle" font-family="Helvetica, Arial, sans-serif" font-size="22" font-weight="600" fill="#ffffff">You joined this channel</text>
@@ -148,4 +201,10 @@ export const SAMPLE_OTHERS: OtherDialog[] = [
   { title: "Gym Buddies", lastMessage: "David: leg day tomorrow?", time: "Yesterday", unread: 1 },
   { title: "Family", lastMessage: "Dad shared a photo", time: "Mon" },
   { title: "Deals & Coupons", lastMessage: "50% off flash sale ends tonight", time: "Sun" },
+];
+
+export const SAMPLE_MESSAGES: ChannelMessage[] = [
+  { text: "Welcome to the channel! Turn on notifications so you never miss an update.", time: "9:12 AM", views: 4200 },
+  { text: "New drop coming this weekend — details tomorrow 🔥", time: "10:04 AM", views: 3800 },
+  { text: "Thanks for 10K subscribers 🎉", time: "11:20 AM", views: 2100 },
 ];
