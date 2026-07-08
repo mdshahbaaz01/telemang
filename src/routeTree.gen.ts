@@ -15,6 +15,7 @@ import { Route as IndexRouteImport } from './routes/index'
 import { Route as AuthenticatedOwnerRouteImport } from './routes/_authenticated/owner'
 import { Route as AuthenticatedDashboardRouteImport } from './routes/_authenticated/dashboard'
 import { Route as AuthenticatedCleanupRouteImport } from './routes/_authenticated/cleanup'
+import { Route as ApiPublicCleanupStreamRouteImport } from './routes/api/public/cleanup-stream'
 import { Route as AuthenticatedTasksNewRouteImport } from './routes/_authenticated/tasks.new'
 import { Route as AuthenticatedTasksIdRouteImport } from './routes/_authenticated/tasks.$id'
 import { Route as AuthenticatedGroupsRouteImport } from './routes/_authenticated/groups.'
@@ -48,6 +49,11 @@ const AuthenticatedCleanupRoute = AuthenticatedCleanupRouteImport.update({
   path: '/cleanup',
   getParentRoute: () => AuthenticatedRouteRoute,
 } as any)
+const ApiPublicCleanupStreamRoute = ApiPublicCleanupStreamRouteImport.update({
+  id: '/api/public/cleanup-stream',
+  path: '/api/public/cleanup-stream',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const AuthenticatedTasksNewRoute = AuthenticatedTasksNewRouteImport.update({
   id: '/tasks/new',
   path: '/tasks/new',
@@ -73,6 +79,7 @@ export interface FileRoutesByFullPath {
   '/groups/': typeof AuthenticatedGroupsRoute
   '/tasks/$id': typeof AuthenticatedTasksIdRoute
   '/tasks/new': typeof AuthenticatedTasksNewRoute
+  '/api/public/cleanup-stream': typeof ApiPublicCleanupStreamRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
@@ -83,6 +90,7 @@ export interface FileRoutesByTo {
   '/groups': typeof AuthenticatedGroupsRoute
   '/tasks/$id': typeof AuthenticatedTasksIdRoute
   '/tasks/new': typeof AuthenticatedTasksNewRoute
+  '/api/public/cleanup-stream': typeof ApiPublicCleanupStreamRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
@@ -95,6 +103,7 @@ export interface FileRoutesById {
   '/_authenticated/groups/': typeof AuthenticatedGroupsRoute
   '/_authenticated/tasks/$id': typeof AuthenticatedTasksIdRoute
   '/_authenticated/tasks/new': typeof AuthenticatedTasksNewRoute
+  '/api/public/cleanup-stream': typeof ApiPublicCleanupStreamRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
@@ -107,6 +116,7 @@ export interface FileRouteTypes {
     | '/groups/'
     | '/tasks/$id'
     | '/tasks/new'
+    | '/api/public/cleanup-stream'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
@@ -117,6 +127,7 @@ export interface FileRouteTypes {
     | '/groups'
     | '/tasks/$id'
     | '/tasks/new'
+    | '/api/public/cleanup-stream'
   id:
     | '__root__'
     | '/'
@@ -128,12 +139,14 @@ export interface FileRouteTypes {
     | '/_authenticated/groups/'
     | '/_authenticated/tasks/$id'
     | '/_authenticated/tasks/new'
+    | '/api/public/cleanup-stream'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   AuthenticatedRouteRoute: typeof AuthenticatedRouteRouteWithChildren
   AuthRoute: typeof AuthRoute
+  ApiPublicCleanupStreamRoute: typeof ApiPublicCleanupStreamRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -179,6 +192,13 @@ declare module '@tanstack/react-router' {
       fullPath: '/cleanup'
       preLoaderRoute: typeof AuthenticatedCleanupRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
+    }
+    '/api/public/cleanup-stream': {
+      id: '/api/public/cleanup-stream'
+      path: '/api/public/cleanup-stream'
+      fullPath: '/api/public/cleanup-stream'
+      preLoaderRoute: typeof ApiPublicCleanupStreamRouteImport
+      parentRoute: typeof rootRouteImport
     }
     '/_authenticated/tasks/new': {
       id: '/_authenticated/tasks/new'
@@ -229,6 +249,7 @@ const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   AuthenticatedRouteRoute: AuthenticatedRouteRouteWithChildren,
   AuthRoute: AuthRoute,
+  ApiPublicCleanupStreamRoute: ApiPublicCleanupStreamRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
