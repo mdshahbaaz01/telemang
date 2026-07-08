@@ -12,6 +12,7 @@ import { Route as rootRouteImport } from './routes/__root'
 import { Route as AuthRouteImport } from './routes/auth'
 import { Route as AuthenticatedRouteRouteImport } from './routes/_authenticated/route'
 import { Route as IndexRouteImport } from './routes/index'
+import { Route as AuthenticatedProofRouteImport } from './routes/_authenticated/proof'
 import { Route as AuthenticatedOwnerRouteImport } from './routes/_authenticated/owner'
 import { Route as AuthenticatedDashboardRouteImport } from './routes/_authenticated/dashboard'
 import { Route as AuthenticatedCleanupRouteImport } from './routes/_authenticated/cleanup'
@@ -39,6 +40,11 @@ const IndexRoute = IndexRouteImport.update({
   id: '/',
   path: '/',
   getParentRoute: () => rootRouteImport,
+} as any)
+const AuthenticatedProofRoute = AuthenticatedProofRouteImport.update({
+  id: '/proof',
+  path: '/proof',
+  getParentRoute: () => AuthenticatedRouteRoute,
 } as any)
 const AuthenticatedOwnerRoute = AuthenticatedOwnerRouteImport.update({
   id: '/owner',
@@ -117,6 +123,7 @@ export interface FileRoutesByFullPath {
   '/cleanup': typeof AuthenticatedCleanupRoute
   '/dashboard': typeof AuthenticatedDashboardRoute
   '/owner': typeof AuthenticatedOwnerRoute
+  '/proof': typeof AuthenticatedProofRoute
   '/groups/$id': typeof AuthenticatedGroupsIdRoute
   '/tasks/$id': typeof AuthenticatedTasksIdRoute
   '/tasks/new': typeof AuthenticatedTasksNewRoute
@@ -134,6 +141,7 @@ export interface FileRoutesByTo {
   '/cleanup': typeof AuthenticatedCleanupRoute
   '/dashboard': typeof AuthenticatedDashboardRoute
   '/owner': typeof AuthenticatedOwnerRoute
+  '/proof': typeof AuthenticatedProofRoute
   '/groups/$id': typeof AuthenticatedGroupsIdRoute
   '/tasks/$id': typeof AuthenticatedTasksIdRoute
   '/tasks/new': typeof AuthenticatedTasksNewRoute
@@ -153,6 +161,7 @@ export interface FileRoutesById {
   '/_authenticated/cleanup': typeof AuthenticatedCleanupRoute
   '/_authenticated/dashboard': typeof AuthenticatedDashboardRoute
   '/_authenticated/owner': typeof AuthenticatedOwnerRoute
+  '/_authenticated/proof': typeof AuthenticatedProofRoute
   '/_authenticated/groups/$id': typeof AuthenticatedGroupsIdRoute
   '/_authenticated/tasks/$id': typeof AuthenticatedTasksIdRoute
   '/_authenticated/tasks/new': typeof AuthenticatedTasksNewRoute
@@ -172,6 +181,7 @@ export interface FileRouteTypes {
     | '/cleanup'
     | '/dashboard'
     | '/owner'
+    | '/proof'
     | '/groups/$id'
     | '/tasks/$id'
     | '/tasks/new'
@@ -189,6 +199,7 @@ export interface FileRouteTypes {
     | '/cleanup'
     | '/dashboard'
     | '/owner'
+    | '/proof'
     | '/groups/$id'
     | '/tasks/$id'
     | '/tasks/new'
@@ -207,6 +218,7 @@ export interface FileRouteTypes {
     | '/_authenticated/cleanup'
     | '/_authenticated/dashboard'
     | '/_authenticated/owner'
+    | '/_authenticated/proof'
     | '/_authenticated/groups/$id'
     | '/_authenticated/tasks/$id'
     | '/_authenticated/tasks/new'
@@ -246,6 +258,13 @@ declare module '@tanstack/react-router' {
       fullPath: '/'
       preLoaderRoute: typeof IndexRouteImport
       parentRoute: typeof rootRouteImport
+    }
+    '/_authenticated/proof': {
+      id: '/_authenticated/proof'
+      path: '/proof'
+      fullPath: '/proof'
+      preLoaderRoute: typeof AuthenticatedProofRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
     }
     '/_authenticated/owner': {
       id: '/_authenticated/owner'
@@ -349,6 +368,7 @@ interface AuthenticatedRouteRouteChildren {
   AuthenticatedCleanupRoute: typeof AuthenticatedCleanupRoute
   AuthenticatedDashboardRoute: typeof AuthenticatedDashboardRoute
   AuthenticatedOwnerRoute: typeof AuthenticatedOwnerRoute
+  AuthenticatedProofRoute: typeof AuthenticatedProofRoute
   AuthenticatedGroupsIdRoute: typeof AuthenticatedGroupsIdRoute
   AuthenticatedTasksIdRoute: typeof AuthenticatedTasksIdRoute
   AuthenticatedTasksNewRoute: typeof AuthenticatedTasksNewRoute
@@ -362,6 +382,7 @@ const AuthenticatedRouteRouteChildren: AuthenticatedRouteRouteChildren = {
   AuthenticatedCleanupRoute: AuthenticatedCleanupRoute,
   AuthenticatedDashboardRoute: AuthenticatedDashboardRoute,
   AuthenticatedOwnerRoute: AuthenticatedOwnerRoute,
+  AuthenticatedProofRoute: AuthenticatedProofRoute,
   AuthenticatedGroupsIdRoute: AuthenticatedGroupsIdRoute,
   AuthenticatedTasksIdRoute: AuthenticatedTasksIdRoute,
   AuthenticatedTasksNewRoute: AuthenticatedTasksNewRoute,
