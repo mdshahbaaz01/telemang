@@ -61,7 +61,6 @@ function ProofPreview({
       : buildChannelViewSvg(info, SAMPLE_MESSAGES);
   }, [format, channelLink]);
 
-  const dataUrl = `data:image/svg+xml;utf8,${encodeURIComponent(svg)}`;
   const label =
     format === "auto"
       ? "Auto — preview shows chat list for private links, channel view otherwise"
@@ -76,10 +75,11 @@ function ProofPreview({
         <span className="text-xs text-muted-foreground">{label}</span>
       </div>
       <div className="flex justify-center rounded-md bg-[#0a1826] p-4">
-        <img
-          src={dataUrl}
-          alt="Screenshot preview"
-          className="max-h-[480px] w-auto rounded-md shadow-lg"
+        <div
+          className="max-h-[520px] w-auto overflow-hidden rounded-md shadow-lg [&>svg]:h-full [&>svg]:max-h-[520px] [&>svg]:w-auto"
+          role="img"
+          aria-label="Screenshot preview"
+          dangerouslySetInnerHTML={{ __html: svg.replace(/^<\?xml[^>]*\?>\s*/, "") }}
         />
       </div>
       <p className="mt-2 text-center text-xs text-muted-foreground">
