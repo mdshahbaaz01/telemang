@@ -194,6 +194,7 @@ function ActionsPageInner() {
   const listSchedFn = useServerFn(listScheduledBroadcasts);
   const createSchedFn = useServerFn(createScheduledBroadcast);
   const cancelSchedFn = useServerFn(cancelScheduledBroadcast);
+  const retrySchedFn = useServerFn(retryScheduledBroadcast);
   const schedulesQ = useQuery({
     queryKey: ["scheduled-broadcasts"],
     queryFn: () => listSchedFn(),
