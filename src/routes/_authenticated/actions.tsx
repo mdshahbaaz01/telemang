@@ -29,8 +29,8 @@ export const Route = createFileRoute("/_authenticated/actions")({
 
 type Tab = "react" | "forward" | "vote" | "broadcast" | "reply";
 
-type BroadcastRow = { id: string; accountId: string; message: string; targets: string };
-type ReplyRow = { id: string; accountId: string; message: string };
+type BroadcastRow = { id: string; message: string; targets: string };
+type ReplyRow = { id: string; message: string };
 
 type LogEntry = {
   accountId?: string;
@@ -92,7 +92,6 @@ function ActionsPageInner() {
   const accountsQ = useQuery({ queryKey: ["accounts"], queryFn: () => listAcc() });
 
   const [tab, setTab] = useState<Tab>(search.tab ?? "react");
-  const [selected, setSelected] = useState<Set<string>>(new Set());
   const [source, setSource] = useState("");
   const [emoji, setEmoji] = useState("👍");
   const [customEmojiId, setCustomEmojiId] = useState("");
@@ -102,10 +101,10 @@ function ActionsPageInner() {
   const [minDelay, setMinDelay] = useState(2);
   const [maxDelay, setMaxDelay] = useState(6);
   const [rows, setRows] = useState<BroadcastRow[]>([
-    { id: crypto.randomUUID(), accountId: "", message: "", targets: "" },
+    { id: crypto.randomUUID(), message: "", targets: "" },
   ]);
   const [replyRows, setReplyRows] = useState<ReplyRow[]>([
-    { id: crypto.randomUUID(), accountId: "", message: "" },
+    { id: crypto.randomUUID(), message: "" },
   ]);
   const [viaDiscussion, setViaDiscussion] = useState(true);
 
@@ -115,24 +114,7 @@ function ActionsPageInner() {
   const abortRef = useRef<AbortController | null>(null);
 
   const accountList = accountsQ.data ?? [];
-  const allSelected = useMemo(
-    () => accountList.length > 0 && accountList.every((a) => selected.has(a.id)),
-    [accountList, selected],
-  );
-
-  const toggle = (id: string) => {
-    setSelected((prev) => {
-      const next = new Set(prev);
-      if (next.has(id)) next.delete(id);
-      else next.add(id);
-      return next;
-    });
-  };
-
-  const toggleAll = () => {
-    if (allSelected) setSelected(new Set());
-    else setSelected(new Set(accountList.map((a) => a.id)));
-  };
+  const allAccountIds = useMemo(() => accountList.map((a) => a.id), [accountList]);
 
   const addLog = (l: Omit<LogEntry, "ts">) =>
     setLogs((prev) => [{ ...l, ts: Date.now() }, ...prev].slice(0, 500));
@@ -143,8 +125,8 @@ function ActionsPageInner() {
       toast.error("Enter a valid message link (https://t.me/<chat>/<id>)");
       return;
     }
-    if (selected.size === 0) {
-      toast.error("Pick at least one account");
+    if (allAccountIds.length === 0) {
+      toast.error("No accounts available");
       return;
     }
 
@@ -195,7 +177,7 @@ function ActionsPageInner() {
           authorization: `Bearer ${token}`,
         },
         body: JSON.stringify({
-          accountIds: [...selected],
+          accountIds: allAccountIds,
           minDelay,
           maxDelay,
           op,
