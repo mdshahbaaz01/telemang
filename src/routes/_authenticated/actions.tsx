@@ -1105,7 +1105,15 @@ function ActionsPageInner() {
                   <Play className="mr-1 h-4 w-4" /> Send {replyRows.length} {viaDiscussion ? "comment" : "reply"}{replyRows.length === 1 ? "" : "s"}
                 </Button>
               ) : (
-                <Button onClick={run} disabled={running || allAccountIds.length === 0}>
+                <Button
+                  onClick={run}
+                  disabled={
+                    running ||
+                    allAccountIds.length === 0 ||
+                    (tab === "vote" && !!pollInfo?.alreadyVoted && !retake) ||
+                    (tab === "vote" && !!pollInfo?.closed)
+                  }
+                >
                   <Play className="mr-1 h-4 w-4" />
                   Run on {allAccountIds.length} account{allAccountIds.length === 1 ? "" : "s"}
                 </Button>
