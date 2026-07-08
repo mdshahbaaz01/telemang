@@ -662,6 +662,161 @@ export const Route = createFileRoute("/api/public/actions-stream")({
               return { ok, fail };
             };
 
+            const parseBotHandle = (raw: string) => {
+              let s = raw.trim();
+              s = s.replace(/^https?:\/\/(t\.me|telegram\.me)\//i, "");
+              s = s.replace(/^@/, "");
+              // Support t.me/bot?start=xxx or t.me/bot?startapp=xxx
+              let startParam: string | undefined;
+              const q = s.indexOf("?");
+              if (q >= 0) {
+                const query = new URLSearchParams(s.slice(q + 1));
+                startParam = query.get("start") ?? query.get("startapp") ?? undefined;
+                s = s.slice(0, q);
+              }
+              // Drop trailing paths
+              s = s.split("/")[0];
+              return { username: s, startParam };
+            };
+
+            const runBotFlowForAccount = async (accountId: string, op: { bot: string; startParam?: string; steps: string[] }) => {
+              send("log", { accountId, level: "info", message: "Connecting…" });
+              let client;
+              try {
+                client = await openClientForAccount(supabase, accountId);
+              } catch (e) {
+                const msg = `Connect failed: ${errorText(e)}`;
+                send("log", { accountId, level: "error", message: msg });
+                await logDb(accountId, null, "error", msg);
+                send("done", { accountId, ok: 0, fail: 1 });
+                return { ok: 0, fail: 1 };
+              }
+              let ok = 0;
+              let fail = 0;
+              let botPeer: any;
+              try {
+                const parsed = parseBotHandle(op.bot);
+                const startParam = op.startParam?.trim() || parsed.startParam;
+                const botLabel = `@${parsed.username}`;
+                try {
+                  botPeer = await client.getEntity(parsed.username);
+                } catch (e) {
+                  const msg = `Resolve bot failed: ${(e as Error).message}`;
+                  send("log", { accountId, level: "error", target: botLabel, message: msg });
+                  await logDb(accountId, botLabel, "error", msg);
+                  return { ok: 0, fail: 1 };
+                }
+
+                // Kick off with /start (+ optional deep link param) so the bot is initialized.
+                try {
+                  const { default: bigInt } = await import("big-integer");
+                  const randomId = bigInt(Math.floor(Math.random() * 1e15));
+                  await client.invoke(
+                    new Api.messages.StartBot({
+                      bot: botPeer,
+                      peer: botPeer,
+                      randomId,
+                      startParam: startParam ?? "",
+                    }),
+                  );
+                  send("log", { accountId, level: "success", target: botLabel, message: startParam ? `Started with param "${startParam}"` : "Started" });
+                  await logDb(accountId, botLabel, "success", startParam ? `Started with param "${startParam}"` : "Started");
+                } catch (e) {
+                  const em = errorText(e);
+                  send("log", { accountId, level: "warn", target: botLabel, message: `StartBot: ${em}` });
+                  await logDb(accountId, botLabel, "warn", `StartBot: ${em}`);
+                }
+
+                for (const rawStep of op.steps) {
+                  if (stopRequested) break;
+                  const step = rawStep.trim();
+                  if (!step || step.startsWith("#")) continue;
+                  const colon = step.indexOf(":");
+                  const cmd = (colon >= 0 ? step.slice(0, colon) : step).trim().toLowerCase();
+                  const arg = colon >= 0 ? step.slice(colon + 1).trim() : "";
+                  try {
+                    if (cmd === "wait" || cmd === "sleep") {
+                      const secs = Math.max(0, Math.min(120, Number(arg) || 0));
+                      send("log", { accountId, level: "info", target: botLabel, message: `Wait ${secs}s` });
+                      await new Promise((r) => setTimeout(r, secs * 1000));
+                    } else if (cmd === "text" || cmd === "send") {
+                      if (!arg) throw new Error("empty text");
+                      await client.sendMessage(botPeer, { message: arg });
+                      ok++;
+                      send("log", { accountId, level: "success", target: botLabel, message: `Sent: ${arg.slice(0, 80)}` });
+                      await logDb(accountId, botLabel, "success", `Sent: ${arg}`);
+                    } else if (cmd === "start") {
+                      const { default: bigInt } = await import("big-integer");
+                      const randomId = bigInt(Math.floor(Math.random() * 1e15));
+                      await client.invoke(
+                        new Api.messages.StartBot({ bot: botPeer, peer: botPeer, randomId, startParam: arg }),
+                      );
+                      ok++;
+                      send("log", { accountId, level: "success", target: botLabel, message: `Re-started${arg ? ` (${arg})` : ""}` });
+                      await logDb(accountId, botLabel, "success", `Re-started${arg ? ` (${arg})` : ""}`);
+                    } else if (cmd === "click" || cmd === "tap" || cmd === "button") {
+                      // Find latest bot message with an inline/reply keyboard button matching arg.
+                      const wanted = arg.toLowerCase();
+                      const recent = await client.getMessages(botPeer, { limit: 10 });
+                      let clicked = false;
+                      for (const m of recent as any[]) {
+                        const rm: any = m?.replyMarkup;
+                        const rows: any[] = rm?.rows ?? [];
+                        for (const row of rows) {
+                          for (const btn of (row?.buttons ?? [])) {
+                            const label = String(btn?.text ?? "").toLowerCase();
+                            if (!label.includes(wanted)) continue;
+                            const cls = btn?.className || btn?.CONSTRUCTOR_ID;
+                            if (btn?.data) {
+                              // Inline callback button
+                              await client.invoke(
+                                new Api.messages.GetBotCallbackAnswer({ peer: botPeer, msgId: m.id, data: btn.data }),
+                              );
+                              clicked = true;
+                            } else if (btn?.url) {
+                              send("log", { accountId, level: "warn", target: botLabel, message: `Skipped URL button "${btn.text}"` });
+                              clicked = true;
+                            } else {
+                              // Reply-keyboard button — send its label as a message.
+                              await client.sendMessage(botPeer, { message: btn.text });
+                              clicked = true;
+                            }
+                            void cls;
+                            break;
+                          }
+                          if (clicked) break;
+                        }
+                        if (clicked) break;
+                      }
+                      if (!clicked) throw new Error(`Button "${arg}" not found`);
+                      ok++;
+                      send("log", { accountId, level: "success", target: botLabel, message: `Clicked "${arg}"` });
+                      await logDb(accountId, botLabel, "success", `Clicked "${arg}"`);
+                    } else {
+                      throw new Error(`Unknown step "${cmd}"`);
+                    }
+                  } catch (e) {
+                    fail++;
+                    const em = errorText(e);
+                    const secs = await pauseAccountOnFlood(accountId, em);
+                    if (secs) {
+                      send("log", { accountId, level: "warn", target: botLabel, message: `FloodWait ${secs}s — account paused` });
+                      await logDb(accountId, botLabel, "warn", `FloodWait ${secs}s`);
+                      break;
+                    }
+                    send("log", { accountId, level: "error", target: botLabel, message: `${step} — ${em}` });
+                    await logDb(accountId, botLabel, "error", `${step} — ${em}`);
+                  }
+                  // Small pacing between steps
+                  await new Promise((r) => setTimeout(r, jitter(body.minDelay, body.maxDelay)));
+                }
+              } finally {
+                await client.disconnect().catch(() => {});
+                send("done", { accountId, ok, fail });
+              }
+              return { ok, fail };
+            };
+
             let totalOk = 0;
             let totalFail = 0;
             try {
@@ -689,7 +844,9 @@ export const Route = createFileRoute("/api/public/actions-stream")({
                           return { ok, fail };
                         },
                       )
-                    : await runWithConcurrency(body.accountIds, 8, (id) => runOne(id));
+                    : body.op.kind === "botflow"
+                      ? await runWithConcurrency(body.accountIds, 5, (id) => runBotFlowForAccount(id, body.op as any))
+                      : await runWithConcurrency(body.accountIds, 8, (id) => runOne(id));
               for (const r of results) {
                 totalOk += r.ok;
                 totalFail += r.fail;
