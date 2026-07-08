@@ -152,6 +152,7 @@ function ActionsPageInner() {
   const [viaDiscussion, setViaDiscussion] = useState(true);
   const [broadcastMode, setBroadcastMode] = useState<SendMode>("per-account");
   const [replyMode, setReplyMode] = useState<SendMode>("per-account");
+  const [broadcastSelectedIds, setBroadcastSelectedIds] = useState<string[]>([]);
 
   const [logs, setLogs] = useState<LogEntry[]>([]);
   const [running, setRunning] = useState(false);
@@ -422,7 +423,9 @@ function ActionsPageInner() {
         cleaned = withAtt.filter((r) => r.accountId);
         if (!cleaned.length) return toast.error("Pick an account for each row");
       } else {
-        cleaned = allAccountIds.flatMap((accountId) =>
+        const targetIds = broadcastSelectedIds.length ? broadcastSelectedIds : allAccountIds;
+        if (!targetIds.length) return toast.error("Select at least one account");
+        cleaned = targetIds.flatMap((accountId) =>
           withAtt.map((r) => ({ accountId, message: r.message, targets: r.targets, attachment: r.attachment })),
         );
       }
@@ -666,8 +669,53 @@ function ActionsPageInner() {
                 <p className="text-xs text-muted-foreground">
                   {broadcastMode === "per-account"
                     ? "Each row: the chosen account sends its message to all listed targets. Rows run in parallel — multiple accounts can post different messages into the same group at the same time, or one account can spray one message across many groups."
-                    : "Every row is sent from every account. Same message goes out from all IDs in parallel."}
+                    : "Every row is sent from every selected account. Same message goes out from all picked IDs in parallel."}
                 </p>
+                {broadcastMode === "all-ids" && (
+                  <div className="rounded-md border border-border p-3 space-y-2">
+                    <div className="flex items-center gap-2">
+                      <Label className="mr-auto">Send from accounts</Label>
+                      <button
+                        type="button"
+                        className="text-xs underline text-muted-foreground"
+                        onClick={() => setBroadcastSelectedIds(allAccountIds)}
+                      >
+                        Select all
+                      </button>
+                      <button
+                        type="button"
+                        className="text-xs underline text-muted-foreground"
+                        onClick={() => setBroadcastSelectedIds([])}
+                      >
+                        Clear
+                      </button>
+                    </div>
+                    <div className="max-h-48 overflow-auto grid grid-cols-1 sm:grid-cols-2 gap-1">
+                      {accountList.map((a) => {
+                        const checked = broadcastSelectedIds.includes(a.id);
+                        return (
+                          <label key={a.id} className="flex items-center gap-2 text-sm rounded px-2 py-1 hover:bg-muted/40">
+                            <input
+                              type="checkbox"
+                              checked={checked}
+                              onChange={(e) =>
+                                setBroadcastSelectedIds((ids) =>
+                                  e.target.checked ? [...ids, a.id] : ids.filter((x) => x !== a.id),
+                                )
+                              }
+                            />
+                            <span className="truncate">{a.first_name || a.username || a.phone}</span>
+                          </label>
+                        );
+                      })}
+                    </div>
+                    <p className="text-xs text-muted-foreground">
+                      {broadcastSelectedIds.length
+                        ? `${broadcastSelectedIds.length} account(s) selected`
+                        : `None selected — will use all ${allAccountIds.length} account(s)`}
+                    </p>
+                  </div>
+                )}
                 {rows.map((row, idx) => (
                   <div key={row.id} className="rounded-md border border-border p-3 space-y-2">
                     <div className="flex items-center gap-2">
