@@ -1175,9 +1175,31 @@ function ActionsPageInner() {
 
             <div className="flex gap-2 pt-2">
               {tab === "broadcast" ? (
-                <Button onClick={runBroadcast} disabled={running}>
-                  <Play className="mr-1 h-4 w-4" /> Run broadcast ({rows.length} row{rows.length === 1 ? "" : "s"})
-                </Button>
+                <>
+                  <Button onClick={runBroadcast} disabled={running || scheduling}>
+                    <Play className="mr-1 h-4 w-4" /> Run broadcast ({rows.length} row{rows.length === 1 ? "" : "s"})
+                  </Button>
+                  <div className="flex items-center gap-1 rounded-md border border-border bg-background px-2 py-1">
+                    <Clock className="h-4 w-4 text-muted-foreground" />
+                    <input
+                      type="datetime-local"
+                      step={1}
+                      value={scheduledAt}
+                      onChange={(e) => setScheduledAt(e.target.value)}
+                      className="bg-transparent text-sm outline-none"
+                      title="Schedule time (with seconds — accurate to ±1s)"
+                    />
+                  </div>
+                  <Button
+                    type="button"
+                    variant="secondary"
+                    onClick={scheduleBroadcast}
+                    disabled={scheduling || running || !scheduledAt}
+                  >
+                    <CalendarClock className="mr-1 h-4 w-4" />
+                    {scheduling ? "Scheduling…" : "Schedule"}
+                  </Button>
+                </>
               ) : (tab === "reply" || tab === "comment") ? (
                 <Button onClick={runReply} disabled={running}>
                   <Play className="mr-1 h-4 w-4" /> Send {replyRows.length} {tab}{replyRows.length === 1 ? "" : "s"}
