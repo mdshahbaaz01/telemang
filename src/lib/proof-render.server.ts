@@ -1,7 +1,7 @@
 import { initWasm, Resvg } from "@resvg/resvg-wasm";
 
 export { buildChannelViewSvg, buildChatListSvg } from "./proof-render";
-export type { ChannelInfo, OtherDialog } from "./proof-render";
+export type { ChannelInfo, OtherDialog, ChannelMessage } from "./proof-render";
 
 const WASM_URL = "https://unpkg.com/@resvg/resvg-wasm@2.6.2/index_bg.wasm";
 

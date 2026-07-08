@@ -28,6 +28,7 @@ import {
   buildChannelViewSvg,
   buildChatListSvg,
   SAMPLE_OTHERS,
+  SAMPLE_MESSAGES,
 } from "@/lib/proof-render";
 
 function ProofPreview({
@@ -57,7 +58,7 @@ function ProofPreview({
       format === "auto" ? (isPrivateLike ? "chat_list" : "channel_view") : format;
     return effective === "chat_list"
       ? buildChatListSvg(info, SAMPLE_OTHERS)
-      : buildChannelViewSvg(info);
+      : buildChannelViewSvg(info, SAMPLE_MESSAGES);
   }, [format, channelLink]);
 
   const dataUrl = `data:image/svg+xml;utf8,${encodeURIComponent(svg)}`;

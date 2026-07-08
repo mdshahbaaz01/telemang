@@ -214,7 +214,28 @@ export const runProofTask = createServerFn({ method: "POST" })
           } catch {}
           svg = buildChatListSvg({ title, username, subscribers }, others);
         } else {
-          svg = buildChannelViewSvg({ title, username, subscribers });
+          // Fetch recent messages to render as bubbles
+          const msgs: Array<{ text: string; time: string; views?: number }> = [];
+          try {
+            if (entity) {
+              const recent: any[] = await client.getMessages(entity, { limit: 6 });
+              for (const m of recent.slice().reverse()) {
+                const text = (m?.message as string) || (m?.action ? "" : "");
+                if (!text) continue;
+                const dt = m?.date ? new Date(m.date * 1000) : new Date();
+                const h = dt.getHours();
+                const mm = dt.getMinutes().toString().padStart(2, "0");
+                const hh = h === 0 ? 12 : h > 12 ? h - 12 : h;
+                const ap = h >= 12 ? "PM" : "AM";
+                msgs.push({
+                  text,
+                  time: `${hh}:${mm} ${ap}`,
+                  views: typeof m?.views === "number" ? m.views : undefined,
+                });
+              }
+            }
+          } catch {}
+          svg = buildChannelViewSvg({ title, username, subscribers }, msgs);
         }
 
         const png = await renderSvgToPng(svg);
