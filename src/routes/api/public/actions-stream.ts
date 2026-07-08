@@ -198,9 +198,9 @@ export const Route = createFileRoute("/api/public/actions-stream")({
               return await client.getEntity(cleaned);
             };
 
-            const buildReaction = (emoji: string, customEmojiId?: string) => {
+            const buildReaction = async (emoji: string, customEmojiId?: string) => {
               if (customEmojiId) {
-                const { default: bigInt } = require("big-integer");
+                const { default: bigInt } = await import("big-integer");
                 return new Api.ReactionCustomEmoji({ documentId: bigInt(customEmojiId) });
               }
               return new Api.ReactionEmoji({ emoticon: emoji });
@@ -261,7 +261,7 @@ export const Route = createFileRoute("/api/public/actions-stream")({
                       new Api.messages.SendReaction({
                         peer: sourcePeer,
                         msgId: src.msgId,
-                        reaction: [buildReaction(op.emoji, op.customEmojiId)],
+                        reaction: [await buildReaction(op.emoji, op.customEmojiId)],
                       }),
                     );
                     ok++;
