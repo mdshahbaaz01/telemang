@@ -562,7 +562,11 @@ export const processNextJoin = createServerFn({ method: "POST" })
             "success",
             `Already joined @${item.target}`,
           );
-        } else if (msg.includes("INVITE_REQUEST_SENT")) {
+        } else if (
+          msg.includes("INVITE_REQUEST_SENT") ||
+          msg.includes("INVITE_REQUEST_ALREADY_SENT") ||
+          msg.includes("REQUEST_SENT")
+        ) {
           statusUpdate = {
             status: "requested",
             error: "waiting for channel approval",
@@ -600,17 +604,18 @@ export const processNextJoin = createServerFn({ method: "POST" })
             paused: true,
             message: `FloodWait ${seconds}s`,
           };
+        } else {
+          statusUpdate = {
+            status: "failed",
+            error: msg,
+            processed_at: new Date().toISOString(),
+          };
+          await log(
+            task.id,
+            "error",
+            `Failed @${item.target}: ${msg}`,
+          );
         }
-        statusUpdate = {
-          status: "failed",
-          error: msg,
-          processed_at: new Date().toISOString(),
-        };
-        await log(
-          task.id,
-          "error",
-          `Failed @${item.target}: ${msg}`,
-        );
       }
 
       // Persist any refreshed session
