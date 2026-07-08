@@ -8,9 +8,9 @@ import { AdminGate } from "@/components/AdminGate";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Textarea } from "@/components/ui/textarea";
 import { toast } from "sonner";
 import { Play, Square, ArrowLeft } from "lucide-react";
+import { AccountIdPaste } from "@/components/AccountIdPaste";
 
 export const Route = createFileRoute("/_authenticated/bot-flow")({
   component: () => (
@@ -34,7 +34,6 @@ function BotFlowPage() {
 
   const [referLink, setReferLink] = useState("");
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
-  const [pastedIds, setPastedIds] = useState("");
   const [logs, setLogs] = useState<LogEntry[]>([]);
   const [running, setRunning] = useState(false);
   const [totals, setTotals] = useState<{ ok: number; fail: number } | null>(null);
@@ -42,40 +41,6 @@ function BotFlowPage() {
 
   const accountList = accountsQ.data ?? [];
   const allIds = useMemo(() => accountList.map((a) => a.id), [accountList]);
-
-  // Match pasted identifiers (phone, username, first name, or account id — one
-  // per line or comma/space separated) against known accounts and auto-select.
-  const applyPastedIds = () => {
-    const tokens = pastedIds
-      .split(/[\s,]+/)
-      .map((t) => t.trim().replace(/^@/, "").toLowerCase())
-      .filter(Boolean);
-    if (!tokens.length) {
-      toast.error("Paste at least one identifier");
-      return;
-    }
-    const matched = new Set<string>();
-    const misses: string[] = [];
-    for (const tok of tokens) {
-      const digits = tok.replace(/\D/g, "");
-      const hit = accountList.find((a) => {
-        const phone = (a.phone ?? "").replace(/\D/g, "");
-        return (
-          a.id.toLowerCase() === tok ||
-          (a.username ?? "").toLowerCase() === tok ||
-          (a.first_name ?? "").toLowerCase() === tok ||
-          (digits.length > 0 && phone.endsWith(digits))
-        );
-      });
-      if (hit) matched.add(hit.id);
-      else misses.push(tok);
-    }
-    setSelectedIds((prev) => Array.from(new Set([...prev, ...matched])));
-    toast.success(
-      `Selected ${matched.size} account${matched.size === 1 ? "" : "s"}` +
-        (misses.length ? ` · ${misses.length} not found` : ""),
-    );
-  };
 
   // Parse a bot referral link/handle preview for the user.
   const parsed = useMemo(() => {
