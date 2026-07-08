@@ -432,46 +432,8 @@ function ActionsPageInner() {
       toast.error("No accounts available");
       return;
     }
-    const baseRows = rows
-      .map((r) => ({
-        accountId: r.accountId ?? "",
-        message: r.message.trim(),
-        targets: r.targets
-          .split(/\r?\n|,/)
-          .map((s) => s.trim())
-          .filter(Boolean),
-        file: r.file ?? null,
-      }))
-      .filter((r) => (r.message || r.file) && r.targets.length);
-    if (!baseRows.length) {
-      toast.error("Add at least one row with message/file and targets");
-      return;
-    }
-    let cleaned: { accountId: string; message: string; targets: string[]; attachment?: { path: string; filename: string; mimeType?: string } }[] = [];
-    try {
-      // Upload each unique file once.
-      const uploaded = await Promise.all(
-        baseRows.map(async (r) => (r.file ? await uploadAttachment(r.file) : undefined)),
-      );
-      const withAtt = baseRows.map((r, i) => ({
-        accountId: r.accountId,
-        message: r.message,
-        targets: r.targets,
-        attachment: uploaded[i],
-      }));
-      if (broadcastMode === "per-account") {
-        cleaned = withAtt.filter((r) => r.accountId);
-        if (!cleaned.length) return toast.error("Pick an account for each row");
-      } else {
-        const targetIds = broadcastSelectedIds.length ? broadcastSelectedIds : allAccountIds;
-        if (!targetIds.length) return toast.error("Select at least one account");
-        cleaned = targetIds.flatMap((accountId) =>
-          withAtt.map((r) => ({ accountId, message: r.message, targets: r.targets, attachment: r.attachment })),
-        );
-      }
-    } catch (e) {
-      return toast.error((e as Error).message);
-    }
+    const cleaned = await buildBroadcastCleaned();
+    if (!cleaned) return;
     const { data: sess } = await supabase.auth.getSession();
     const token = sess.session?.access_token;
     if (!token) return toast.error("Not signed in");
