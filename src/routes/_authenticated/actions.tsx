@@ -61,6 +61,30 @@ function parseMessageLink(input: string): { chat: string; msgId: number } | null
   return { chat: m[1], msgId: Number(m[2]) };
 }
 
+// The schedule picker shows "wall clock" time. Users in India expect that to
+// mean IST (Asia/Kolkata) no matter what timezone their browser is set to,
+// so we always interpret the datetime-local value as IST (+05:30) before
+// converting to UTC for the server.
+function istWallClockToDate(local: string): Date {
+  const withSeconds = /T\d{2}:\d{2}:\d{2}/.test(local) ? local : `${local}:00`;
+  return new Date(`${withSeconds}+05:30`);
+}
+
+const IST_FORMATTER = new Intl.DateTimeFormat("en-IN", {
+  timeZone: "Asia/Kolkata",
+  year: "numeric",
+  month: "2-digit",
+  day: "2-digit",
+  hour: "2-digit",
+  minute: "2-digit",
+  second: "2-digit",
+  hour12: true,
+});
+
+function formatIst(d: Date): string {
+  return `${IST_FORMATTER.format(d)} IST`;
+}
+
 function ActionsPage() {
   return <ActionsPageInner />;
 }
