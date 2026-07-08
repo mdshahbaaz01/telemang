@@ -30,10 +30,19 @@ const voteSchema = z.object({
   retake: z.boolean().optional(),
 });
 
+const attachmentSchema = z.object({
+  path: z.string().min(1).max(500), // storage path in "action-attachments" bucket
+  filename: z.string().min(1).max(200),
+  mimeType: z.string().min(1).max(200).optional(),
+});
+
 const broadcastRowSchema = z.object({
   accountId: z.string().uuid(),
-  message: z.string().min(1).max(4096),
+  message: z.string().max(4096).default(""),
   targets: z.array(z.string().min(1).max(200)).min(1).max(500),
+  attachment: attachmentSchema.optional(),
+}).refine((r) => r.message.length > 0 || !!r.attachment, {
+  message: "Row needs a message or an attachment",
 });
 
 const broadcastSchema = z.object({
@@ -43,7 +52,10 @@ const broadcastSchema = z.object({
 
 const replyRowSchema = z.object({
   accountId: z.string().uuid(),
-  message: z.string().min(1).max(4096),
+  message: z.string().max(4096).default(""),
+  attachment: attachmentSchema.optional(),
+}).refine((r) => r.message.length > 0 || !!r.attachment, {
+  message: "Row needs a message or an attachment",
 });
 
 const replySchema = z.object({
