@@ -166,7 +166,7 @@ export const Route = createFileRoute("/api/public/actions-stream")({
             user_id: userId,
             kind: body.op.kind,
             status: "running",
-            params: JSON.parse(JSON.stringify(body.op)),
+            params: JSON.parse(JSON.stringify(body)),
           })
           .select("id")
           .single();
