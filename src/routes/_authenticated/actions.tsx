@@ -299,10 +299,14 @@ function ActionsPageInner() {
   const runReply = async () => {
     const src = parseMessageLink(source);
     if (!src) return toast.error("Enter a valid message link");
-    const cleaned = replyRows
-      .map((r) => ({ accountId: r.accountId, message: r.message.trim() }))
-      .filter((r) => r.accountId && r.message);
-    if (!cleaned.length) return toast.error("Add at least one row with account + message");
+    if (allAccountIds.length === 0) return toast.error("No accounts available");
+    const messages = replyRows.map((r) => r.message.trim()).filter(Boolean);
+    if (!messages.length) return toast.error("Add at least one message");
+    // Expand: each account sends each message (round-robin messages across accounts).
+    const cleaned = allAccountIds.flatMap((accountId, i) => {
+      const message = messages[i % messages.length];
+      return [{ accountId, message }];
+    });
     await streamRun({
       accountIds: [],
       minDelay,
@@ -312,20 +316,27 @@ function ActionsPageInner() {
   };
 
   const runBroadcast = async () => {
-    const cleaned = rows
+    if (allAccountIds.length === 0) {
+      toast.error("No accounts available");
+      return;
+    }
+    const baseRows = rows
       .map((r) => ({
-        accountId: r.accountId,
         message: r.message.trim(),
         targets: r.targets
           .split(/\r?\n|,/) 
           .map((s) => s.trim())
           .filter(Boolean),
       }))
-      .filter((r) => r.accountId && r.message && r.targets.length);
-    if (!cleaned.length) {
-      toast.error("Add at least one row with account, message, and targets");
+      .filter((r) => r.message && r.targets.length);
+    if (!baseRows.length) {
+      toast.error("Add at least one row with message and targets");
       return;
     }
+    // Expand: each account runs each row in parallel.
+    const cleaned = allAccountIds.flatMap((accountId) =>
+      baseRows.map((r) => ({ accountId, message: r.message, targets: r.targets })),
+    );
     const { data: sess } = await supabase.auth.getSession();
     const token = sess.session?.access_token;
     if (!token) return toast.error("Not signed in");
@@ -403,24 +414,16 @@ function ActionsPageInner() {
       <div className="mx-auto grid max-w-7xl gap-6 px-4 py-6 md:grid-cols-[280px_1fr] md:px-8">
         {/* Accounts column */}
         <aside className="rounded-lg border border-border bg-card p-3">
-          <div className="mb-2 flex items-center justify-between">
-            <div className="text-sm font-medium">Accounts ({selected.size}/{accountList.length})</div>
-            <button className="text-xs underline" onClick={toggleAll}>
-              {allSelected ? "Clear" : "Select all"}
-            </button>
+          <div className="mb-2 text-sm font-medium">
+            All accounts ({accountList.length}) will be used
           </div>
           <div className="max-h-[70vh] space-y-1 overflow-auto">
             {accountList.map((a) => (
-              <label key={a.id} className="flex cursor-pointer items-center gap-2 rounded px-2 py-1 text-sm hover:bg-muted">
-                <input
-                  type="checkbox"
-                  checked={selected.has(a.id)}
-                  onChange={() => toggle(a.id)}
-                />
+              <div key={a.id} className="flex items-center gap-2 rounded px-2 py-1 text-sm">
                 <span className="truncate">
                   {a.first_name || a.username || a.phone}
                 </span>
-              </label>
+              </div>
             ))}
             {accountList.length === 0 && (
               <p className="text-xs text-muted-foreground">No accounts yet.</p>
@@ -569,23 +572,6 @@ function ActionsPageInner() {
                       </button>
                     </div>
                     <div>
-                      <Label>Account</Label>
-                      <select
-                        className="mt-1 w-full rounded-md border border-input bg-background px-2 py-2 text-sm"
-                        value={row.accountId}
-                        onChange={(e) =>
-                          setRows((rs) => rs.map((r) => (r.id === row.id ? { ...r, accountId: e.target.value } : r)))
-                        }
-                      >
-                        <option value="">— pick account —</option>
-                        {accountList.map((a) => (
-                          <option key={a.id} value={a.id}>
-                            {a.first_name || a.username || a.phone}
-                          </option>
-                        ))}
-                      </select>
-                    </div>
-                    <div>
                       <Label>Message</Label>
                       <Textarea
                         rows={3}
@@ -614,27 +600,10 @@ function ActionsPageInner() {
                     type="button"
                     variant="outline"
                     onClick={() =>
-                      setRows((rs) => [...rs, { id: crypto.randomUUID(), accountId: "", message: "", targets: "" }])
+                      setRows((rs) => [...rs, { id: crypto.randomUUID(), message: "", targets: "" }])
                     }
                   >
                     + Add row
-                  </Button>
-                  <Button
-                    type="button"
-                    variant="outline"
-                    onClick={() => {
-                      if (selected.size === 0) return toast.error("Select accounts on the left first");
-                      setRows(
-                        [...selected].map((id) => ({
-                          id: crypto.randomUUID(),
-                          accountId: id,
-                          message: "",
-                          targets: "",
-                        })),
-                      );
-                    }}
-                  >
-                    Fill rows from selected accounts
                   </Button>
                 </div>
                 <DelayFields
@@ -669,23 +638,6 @@ function ActionsPageInner() {
                       </button>
                     </div>
                     <div>
-                      <Label>Account</Label>
-                      <select
-                        className="mt-1 w-full rounded-md border border-input bg-background px-2 py-2 text-sm"
-                        value={row.accountId}
-                        onChange={(e) =>
-                          setReplyRows((rs) => rs.map((r) => (r.id === row.id ? { ...r, accountId: e.target.value } : r)))
-                        }
-                      >
-                        <option value="">— pick account —</option>
-                        {accountList.map((a) => (
-                          <option key={a.id} value={a.id}>
-                            {a.first_name || a.username || a.phone}
-                          </option>
-                        ))}
-                      </select>
-                    </div>
-                    <div>
                       <Label>Message</Label>
                       <Textarea
                         rows={2}
@@ -702,19 +654,9 @@ function ActionsPageInner() {
                   <Button
                     type="button"
                     variant="outline"
-                    onClick={() => setReplyRows((rs) => [...rs, { id: crypto.randomUUID(), accountId: "", message: "" }])}
+                    onClick={() => setReplyRows((rs) => [...rs, { id: crypto.randomUUID(), message: "" }])}
                   >
                     + Add row
-                  </Button>
-                  <Button
-                    type="button"
-                    variant="outline"
-                    onClick={() => {
-                      if (selected.size === 0) return toast.error("Select accounts on the left first");
-                      setReplyRows([...selected].map((id) => ({ id: crypto.randomUUID(), accountId: id, message: "" })));
-                    }}
-                  >
-                    Fill rows from selected accounts
                   </Button>
                 </div>
                 <DelayFields minDelay={minDelay} maxDelay={maxDelay} setMin={setMinDelay} setMax={setMaxDelay} />
@@ -731,9 +673,9 @@ function ActionsPageInner() {
                   <Play className="mr-1 h-4 w-4" /> Send {replyRows.length} {viaDiscussion ? "comment" : "reply"}{replyRows.length === 1 ? "" : "s"}
                 </Button>
               ) : (
-                <Button onClick={run} disabled={running || selected.size === 0}>
+                <Button onClick={run} disabled={running || allAccountIds.length === 0}>
                   <Play className="mr-1 h-4 w-4" />
-                  Run on {selected.size} account{selected.size === 1 ? "" : "s"}
+                  Run on {allAccountIds.length} account{allAccountIds.length === 1 ? "" : "s"}
                 </Button>
               )}
               <Button variant="destructive" onClick={stop} disabled={!running}>
