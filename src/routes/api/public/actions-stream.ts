@@ -366,23 +366,26 @@ export const Route = createFileRoute("/api/public/actions-stream")({
                       );
                       send("log", { accountId, level: "info", target: `${src.chat}/${src.msgId}`, message: "Viewed post" });
                     } catch {}
-                    if (op.retake) {
-                      try {
-                        await client.invoke(
-                          new Api.messages.SendReaction({ peer: sourcePeer, msgId: src.msgId, reaction: [] }),
-                        );
-                        send("log", { accountId, level: "info", target: `${src.chat}/${src.msgId}`, message: "Cleared previous reaction" });
-                      } catch {}
+                    // Always clear any previous reaction so a re-run is idempotent.
+                    try {
+                      await client.invoke(
+                        new Api.messages.SendReaction({ peer: sourcePeer, msgId: src.msgId, reaction: [] }),
+                      );
+                    } catch {}
+                    const clearOnly = op.mode === "clear";
+                    if (!clearOnly) {
+                      await client.invoke(
+                        new Api.messages.SendReaction({
+                          peer: sourcePeer,
+                          msgId: src.msgId,
+                          reaction: [await buildReaction(op.emoji, op.customEmojiId)],
+                        }),
+                      );
                     }
-                    await client.invoke(
-                      new Api.messages.SendReaction({
-                        peer: sourcePeer,
-                        msgId: src.msgId,
-                        reaction: [await buildReaction(op.emoji, op.customEmojiId)],
-                      }),
-                    );
                     ok++;
-                    const m = op.customEmojiId ? `Reacted custom:${op.customEmojiId}` : `Reacted ${op.emoji}`;
+                    const m = clearOnly
+                      ? "Reaction taken back"
+                      : op.customEmojiId ? `Reacted custom:${op.customEmojiId}` : `Reacted ${op.emoji}`;
                     send("log", { accountId, level: "success", target: `${src.chat}/${src.msgId}`, message: m });
                     await logDb(accountId, `${src.chat}/${src.msgId}`, "success", m);
                   } catch (e) {
@@ -410,28 +413,29 @@ export const Route = createFileRoute("/api/public/actions-stream")({
                     if (!msg?.poll) throw new Error("Message is not a poll");
                     const pollObj = (msg.poll as { poll?: { answers?: Array<{ option: Uint8Array }> } }).poll;
                     const answers = pollObj?.answers ?? [];
+                    const clearOnly = op.mode === "clear";
                     const chosen = op.options
                       .map((i) => answers[i]?.option)
                       .filter((x): x is Uint8Array => !!x)
                       .map((x) => Buffer.from(x));
-                    if (chosen.length === 0) throw new Error("No matching poll options");
-                    if (op.retake) {
-                      try {
-                        await client.invoke(
-                          new Api.messages.SendVote({ peer: sourcePeer, msgId: src.msgId, options: [] }),
-                        );
-                        send("log", { accountId, level: "info", target: `${src.chat}/${src.msgId}`, message: "Retracted previous vote" });
-                      } catch {}
+                    if (!clearOnly && chosen.length === 0) throw new Error("No matching poll options");
+                    // Always retract any previous vote first so a re-run just works.
+                    try {
+                      await client.invoke(
+                        new Api.messages.SendVote({ peer: sourcePeer, msgId: src.msgId, options: [] }),
+                      );
+                    } catch {}
+                    if (!clearOnly) {
+                      await client.invoke(
+                        new Api.messages.SendVote({
+                          peer: sourcePeer,
+                          msgId: src.msgId,
+                          options: chosen,
+                        }),
+                      );
                     }
-                    await client.invoke(
-                      new Api.messages.SendVote({
-                        peer: sourcePeer,
-                        msgId: src.msgId,
-                        options: chosen,
-                      }),
-                    );
                     ok++;
-                    const m = `Voted options ${op.options.join(",")}`;
+                    const m = clearOnly ? "Vote taken back" : `Voted options ${op.options.join(",")}`;
                     send("log", { accountId, level: "success", target: `${src.chat}/${src.msgId}`, message: m });
                     await logDb(accountId, `${src.chat}/${src.msgId}`, "success", m);
                   } catch (e) {
