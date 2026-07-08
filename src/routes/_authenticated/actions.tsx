@@ -778,6 +778,12 @@ function ActionsPageInner() {
                         placeholder="Reply text…"
                       />
                     </div>
+                    <AttachmentField
+                      file={row.file ?? null}
+                      onChange={(f) =>
+                        setReplyRows((rs) => rs.map((r) => (r.id === row.id ? { ...r, file: f } : r)))
+                      }
+                    />
                   </div>
                 ))}
                 <div className="flex flex-wrap gap-2">
