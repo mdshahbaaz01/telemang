@@ -552,7 +552,7 @@ function ActionsPageInner() {
       const res = await createSchedFn({
         data: {
           scheduledAt: when.toISOString(),
-          rows: cleaned,
+          op: { kind: "broadcast", rows: cleaned },
           minDelay,
           maxDelay,
         },
@@ -561,6 +561,102 @@ function ActionsPageInner() {
       setScheduledAt("");
       await qc.invalidateQueries({ queryKey: ["scheduled-broadcasts"] });
       return res;
+    } catch (e) {
+      toast.error((e as Error).message);
+    } finally {
+      setScheduling(false);
+    }
+  };
+
+  const parseScheduledAt = () => {
+    if (!scheduledAt) {
+      toast.error("Pick a schedule time (with seconds)");
+      return null;
+    }
+    const when = new Date(scheduledAt);
+    if (Number.isNaN(when.getTime())) {
+      toast.error("Invalid schedule time");
+      return null;
+    }
+    if (when.getTime() < Date.now() + 5_000) {
+      toast.error("Schedule at least 5 seconds in the future");
+      return null;
+    }
+    return when;
+  };
+
+  const scheduleReply = async () => {
+    const when = parseScheduledAt();
+    if (!when) return;
+    const src = parseMessageLink(source);
+    if (!src) return toast.error("Enter a valid message link");
+    if (allAccountIds.length === 0) return toast.error("No accounts available");
+    let cleaned: { accountId: string; message: string; attachment?: { path: string; filename: string; mimeType?: string } }[] = [];
+    try {
+      if (replyMode === "per-account") {
+        const rs = replyRows.filter((r) => (r.accountId ?? "") && (r.message.trim() || r.file));
+        if (!rs.length) return toast.error("Pick an account and add message or file for each row");
+        cleaned = await Promise.all(rs.map(async (r) => ({
+          accountId: r.accountId!,
+          message: r.message.trim(),
+          attachment: r.file ? await uploadAttachment(r.file) : undefined,
+        })));
+      } else {
+        const rs = replyRows.filter((r) => r.message.trim() || r.file);
+        if (!rs.length) return toast.error("Add at least one message or file");
+        const uploads = await Promise.all(rs.map(async (r) => ({
+          message: r.message.trim(),
+          attachment: r.file ? await uploadAttachment(r.file) : undefined,
+        })));
+        const targetIds = replySelectedIds.length ? replySelectedIds : allAccountIds;
+        if (!targetIds.length) return toast.error("Select at least one account");
+        cleaned = targetIds.map((accountId, i) => ({ accountId, ...uploads[i % uploads.length] }));
+      }
+    } catch (e) {
+      return toast.error((e as Error).message);
+    }
+    setScheduling(true);
+    try {
+      await createSchedFn({
+        data: {
+          scheduledAt: when.toISOString(),
+          op: { kind: "reply", source: src, viaDiscussion: tab === "comment", rows: cleaned },
+          minDelay,
+          maxDelay,
+        },
+      });
+      toast.success(`Scheduled for ${when.toLocaleString()} (fires within ±1s)`);
+      setScheduledAt("");
+      await qc.invalidateQueries({ queryKey: ["scheduled-broadcasts"] });
+    } catch (e) {
+      toast.error((e as Error).message);
+    } finally {
+      setScheduling(false);
+    }
+  };
+
+  const scheduleForward = async () => {
+    const when = parseScheduledAt();
+    if (!when) return;
+    const src = parseMessageLink(source);
+    if (!src) return toast.error("Enter a valid message link");
+    const list = targets.split(/\r?\n|,/).map((s) => s.trim()).filter(Boolean);
+    if (!list.length) return toast.error("Enter at least one destination");
+    const runAccountIds = actionSelectedIds.length ? actionSelectedIds : allAccountIds;
+    if (!runAccountIds.length) return toast.error("No accounts available");
+    setScheduling(true);
+    try {
+      await createSchedFn({
+        data: {
+          scheduledAt: when.toISOString(),
+          op: { kind: "forward", source: src, accountIds: runAccountIds, targets: list },
+          minDelay,
+          maxDelay,
+        },
+      });
+      toast.success(`Scheduled for ${when.toLocaleString()} (fires within ±1s)`);
+      setScheduledAt("");
+      await qc.invalidateQueries({ queryKey: ["scheduled-broadcasts"] });
     } catch (e) {
       toast.error((e as Error).message);
     } finally {
