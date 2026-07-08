@@ -1292,6 +1292,12 @@ function AccountMultiPicker({
           ? `${selectedIds.length} account(s) selected`
           : `None selected — will use all ${allAccountIds.length} account(s)`}
       </p>
+      <AccountIdPaste
+        accounts={accountList}
+        onSelect={(ids) =>
+          setSelectedIds((prev) => Array.from(new Set([...prev, ...ids])))
+        }
+      />
     </div>
   );
 }
