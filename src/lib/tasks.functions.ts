@@ -6,8 +6,8 @@ const createTaskSchema = z.object({
   accountId: z.string().uuid(),
   name: z.string().min(1).max(100),
   targets: z.array(z.string().min(1).max(200)).min(1).max(2000),
-  minDelay: z.number().int().min(5).max(600).default(15),
-  maxDelay: z.number().int().min(5).max(600).default(45),
+  minDelay: z.number().int().min(0).max(3600).default(15),
+  maxDelay: z.number().int().min(0).max(3600).default(45),
   groupId: z.string().uuid().optional(),
 });
 
