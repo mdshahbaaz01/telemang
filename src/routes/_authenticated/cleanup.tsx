@@ -236,6 +236,17 @@ function CleanupPanel({ mode }: { mode: "chats" | "personal" }) {
             </label>
           ))}
         </div>
+        <AccountIdPaste
+          className="mt-3"
+          accounts={accountsQ.data ?? []}
+          onSelect={(ids) =>
+            setAccountIds((prev) => {
+              const next = new Set(prev);
+              for (const id of ids) next.add(id);
+              return next;
+            })
+          }
+        />
       </div>
 
       {/* Controls */}
