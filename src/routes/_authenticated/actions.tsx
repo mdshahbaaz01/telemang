@@ -299,10 +299,14 @@ function ActionsPageInner() {
   const runReply = async () => {
     const src = parseMessageLink(source);
     if (!src) return toast.error("Enter a valid message link");
-    const cleaned = replyRows
-      .map((r) => ({ accountId: r.accountId, message: r.message.trim() }))
-      .filter((r) => r.accountId && r.message);
-    if (!cleaned.length) return toast.error("Add at least one row with account + message");
+    if (allAccountIds.length === 0) return toast.error("No accounts available");
+    const messages = replyRows.map((r) => r.message.trim()).filter(Boolean);
+    if (!messages.length) return toast.error("Add at least one message");
+    // Expand: each account sends each message (round-robin messages across accounts).
+    const cleaned = allAccountIds.flatMap((accountId, i) => {
+      const message = messages[i % messages.length];
+      return [{ accountId, message }];
+    });
     await streamRun({
       accountIds: [],
       minDelay,
@@ -312,20 +316,27 @@ function ActionsPageInner() {
   };
 
   const runBroadcast = async () => {
-    const cleaned = rows
+    if (allAccountIds.length === 0) {
+      toast.error("No accounts available");
+      return;
+    }
+    const baseRows = rows
       .map((r) => ({
-        accountId: r.accountId,
         message: r.message.trim(),
         targets: r.targets
           .split(/\r?\n|,/) 
           .map((s) => s.trim())
           .filter(Boolean),
       }))
-      .filter((r) => r.accountId && r.message && r.targets.length);
-    if (!cleaned.length) {
-      toast.error("Add at least one row with account, message, and targets");
+      .filter((r) => r.message && r.targets.length);
+    if (!baseRows.length) {
+      toast.error("Add at least one row with message and targets");
       return;
     }
+    // Expand: each account runs each row in parallel.
+    const cleaned = allAccountIds.flatMap((accountId) =>
+      baseRows.map((r) => ({ accountId, message: r.message, targets: r.targets })),
+    );
     const { data: sess } = await supabase.auth.getSession();
     const token = sess.session?.access_token;
     if (!token) return toast.error("Not signed in");
