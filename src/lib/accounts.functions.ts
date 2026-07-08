@@ -138,7 +138,7 @@ export const listAccounts = createServerFn({ method: "GET" })
     const { data, error } = await context.supabase
       .from("telegram_accounts")
       .select(
-        "id, phone, first_name, last_name, username, status, paused_until, last_error, created_at",
+        "id, phone, first_name, last_name, username, status, paused_until, last_error, created_at, updated_at",
       )
       .order("created_at", { ascending: false });
     if (error) throw new Error(error.message);
