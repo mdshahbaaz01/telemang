@@ -86,6 +86,305 @@ export const listTasks = createServerFn({ method: "GET" })
     return data ?? [];
   });
 
+export const listTaskGroups = createServerFn({ method: "GET" })
+  .middleware([requireSupabaseAuth])
+  .handler(async ({ context }) => {
+    const { data: tasks, error } = await context.supabase
+      .from("join_tasks")
+      .select("id, group_id, name, status, min_delay, max_delay, created_at")
+      .order("created_at", { ascending: false });
+    if (error) throw new Error(error.message);
+
+    type Agg = {
+      groupId: string;
+      name: string;
+      minDelay: number;
+      maxDelay: number;
+      createdAt: string;
+      taskIds: string[];
+      statuses: string[];
+    };
+    const groups = new Map<string, Agg>();
+    for (const t of tasks ?? []) {
+      const gid = t.group_id ?? t.id;
+      const baseName = (t.name ?? "task").split(" · ")[0];
+      const g = groups.get(gid);
+      if (!g) {
+        groups.set(gid, {
+          groupId: gid,
+          name: baseName,
+          minDelay: t.min_delay,
+          maxDelay: t.max_delay,
+          createdAt: t.created_at,
+          taskIds: [t.id],
+          statuses: [t.status],
+        });
+      } else {
+        g.taskIds.push(t.id);
+        g.statuses.push(t.status);
+        if (t.created_at > g.createdAt) g.createdAt = t.created_at;
+      }
+    }
+
+    const results: Array<{
+      groupId: string;
+      name: string;
+      minDelay: number;
+      maxDelay: number;
+      createdAt: string;
+      accounts: number;
+      total: number;
+      done: number;
+      failed: number;
+      pending: number;
+      running: boolean;
+      status: "running" | "done" | "failed" | "idle" | "partial";
+    }> = [];
+    for (const g of groups.values()) {
+      const { data: items } = await context.supabase
+        .from("join_task_items")
+        .select("status")
+        .in("task_id", g.taskIds);
+      const list = items ?? [];
+      const total = list.length;
+      const done = list.filter(
+        (i) => i.status === "joined" || i.status === "requested",
+      ).length;
+      const failed = list.filter((i) => i.status === "failed").length;
+      const pending = list.filter((i) => i.status === "pending").length;
+      const running = g.statuses.includes("running");
+      const status: "running" | "done" | "failed" | "idle" | "partial" = running
+        ? "running"
+        : total > 0 && done + failed === total
+          ? failed === 0
+            ? "done"
+            : done === 0
+              ? "failed"
+              : "partial"
+          : "idle";
+      results.push({
+        groupId: g.groupId,
+        name: g.name,
+        minDelay: g.minDelay,
+        maxDelay: g.maxDelay,
+        createdAt: g.createdAt,
+        accounts: g.taskIds.length,
+        total,
+        done,
+        failed,
+        pending,
+        running,
+        status,
+      });
+    }
+    return results.sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+  });
+
+export const getGroupEdit = createServerFn({ method: "GET" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((d: unknown) =>
+    z.object({ groupId: z.string().uuid() }).parse(d),
+  )
+  .handler(async ({ data, context }) => {
+    const { data: tasks, error } = await context.supabase
+      .from("join_tasks")
+      .select("id, name, min_delay, max_delay, account_id")
+      .eq("group_id", data.groupId);
+    if (error) throw new Error(error.message);
+    if (!tasks?.length) throw new Error("Group not found");
+    const first = tasks[0];
+    const baseName = (first.name ?? "task").split(" · ")[0];
+    const { data: items } = await context.supabase
+      .from("join_task_items")
+      .select("target")
+      .in("task_id", tasks.map((t) => t.id));
+    const targets = Array.from(new Set((items ?? []).map((i) => i.target)));
+    return {
+      groupId: data.groupId,
+      name: baseName,
+      minDelay: first.min_delay as number,
+      maxDelay: first.max_delay as number,
+      targets,
+      accountIds: tasks.map((t) => t.account_id as string),
+    };
+  });
+
+export const updateGroup = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((d: unknown) =>
+    z
+      .object({
+        groupId: z.string().uuid(),
+        name: z.string().min(1).max(100),
+        minDelay: z.number().int().min(1).max(600),
+        maxDelay: z.number().int().min(1).max(600),
+        targets: z.array(z.string().min(1).max(200)).max(2000),
+        accountIds: z.array(z.string().uuid()).max(100),
+      })
+      .parse(d),
+  )
+  .handler(async ({ data, context }) => {
+    const { data: tasks, error } = await context.supabase
+      .from("join_tasks")
+      .select("id, account_id")
+      .eq("group_id", data.groupId);
+    if (error) throw new Error(error.message);
+    if (!tasks?.length) throw new Error("Group not found");
+
+    const existingByAccount = new Map<string, string>(
+      tasks.map((t) => [t.account_id as string, t.id as string]),
+    );
+    const keep = new Set(data.accountIds);
+
+    // Remove tasks for deselected accounts
+    const toRemove = tasks
+      .filter((t) => !keep.has(t.account_id as string))
+      .map((t) => t.id as string);
+    if (toRemove.length) {
+      await context.supabase.from("join_tasks").delete().in("id", toRemove);
+    }
+
+    // Load account labels for renaming / naming
+    const { data: accs } = await context.supabase
+      .from("telegram_accounts")
+      .select("id, phone, username, first_name")
+      .in("id", data.accountIds.length ? data.accountIds : ["00000000-0000-0000-0000-000000000000"]);
+    const accMap = new Map(
+      (accs ?? []).map((a: {
+        id: string; phone: string | null; username: string | null; first_name: string | null;
+      }) => [a.id, a]),
+    );
+    const buildName = (accId: string) => {
+      const a = accMap.get(accId);
+      const label = a?.username || a?.first_name || a?.phone || "acct";
+      return data.accountIds.length > 1 ? `${data.name} · ${label}` : data.name;
+    };
+
+    const newTargets = new Set(data.targets);
+    const remainingTaskIds: string[] = [];
+
+    // Update kept tasks
+    for (const [accId, tid] of existingByAccount) {
+      if (!keep.has(accId)) continue;
+      remainingTaskIds.push(tid);
+      await context.supabase
+        .from("join_tasks")
+        .update({
+          name: buildName(accId),
+          min_delay: data.minDelay,
+          max_delay: data.maxDelay,
+          updated_at: new Date().toISOString(),
+        })
+        .eq("id", tid);
+
+      const { data: existingItems } = await context.supabase
+        .from("join_task_items")
+        .select("id, target, position")
+        .eq("task_id", tid);
+      const existingSet = new Set(
+        (existingItems ?? []).map((i: { target: string }) => i.target),
+      );
+      const toDel = (existingItems ?? [])
+        .filter((i: { target: string }) => !newTargets.has(i.target))
+        .map((i: { id: string }) => i.id);
+      if (toDel.length) {
+        await context.supabase.from("join_task_items").delete().in("id", toDel);
+      }
+      const positions = (existingItems ?? []).map(
+        (i: { position: number }) => i.position,
+      );
+      const posStart = (positions.length ? Math.max(...positions) : -1) + 1;
+      const toAdd = data.targets
+        .filter((t) => !existingSet.has(t))
+        .map((t, i) => ({
+          task_id: tid,
+          user_id: context.userId,
+          target: t,
+          position: posStart + i,
+        }));
+      if (toAdd.length) {
+        await context.supabase.from("join_task_items").insert(toAdd);
+      }
+    }
+
+    // Add new accounts
+    const toAddAcc = data.accountIds.filter(
+      (id) => !existingByAccount.has(id),
+    );
+    for (const accId of toAddAcc) {
+      const { data: newTask, error: cErr } = await context.supabase
+        .from("join_tasks")
+        .insert({
+          user_id: context.userId,
+          account_id: accId,
+          name: buildName(accId),
+          status: "idle",
+          min_delay: data.minDelay,
+          max_delay: data.maxDelay,
+          group_id: data.groupId,
+        })
+        .select("id")
+        .single();
+      if (cErr || !newTask) continue;
+      if (data.targets.length) {
+        const rows = data.targets.map((t, i) => ({
+          task_id: newTask.id,
+          user_id: context.userId,
+          target: t,
+          position: i,
+        }));
+        await context.supabase.from("join_task_items").insert(rows);
+      }
+    }
+
+    return { ok: true };
+  });
+
+export const deleteGroup = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((d: unknown) =>
+    z.object({ groupId: z.string().uuid() }).parse(d),
+  )
+  .handler(async ({ data, context }) => {
+    const { error } = await context.supabase
+      .from("join_tasks")
+      .delete()
+      .eq("group_id", data.groupId);
+    if (error) throw new Error(error.message);
+    return { ok: true };
+  });
+
+export const resetGroupItems = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((d: unknown) =>
+    z
+      .object({
+        groupId: z.string().uuid(),
+        scope: z.enum(["failed", "all"]),
+      })
+      .parse(d),
+  )
+  .handler(async ({ data, context }) => {
+    const { data: tasks } = await context.supabase
+      .from("join_tasks")
+      .select("id")
+      .eq("group_id", data.groupId);
+    const ids = (tasks ?? []).map((t) => t.id as string);
+    if (!ids.length) return { reset: 0 };
+    let q = context.supabase
+      .from("join_task_items")
+      .update({ status: "pending", error: null, processed_at: null })
+      .in("task_id", ids);
+    if (data.scope === "failed") q = q.eq("status", "failed");
+    const { error, count } = await q.select("id", { count: "exact" });
+    if (error) throw new Error(error.message);
+    await context.supabase
+      .from("join_tasks")
+      .update({ status: "idle", updated_at: new Date().toISOString() })
+      .in("id", ids);
+    return { reset: count ?? 0 };
+  });
+
 export const getTask = createServerFn({ method: "GET" })
   .middleware([requireSupabaseAuth])
   .inputValidator((d: unknown) => z.object({ id: z.string().uuid() }).parse(d))
