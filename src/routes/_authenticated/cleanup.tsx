@@ -68,20 +68,22 @@ function Cleanup() {
     });
   }, [dialogsQ.data, filter, query, action]);
 
-  const toggle = (id: string) =>
+  const toggle = (key: string) =>
     setSelected((s) => {
       const n = new Set(s);
-      n.has(id) ? n.delete(id) : n.add(id);
+      n.has(key) ? n.delete(key) : n.add(key);
       return n;
     });
   const toggleAll = () =>
     setSelected((s) =>
-      s.size === filtered.length ? new Set() : new Set(filtered.map((r) => r.id)),
+      filtered.every((r) => s.has(r.key)) && filtered.length > 0
+        ? new Set()
+        : new Set(filtered.map((r) => r.key)),
     );
 
   const run = useMutation({
     mutationFn: async () => {
-      const targets = Array.from(selected);
+      const targets = (dialogsQ.data ?? []).filter((r) => selected.has(r.key));
       if (!targets.length) throw new Error("Select at least one item");
       return runFn({ data: { accountId, targets, action } });
     },
@@ -171,7 +173,7 @@ function Cleanup() {
             <div className="flex flex-wrap items-center justify-between gap-2">
               <div className="flex items-center gap-2">
                 <Button variant="outline" size="sm" onClick={toggleAll}>
-                  {selected.size === filtered.length && filtered.length > 0 ? "Deselect all" : "Select all"}
+                  {filtered.every((r) => selected.has(r.key)) && filtered.length > 0 ? "Deselect all" : "Select all"}
                 </Button>
                 <Button variant="outline" size="sm" onClick={() => dialogsQ.refetch()}>
                   <RefreshCw className="mr-1 h-3.5 w-3.5" /> Refresh
@@ -193,8 +195,8 @@ function Cleanup() {
               {filtered.length === 0 ? (
                 <p className="p-4 text-sm text-muted-foreground">Nothing matches.</p>
               ) : filtered.map((r) => (
-                <label key={r.id} className="flex cursor-pointer items-center gap-3 p-3">
-                  <Checkbox checked={selected.has(r.id)} onCheckedChange={() => toggle(r.id)} />
+                <label key={r.key} className="flex cursor-pointer items-center gap-3 p-3">
+                  <Checkbox checked={selected.has(r.key)} onCheckedChange={() => toggle(r.key)} />
                   <div className="min-w-0 flex-1">
                     <div className="truncate font-medium">{r.title}</div>
                     <div className="text-xs text-muted-foreground">
