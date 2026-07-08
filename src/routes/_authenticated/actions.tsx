@@ -1032,6 +1032,12 @@ function ActionsPageInner() {
                         ? `${replySelectedIds.length} account(s) selected`
                         : `None selected — will use all ${allAccountIds.length} account(s)`}
                     </p>
+                    <AccountIdPaste
+                      accounts={accountList}
+                      onSelect={(ids) =>
+                        setReplySelectedIds((prev) => Array.from(new Set([...prev, ...ids])))
+                      }
+                    />
                   </div>
                 )}
                 {replyRows.map((row, idx) => (
