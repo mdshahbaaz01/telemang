@@ -871,6 +871,12 @@ function ActionsPageInner() {
                         ? `${broadcastSelectedIds.length} account(s) selected`
                         : `None selected — will use all ${allAccountIds.length} account(s)`}
                     </p>
+                    <AccountIdPaste
+                      accounts={accountList}
+                      onSelect={(ids) =>
+                        setBroadcastSelectedIds((prev) => Array.from(new Set([...prev, ...ids])))
+                      }
+                    />
                   </div>
                 )}
                 {rows.map((row, idx) => (
