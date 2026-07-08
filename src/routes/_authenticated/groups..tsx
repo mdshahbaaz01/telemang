@@ -14,7 +14,7 @@ import { AdminGate } from "@/components/AdminGate";
 import { ArrowLeft, Play, Square } from "lucide-react";
 import { toast } from "sonner";
 
-export const Route = createFileRoute("/_authenticated/groups/$id")({
+export const Route = createFileRoute("/_authenticated/groups/")({
   component: () => (
     <AdminGate>
       <GroupRunner />
