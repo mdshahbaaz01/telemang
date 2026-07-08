@@ -1,3 +1,4 @@
+import { Loader } from "@/components/ui/loader";
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useServerFn } from "@tanstack/react-start";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
@@ -130,7 +131,7 @@ function GroupRunner() {
         </header>
 
         {groupQ.isLoading ? (
-          <p className="text-sm text-muted-foreground">Loading…</p>
+          <Loader size="sm" />
         ) : (
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
             {tasks.map((t) => (
