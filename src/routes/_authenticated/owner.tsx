@@ -8,11 +8,20 @@ import {
   ownerSetAccountStatus,
   ownerListLogins,
 } from "@/lib/owner.functions";
+import {
+  listAccountGroups,
+  createAccountGroup,
+  renameAccountGroup,
+  deleteAccountGroup,
+  setGroupMembers,
+} from "@/lib/account-groups.functions";
+import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
 import { AdminGate, useMyRole } from "@/components/AdminGate";
-import { ArrowLeft } from "lucide-react";
+import { ArrowLeft, Plus, Trash2, Users } from "lucide-react";
 import { toast } from "sonner";
+import { useState } from "react";
 
 export const Route = createFileRoute("/_authenticated/owner")({
   component: () => (
@@ -174,6 +183,8 @@ function OwnerPanel() {
               </table>
             </div>
           </section>
+
+          <AccountGroupsSection accounts={acctsQ.data ?? []} />
 
           <section className="rounded-lg border border-border bg-card p-4 md:p-6">
             <h2 className="mb-4 text-lg font-semibold">
