@@ -159,3 +159,53 @@ export const deleteAccount = createServerFn({ method: "POST" })
     if (error) throw new Error(error.message);
     return { ok: true };
   });
+
+export const backfillTelegramIds = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .handler(async ({ context }) => {
+    const { decryptString } = await import("./crypto.server");
+    const { createTgClient } = await import("./telegram-client.server");
+
+    const { data: rows, error } = await context.supabase
+      .from("telegram_accounts")
+      .select("id, api_id, api_hash_enc, session_enc, telegram_user_id")
+      .is("telegram_user_id", null);
+    if (error) throw new Error(error.message);
+
+    let updated = 0;
+    let failed = 0;
+    for (const row of rows ?? []) {
+      if (!row.session_enc) {
+        failed++;
+        continue;
+      }
+      try {
+        const apiHash = await decryptString(row.api_hash_enc);
+        const sessionStr = await decryptString(row.session_enc);
+        const client = await createTgClient(row.api_id, apiHash, sessionStr);
+        try {
+          const me = (await client.getMe()) as {
+            id?: { toString: () => string } | string | number | bigint;
+          };
+          const tgId =
+            me?.id != null
+              ? Number(typeof me.id === "object" ? me.id.toString() : me.id)
+              : null;
+          if (tgId != null && Number.isFinite(tgId)) {
+            await context.supabase
+              .from("telegram_accounts")
+              .update({ telegram_user_id: tgId })
+              .eq("id", row.id);
+            updated++;
+          } else {
+            failed++;
+          }
+        } finally {
+          await client.disconnect().catch(() => {});
+        }
+      } catch {
+        failed++;
+      }
+    }
+    return { updated, failed, total: rows?.length ?? 0 };
+  });
