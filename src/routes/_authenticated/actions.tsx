@@ -391,8 +391,10 @@ function ActionsPageInner() {
           message: r.message.trim(),
           attachment: r.file ? await uploadAttachment(r.file) : undefined,
         })));
-        // Round-robin rows across accounts.
-        cleaned = allAccountIds.map((accountId, i) => ({ accountId, ...uploads[i % uploads.length] }));
+        const targetIds = replySelectedIds.length ? replySelectedIds : allAccountIds;
+        if (!targetIds.length) return toast.error("Select at least one account");
+        // Round-robin rows across selected accounts.
+        cleaned = targetIds.map((accountId, i) => ({ accountId, ...uploads[i % uploads.length] }));
       }
     } catch (e) {
       return toast.error((e as Error).message);
