@@ -191,3 +191,101 @@ export const loadPoll = createServerFn({ method: "POST" })
       await client.disconnect().catch(() => {});
     }
   });
+
+export const getReferralStats = createServerFn({ method: "GET" })
+  .middleware([requireSupabaseAuth])
+  .handler(async ({ context }) => {
+    await assertAdmin(context.supabase, context.userId);
+    const { data, error } = await context.supabase
+      .from("action_runs")
+      .select("id, status, totals, params, created_at")
+      .eq("kind", "botflow")
+      .order("created_at", { ascending: false })
+      .limit(200);
+    if (error) throw new Error(error.message);
+    const stats = new Map<string, { code: string; runs: number; ok: number; fail: number; lastRun: string | null }>();
+    for (const run of data ?? []) {
+      const op = (run.params as any)?.op ?? {};
+      const link = String(op.bot ?? "");
+      let code = String(op.startParam ?? "");
+      if (!code && link) {
+        try {
+          const url = new URL(link.startsWith("http") ? link : `https://${link}`);
+          code = url.searchParams.get("start") || url.searchParams.get("startapp") || "no-code";
+        } catch {
+          code = "no-code";
+        }
+      }
+      if (!code) code = "no-code";
+      const existing = stats.get(code) ?? { code, runs: 0, ok: 0, fail: 0, lastRun: null };
+      existing.runs += 1;
+      existing.ok += Number((run.totals as any)?.ok ?? 0);
+      existing.fail += Number((run.totals as any)?.fail ?? 0);
+      existing.lastRun = existing.lastRun ?? (run.created_at as string);
+      stats.set(code, existing);
+    }
+    return Array.from(stats.values()).sort((a, b) => b.runs - a.runs);
+  });
+
+const notificationSettingsSchema = z.object({
+  emailEnabled: z.boolean(),
+  telegramEnabled: z.boolean(),
+  emailTo: z.string().email().or(z.literal("")).optional(),
+  telegramChat: z.string().max(200).optional(),
+  alertSuccess: z.boolean(),
+  alertFailure: z.boolean(),
+  alertAccount: z.boolean(),
+});
+
+export const getNotificationSettings = createServerFn({ method: "GET" })
+  .middleware([requireSupabaseAuth])
+  .handler(async ({ context }) => {
+    await assertAdmin(context.supabase, context.userId);
+    const { data, error } = await context.supabase
+      .from("notification_settings")
+      .select("email_enabled, telegram_enabled, email_to, telegram_chat, alert_success, alert_failure, alert_account")
+      .eq("user_id", context.userId)
+      .maybeSingle();
+    if (error) throw new Error(error.message);
+    return {
+      emailEnabled: !!data?.email_enabled,
+      telegramEnabled: !!data?.telegram_enabled,
+      emailTo: data?.email_to ?? "",
+      telegramChat: data?.telegram_chat ?? "",
+      alertSuccess: data?.alert_success ?? true,
+      alertFailure: data?.alert_failure ?? true,
+      alertAccount: data?.alert_account ?? true,
+    };
+  });
+
+export const saveNotificationSettings = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((d: unknown) => notificationSettingsSchema.parse(d))
+  .handler(async ({ data, context }) => {
+    await assertAdmin(context.supabase, context.userId);
+    const { error } = await context.supabase.from("notification_settings").upsert({
+      user_id: context.userId,
+      email_enabled: data.emailEnabled,
+      telegram_enabled: data.telegramEnabled,
+      email_to: data.emailTo || null,
+      telegram_chat: data.telegramChat || null,
+      alert_success: data.alertSuccess,
+      alert_failure: data.alertFailure,
+      alert_account: data.alertAccount,
+    });
+    if (error) throw new Error(error.message);
+    return { ok: true };
+  });
+
+export const listNotificationLogs = createServerFn({ method: "GET" })
+  .middleware([requireSupabaseAuth])
+  .handler(async ({ context }) => {
+    await assertAdmin(context.supabase, context.userId);
+    const { data, error } = await context.supabase
+      .from("notification_logs")
+      .select("id, channel, event, title, body, status, error, created_at")
+      .order("created_at", { ascending: false })
+      .limit(100);
+    if (error) throw new Error(error.message);
+    return data ?? [];
+  });
