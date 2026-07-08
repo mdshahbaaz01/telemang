@@ -646,6 +646,212 @@ export const processNextJoin = createServerFn({ method: "POST" })
   });
 
 export const recentLogs = createServerFn({ method: "GET" })
+
+// Batch processor: join multiple targets in parallel using one Telegram client.
+export const processBatchJoin = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((d: unknown) =>
+    z
+      .object({
+        taskId: z.string().uuid(),
+        batchSize: z.coerce.number().int().min(1).max(10).default(5),
+      })
+      .parse(d),
+  )
+  .handler(async ({ data, context }) => {
+    const { decryptString, encryptString } = await import("./crypto.server");
+    const { createTgClient } = await import("./telegram-client.server");
+    const { Api } = await import("telegram");
+    const { StringSession } = await import("telegram/sessions");
+    const supabase = context.supabase;
+    const log = async (
+      taskId: string,
+      level: "info" | "warn" | "error" | "success",
+      message: string,
+    ) => {
+      await supabase
+        .from("task_logs")
+        .insert({ task_id: taskId, user_id: context.userId, level, message });
+    };
+
+    const { data: task, error: terr } = await supabase
+      .from("join_tasks")
+      .select("id, account_id, status, user_id")
+      .eq("id", data.taskId)
+      .single();
+    if (terr || !task) throw new Error("Task not found");
+    if (task.status === "paused")
+      return { done: false, paused: true, processed: 0, message: "Task is paused" };
+
+    const { data: acct, error: aerr } = await supabase
+      .from("telegram_accounts")
+      .select("id, api_id, api_hash_enc, session_enc, paused_until, phone, status")
+      .eq("id", task.account_id)
+      .single();
+    if (aerr || !acct) throw new Error("Account not found");
+    if (acct.status === "disabled")
+      return { done: false, paused: true, processed: 0, message: "Account disabled" };
+    if (acct.paused_until && new Date(acct.paused_until) > new Date())
+      return {
+        done: false,
+        paused: true,
+        processed: 0,
+        message: `Account paused until ${acct.paused_until}`,
+      };
+    if (!acct.session_enc) throw new Error("Account not logged in");
+
+    const { data: items } = await supabase
+      .from("join_task_items")
+      .select("id, target")
+      .eq("task_id", task.id)
+      .eq("status", "pending")
+      .order("position")
+      .limit(data.batchSize);
+
+    if (!items || items.length === 0) {
+      await supabase.from("join_tasks").update({ status: "done" }).eq("id", task.id);
+      await log(task.id, "success", "All targets processed.");
+      return { done: true, paused: false, processed: 0 };
+    }
+
+    const apiHash = await decryptString(acct.api_hash_enc);
+    const sessionStr = await decryptString(acct.session_enc);
+    const client = await createTgClient(acct.api_id, apiHash, sessionStr);
+
+    let floodPaused: { seconds: number } | null = null;
+
+    const processOne = async (item: { id: string; target: string }) => {
+      let statusUpdate: {
+        status: string;
+        error: string | null;
+        processed_at: string;
+      } = { status: "joined", error: null, processed_at: new Date().toISOString() };
+      try {
+        await log(task.id, "info", `Joining @${item.target}…`);
+        const target = item.target
+          .trim()
+          .replace(/^@/, "")
+          .replace(/[?#].*$/, "")
+          .replace(/^(?:https?:\/\/)?(?:www\.)?(?:t\.me|telegram\.me)\//i, "")
+          .replace(/^@/, "");
+        const inviteHash = target.startsWith("+")
+          ? target.slice(1)
+          : target.toLowerCase().startsWith("joinchat/")
+            ? target.slice("joinchat/".length)
+            : null;
+
+        let result: { status: "joined" | "requested"; message: string; note: string | null };
+
+        if (inviteHash) {
+          const invite = await client.invoke(
+            new Api.messages.CheckChatInvite({ hash: inviteHash }),
+          );
+          if (invite.className === "ChatInviteAlready") {
+            result = { status: "joined", message: `Already joined ${item.target}`, note: null };
+          } else {
+            const requestNeeded = Boolean((invite as { requestNeeded?: boolean }).requestNeeded);
+            await client.invoke(new Api.messages.ImportChatInvite({ hash: inviteHash }));
+            result = requestNeeded
+              ? {
+                  status: "requested",
+                  message: `Join request sent for ${item.target}`,
+                  note: "waiting for channel approval",
+                }
+              : { status: "joined", message: `Joined ${item.target}`, note: null };
+          }
+        } else {
+          await client.invoke(new Api.channels.JoinChannel({ channel: target }));
+          result = { status: "joined", message: `Joined @${target}`, note: null };
+        }
+        statusUpdate = {
+          status: result.status,
+          error: result.note,
+          processed_at: new Date().toISOString(),
+        };
+        await log(task.id, "success", result.message);
+      } catch (e) {
+        const err = e as { message?: string; seconds?: number };
+        const msg = err.message || String(e);
+        if (msg.includes("USER_ALREADY_PARTICIPANT")) {
+          statusUpdate = {
+            status: "joined",
+            error: null,
+            processed_at: new Date().toISOString(),
+          };
+          await log(task.id, "success", `Already joined @${item.target}`);
+        } else if (
+          msg.includes("INVITE_REQUEST_SENT") ||
+          msg.includes("INVITE_REQUEST_ALREADY_SENT") ||
+          msg.includes("REQUEST_SENT")
+        ) {
+          statusUpdate = {
+            status: "requested",
+            error: "waiting for channel approval",
+            processed_at: new Date().toISOString(),
+          };
+          await log(task.id, "success", `Join request sent for ${item.target}`);
+        } else if (msg.includes("FLOOD_WAIT") || err.seconds) {
+          const match = msg.match(/FLOOD_WAIT_?(\d+)/i);
+          const seconds = err.seconds ?? (match ? Number(match[1]) : 60);
+          floodPaused = { seconds };
+          statusUpdate = {
+            status: "pending",
+            error: `FloodWait ${seconds}s`,
+            processed_at: new Date().toISOString(),
+          };
+          await log(
+            task.id,
+            "warn",
+            `FloodWait ${seconds}s — Telegram rate limited this account`,
+          );
+        } else {
+          statusUpdate = {
+            status: "failed",
+            error: msg,
+            processed_at: new Date().toISOString(),
+          };
+          await log(task.id, "error", `Failed @${item.target}: ${msg}`);
+        }
+      }
+      await supabase.from("join_task_items").update(statusUpdate).eq("id", item.id);
+    };
+
+    try {
+      await Promise.all(items.map(processOne));
+      const newSession = (client.session as InstanceType<typeof StringSession>).save();
+      if (newSession && newSession !== sessionStr) {
+        const enc = await encryptString(newSession);
+        await supabase
+          .from("telegram_accounts")
+          .update({ session_enc: enc })
+          .eq("id", acct.id);
+      }
+    } finally {
+      await client.disconnect().catch(() => {});
+    }
+
+    if (floodPaused) {
+      const pausedUntil = new Date(Date.now() + floodPaused.seconds * 1000).toISOString();
+      await supabase
+        .from("telegram_accounts")
+        .update({ paused_until: pausedUntil, last_error: `FloodWait ${floodPaused.seconds}s` })
+        .eq("id", acct.id);
+      await supabase
+        .from("join_tasks")
+        .update({ status: "paused", updated_at: new Date().toISOString() })
+        .eq("id", task.id);
+      return {
+        done: false,
+        paused: true,
+        processed: items.length,
+        message: `FloodWait ${floodPaused.seconds}s`,
+      };
+    }
+
+    return { done: false, paused: false, processed: items.length };
+  });
+
+const _recentLogs_marker = createServerFn({ method: "GET" })
   .middleware([requireSupabaseAuth])
   .inputValidator((d: unknown) =>
     z.object({ taskId: z.string().uuid() }).parse(d),
