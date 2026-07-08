@@ -1,7 +1,7 @@
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useServerFn } from "@tanstack/react-start";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import {
   listAccounts,
@@ -9,11 +9,10 @@ import {
   verifyAccountLogin,
   deleteAccount,
 } from "@/lib/accounts.functions";
-import { listTasks, createJoinTask, parseTargets } from "@/lib/tasks.functions";
+import { listTasks } from "@/lib/tasks.functions";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Textarea } from "@/components/ui/textarea";
 import {
   Dialog,
   DialogContent,
@@ -21,12 +20,22 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "@/components/ui/dialog";
-import { Checkbox } from "@/components/ui/checkbox";
 import { toast } from "sonner";
+import { LogOut, Plus, RefreshCw, Trash2 } from "lucide-react";
 
 export const Route = createFileRoute("/_authenticated/dashboard")({
   component: Dashboard,
 });
+
+const NAV = [
+  "Owner Panel",
+  "Cleanup",
+  "Broadcast",
+  "Bot Flow",
+  "Reactions",
+  "Poll Vote",
+  "Leave Channels",
+];
 
 function Dashboard() {
   const nav = useNavigate();
@@ -34,6 +43,11 @@ function Dashboard() {
   const listAcc = useServerFn(listAccounts);
   const listTsk = useServerFn(listTasks);
   const delAcc = useServerFn(deleteAccount);
+  const [email, setEmail] = useState<string>("");
+
+  useEffect(() => {
+    supabase.auth.getUser().then(({ data }) => setEmail(data.user?.email ?? ""));
+  }, []);
 
   const accountsQ = useQuery({ queryKey: ["accounts"], queryFn: () => listAcc() });
   const tasksQ = useQuery({ queryKey: ["tasks"], queryFn: () => listTsk() });
@@ -48,52 +62,101 @@ function Dashboard() {
     onSuccess: () => qc.invalidateQueries({ queryKey: ["accounts"] }),
   });
 
-  return (
-    <main className="min-h-screen bg-background p-4 md:p-8">
-      <div className="mx-auto max-w-6xl space-y-8">
-        <header className="flex items-center justify-between">
-          <div>
-            <h1 className="text-2xl font-semibold tracking-tight">TeleManager Pro</h1>
-            <p className="text-sm text-muted-foreground">Manage Telegram accounts and join tasks</p>
-          </div>
-          <Button variant="outline" size="sm" onClick={signOut}>
-            Sign out
-          </Button>
-        </header>
+  const soon = () => toast.info("Coming soon");
 
-        <section className="rounded-lg border border-border bg-card p-4 md:p-6">
-          <div className="mb-4 flex items-center justify-between">
-            <h2 className="text-lg font-semibold">Accounts</h2>
+  return (
+    <main className="min-h-screen bg-background">
+      <header className="border-b border-border bg-card">
+        <div className="mx-auto flex max-w-7xl flex-wrap items-center gap-3 px-4 py-3 md:px-8">
+          <h1 className="mr-auto text-xl font-semibold tracking-tight">TeleManager Pro</h1>
+          <nav className="flex flex-wrap items-center gap-1">
+            {NAV.map((n) => (
+              <Button key={n} variant="ghost" size="sm" onClick={soon}>
+                {n}
+              </Button>
+            ))}
+            <Link to="/tasks/new">
+              <Button size="sm" disabled={!accountsQ.data?.length}>
+                New Task
+              </Button>
+            </Link>
+            <Button variant="ghost" size="icon" onClick={signOut} aria-label="Sign out">
+              <LogOut className="h-4 w-4" />
+            </Button>
+          </nav>
+        </div>
+      </header>
+
+      <div className="mx-auto max-w-7xl space-y-10 px-4 py-8 md:px-8">
+        <section>
+          <div className="mb-6 flex flex-wrap items-start justify-between gap-3">
+            <div>
+              <h2 className="text-2xl font-semibold tracking-tight">
+                Shared accounts ({accountsQ.data?.length ?? 0})
+              </h2>
+              <p className="text-sm text-muted-foreground">
+                Every admin sees and can use every account added here.
+              </p>
+            </div>
             <AddAccountDialog onDone={() => qc.invalidateQueries({ queryKey: ["accounts"] })} />
           </div>
+
           {accountsQ.isLoading ? (
             <p className="text-sm text-muted-foreground">Loading…</p>
           ) : accountsQ.data?.length ? (
-            <ul className="divide-y divide-border">
-              {accountsQ.data.map((a) => (
-                <li key={a.id} className="flex items-center justify-between py-3">
-                  <div>
-                    <div className="font-medium">
-                      {a.first_name || a.username || a.phone}{" "}
-                      <span className="text-xs text-muted-foreground">{a.phone}</span>
-                    </div>
-                    <div className="text-xs text-muted-foreground">
-                      {a.status}
-                      {a.paused_until ? ` · paused until ${new Date(a.paused_until).toLocaleTimeString()}` : ""}
-                      {a.last_error ? ` · ${a.last_error}` : ""}
-                    </div>
-                  </div>
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    onClick={() => del.mutate(a.id)}
-                    disabled={del.isPending}
+            <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
+              {accountsQ.data.map((a) => {
+                const paused =
+                  a.paused_until && new Date(a.paused_until) > new Date();
+                const label = paused ? "paused" : a.status;
+                return (
+                  <article
+                    key={a.id}
+                    className="rounded-lg border border-border bg-card p-4"
                   >
-                    Remove
-                  </Button>
-                </li>
-              ))}
-            </ul>
+                    <div className="mb-3 flex items-start justify-between gap-2">
+                      <div className="min-w-0">
+                        <div className="truncate font-semibold">
+                          {a.first_name || a.username || a.phone}
+                        </div>
+                        <div className="text-xs text-muted-foreground">{a.phone}</div>
+                      </div>
+                      <span className="rounded-full border border-border px-2 py-0.5 text-xs">
+                        {label}
+                      </span>
+                    </div>
+                    <div className="space-y-1 text-xs text-muted-foreground">
+                      <div>
+                        <span className="font-medium text-foreground/70">Added by:</span>{" "}
+                        {email || "—"}
+                      </div>
+                      <div>
+                        <span className="font-medium text-foreground/70">Last used:</span>{" "}
+                        {email || "—"} ·{" "}
+                        {new Date(a.updated_at ?? a.created_at).toLocaleString()}
+                      </div>
+                      {a.last_error ? (
+                        <div className="text-destructive">{a.last_error}</div>
+                      ) : null}
+                    </div>
+                    <div className="mt-4 flex gap-2">
+                      <Button variant="outline" size="sm" onClick={soon}>
+                        <RefreshCw className="mr-1 h-3.5 w-3.5" /> Check
+                      </Button>
+                      <Button
+                        variant="outline"
+                        size="icon"
+                        onClick={() => del.mutate(a.id)}
+                        disabled={del.isPending}
+                        aria-label="Delete"
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </Button>
+                    </div>
+                  </article>
+                );
+              })}
+            </div>
           ) : (
             <p className="text-sm text-muted-foreground">
               No accounts yet. Add one with your phone, api_id, and api_hash from my.telegram.org.
@@ -101,20 +164,14 @@ function Dashboard() {
           )}
         </section>
 
-        <section className="rounded-lg border border-border bg-card p-4 md:p-6">
-          <div className="mb-4 flex items-center justify-between">
-            <h2 className="text-lg font-semibold">Join Tasks</h2>
-            <NewTaskDialog
-              accounts={accountsQ.data ?? []}
-              onDone={() => qc.invalidateQueries({ queryKey: ["tasks"] })}
-            />
-          </div>
+        <section>
+          <h2 className="mb-4 text-2xl font-semibold tracking-tight">Join Tasks</h2>
           {tasksQ.isLoading ? (
             <p className="text-sm text-muted-foreground">Loading…</p>
           ) : tasksQ.data?.length ? (
-            <ul className="divide-y divide-border">
+            <ul className="divide-y divide-border rounded-lg border border-border bg-card">
               {tasksQ.data.map((t) => (
-                <li key={t.id} className="flex items-center justify-between py-3">
+                <li key={t.id} className="flex items-center justify-between p-4">
                   <div>
                     <div className="font-medium">{t.name}</div>
                     <div className="text-xs text-muted-foreground">
@@ -218,7 +275,9 @@ function AddAccountDialog({ onDone }: { onDone: () => void }) {
       }}
     >
       <DialogTrigger asChild>
-        <Button size="sm">Add account</Button>
+        <Button size="sm">
+          <Plus className="mr-1 h-4 w-4" /> Add Account
+        </Button>
       </DialogTrigger>
       <DialogContent>
         <DialogHeader>
