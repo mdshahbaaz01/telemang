@@ -16,7 +16,12 @@ function parseTargets(raw: string): string[] {
     .split(/\r?\n|,|\s/)
     .map((s) => s.trim())
     .filter(Boolean)
-    .map((s) => s.replace(/^https?:\/\/t\.me\//i, "").replace(/^@/, ""));
+    .map((s) =>
+      s
+        .replace(/^https?:\/\/(?:t\.me|telegram\.me)\//i, "")
+        .replace(/[?#].*$/, "")
+        .replace(/^@/, ""),
+    );
 }
 export { parseTargets };
 
@@ -120,19 +125,6 @@ export const setTaskStatus = createServerFn({ method: "POST" })
     return { ok: true };
   });
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-async function log(
-  supabase: any,
-  taskId: string,
-  userId: string,
-  level: "info" | "warn" | "error" | "success",
-  message: string,
-) {
-  await supabase
-    .from("task_logs")
-    .insert({ task_id: taskId, user_id: userId, level, message });
-}
-
 export const processNextJoin = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .inputValidator((d: unknown) =>
@@ -144,6 +136,15 @@ export const processNextJoin = createServerFn({ method: "POST" })
     const { Api } = await import("telegram");
     const { StringSession } = await import("telegram/sessions");
     const supabase = context.supabase;
+    const log = async (
+      taskId: string,
+      level: "info" | "warn" | "error" | "success",
+      message: string,
+    ) => {
+      await supabase
+        .from("task_logs")
+        .insert({ task_id: taskId, user_id: context.userId, level, message });
+    };
 
     const { data: task, error: terr } = await supabase
       .from("join_tasks")
@@ -185,7 +186,7 @@ export const processNextJoin = createServerFn({ method: "POST" })
         .from("join_tasks")
         .update({ status: "done" })
         .eq("id", task.id);
-      await log(supabase, task.id, context.userId, "success", "All targets processed.");
+      await log(task.id, "success", "All targets processed.");
       return { done: true };
     }
 
@@ -200,44 +201,98 @@ export const processNextJoin = createServerFn({ method: "POST" })
 
     try {
       await log(
-        supabase,
         task.id,
-        context.userId,
         "info",
         `Joining @${item.target}…`,
       );
       try {
-        await client.invoke(
-          new Api.channels.JoinChannel({ channel: item.target }),
-        );
+        const target = item.target.trim().replace(/^@/, "").replace(/[?#].*$/, "");
+        const inviteHash = target.startsWith("+")
+          ? target.slice(1)
+          : target.toLowerCase().startsWith("joinchat/")
+            ? target.slice("joinchat/".length)
+            : null;
+
+        let result: { status: "joined" | "requested"; message: string; note: string | null };
+
+        if (inviteHash) {
+          const invite = await client.invoke(
+            new Api.messages.CheckChatInvite({ hash: inviteHash }),
+          );
+          if (invite.className === "ChatInviteAlready") {
+            result = { status: "joined", message: `Already joined ${item.target}`, note: null };
+          } else {
+            const requestNeeded = Boolean((invite as { requestNeeded?: boolean }).requestNeeded);
+            await client.invoke(new Api.messages.ImportChatInvite({ hash: inviteHash }));
+            result = requestNeeded
+              ? {
+                  status: "requested",
+                  message: `Join request sent for ${item.target}`,
+                  note: "waiting for channel approval",
+                }
+              : { status: "joined", message: `Joined ${item.target}`, note: null };
+          }
+        } else {
+          await client.invoke(new Api.channels.JoinChannel({ channel: target }));
+          result = { status: "joined", message: `Joined @${target}`, note: null };
+        }
+
+        statusUpdate = {
+          status: result.status,
+          error: result.note,
+          processed_at: new Date().toISOString(),
+        };
         await log(
-          supabase,
           task.id,
-          context.userId,
           "success",
-          `Joined @${item.target}`,
+          result.message,
         );
       } catch (e) {
         const err = e as { message?: string; seconds?: number };
         const msg = err.message || String(e);
-        if (msg.includes("FLOOD_WAIT") || err.seconds) {
-          const seconds = err.seconds ?? 60;
+        if (msg.includes("USER_ALREADY_PARTICIPANT")) {
+          statusUpdate = {
+            status: "joined",
+            error: null,
+            processed_at: new Date().toISOString(),
+          };
+          await log(
+            task.id,
+            "success",
+            `Already joined @${item.target}`,
+          );
+        } else if (msg.includes("INVITE_REQUEST_SENT")) {
+          statusUpdate = {
+            status: "requested",
+            error: "waiting for channel approval",
+            processed_at: new Date().toISOString(),
+          };
+          await log(
+            task.id,
+            "success",
+            `Join request sent for ${item.target}`,
+          );
+        } else if (msg.includes("FLOOD_WAIT") || err.seconds) {
+          const match = msg.match(/FLOOD_WAIT_?(\d+)/i);
+          const seconds = err.seconds ?? (match ? Number(match[1]) : 60);
           const pausedUntil = new Date(Date.now() + seconds * 1000).toISOString();
           await supabase
             .from("telegram_accounts")
             .update({ paused_until: pausedUntil, last_error: msg })
             .eq("id", acct.id);
+          await supabase
+            .from("join_tasks")
+            .update({ status: "paused", updated_at: new Date().toISOString() })
+            .eq("id", task.id);
           statusUpdate = {
             status: "pending",
             error: `FloodWait ${seconds}s`,
             processed_at: new Date().toISOString(),
           };
           await log(
-            supabase,
             task.id,
-            context.userId,
             "warn",
-            `FloodWait ${seconds}s — account paused`,
+            `FloodWait ${seconds}s — Telegram rate limited this account until ${pausedUntil}`,
           );
           return {
             done: false,
@@ -251,9 +306,7 @@ export const processNextJoin = createServerFn({ method: "POST" })
           processed_at: new Date().toISOString(),
         };
         await log(
-          supabase,
           task.id,
-          context.userId,
           "error",
           `Failed @${item.target}: ${msg}`,
         );
