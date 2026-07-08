@@ -32,7 +32,7 @@ export const Route = createFileRoute("/_authenticated/dashboard")({
   ),
 });
 
-const NAV = ["Broadcast", "Bot Flow"];
+const NAV = ["Bot Flow"];
 
 function Dashboard() {
   const nav = useNavigate();
@@ -80,6 +80,11 @@ function Dashboard() {
             <Link to="/actions">
               <Button variant="ghost" size="sm">
                 Actions
+              </Button>
+            </Link>
+            <Link to="/actions" search={{ tab: "broadcast" }}>
+              <Button variant="ghost" size="sm">
+                Broadcast
               </Button>
             </Link>
             {NAV.map((n) => (
