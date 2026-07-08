@@ -176,6 +176,7 @@ function ActionsPageInner() {
   const [replyMode, setReplyMode] = useState<SendMode>("per-account");
   const [broadcastSelectedIds, setBroadcastSelectedIds] = useState<string[]>([]);
   const [replySelectedIds, setReplySelectedIds] = useState<string[]>([]);
+  const [actionSelectedIds, setActionSelectedIds] = useState<string[]>([]);
 
   const [logs, setLogs] = useState<LogEntry[]>([]);
   const [running, setRunning] = useState(false);
@@ -247,6 +248,10 @@ function ActionsPageInner() {
       toast.error("No accounts available");
       return;
     }
+    const runAccountIds =
+      (tab === "react" || tab === "vote") && actionSelectedIds.length
+        ? actionSelectedIds
+        : allAccountIds;
 
     let op: unknown;
     if (tab === "react") {
@@ -298,7 +303,7 @@ function ActionsPageInner() {
           authorization: `Bearer ${token}`,
         },
         body: JSON.stringify({
-          accountIds: allAccountIds,
+          accountIds: runAccountIds,
           minDelay,
           maxDelay,
           op,
