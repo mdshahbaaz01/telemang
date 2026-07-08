@@ -6,6 +6,7 @@ const attachmentSchema = z.object({
   path: z.string().min(1).max(500),
   filename: z.string().min(1).max(200),
   mimeType: z.string().min(1).max(200).optional(),
+  isVoice: z.boolean().optional(),
 });
 
 const msgRefSchema = z.object({
@@ -18,12 +19,14 @@ const broadcastRowSchema = z.object({
   message: z.string().max(4096).default(""),
   targets: z.array(z.string().min(1).max(200)).min(1).max(500),
   attachment: attachmentSchema.optional(),
+  format: z.enum(["plain", "mono"]).default("plain"),
 });
 
 const replyRowSchema = z.object({
   accountId: z.string().uuid(),
   message: z.string().max(4096).default(""),
   attachment: attachmentSchema.optional(),
+  format: z.enum(["plain", "mono"]).default("plain"),
 }).refine((r) => r.message.length > 0 || !!r.attachment, {
   message: "Row needs a message or attachment",
 });
@@ -44,6 +47,20 @@ const opSchema = z.discriminatedUnion("kind", [
     source: msgRefSchema,
     accountIds: z.array(z.string().uuid()).min(1).max(200),
     targets: z.array(z.string().min(1).max(200)).min(1).max(500),
+  }),
+  z.object({
+    kind: z.literal("edit"),
+    source: msgRefSchema,
+    accountIds: z.array(z.string().uuid()).min(1).max(200),
+    message: z.string().min(1).max(4096),
+    format: z.enum(["plain", "mono"]).default("plain"),
+  }),
+  z.object({
+    kind: z.literal("deleteMessages"),
+    accountIds: z.array(z.string().uuid()).min(1).max(200),
+    chat: z.string().min(1).max(200),
+    messageIds: z.array(z.number().int().positive()).min(1).max(100),
+    revoke: z.boolean().default(true),
   }),
 ]);
 
@@ -89,14 +106,14 @@ export const listScheduledBroadcasts = createServerFn({ method: "GET" })
   .handler(async ({ context }) => {
     const { data, error } = await context.supabase
       .from("scheduled_broadcasts")
-      .select("id, scheduled_at, label, status, dispatched_at, completed_at, error, payload, created_at")
+      .select("id, scheduled_at, label, status, dispatched_at, completed_at, error, payload, created_at, total_items, processed_items")
       .order("scheduled_at", { ascending: true })
       .limit(200);
     if (error) throw new Error(error.message);
     return (data ?? []).map((r) => {
       const payload = (r.payload as any) ?? {};
-      const kind: "broadcast" | "reply" | "forward" =
-        payload.kind === "reply" || payload.kind === "forward" ? payload.kind : "broadcast";
+      const kind: "broadcast" | "reply" | "forward" | "edit" | "deleteMessages" =
+        ["reply", "forward", "edit", "deleteMessages"].includes(payload.kind) ? payload.kind : "broadcast";
       let summary = "";
       if (kind === "broadcast") {
         const rows = Array.isArray(payload.rows) ? payload.rows : [];
@@ -105,10 +122,17 @@ export const listScheduledBroadcasts = createServerFn({ method: "GET" })
       } else if (kind === "reply") {
         const rows = Array.isArray(payload.rows) ? payload.rows : [];
         summary = `${rows.length} ${payload.viaDiscussion ? "comment" : "reply"}(s) · ${payload?.source?.chat ?? "?"}/${payload?.source?.msgId ?? "?"}`;
-      } else {
+      } else if (kind === "forward") {
         const accIds = Array.isArray(payload.accountIds) ? payload.accountIds.length : 0;
         const tgts = Array.isArray(payload.targets) ? payload.targets.length : 0;
         summary = `${accIds} account(s) → ${tgts} target(s)`;
+      } else if (kind === "edit") {
+        const accIds = Array.isArray(payload.accountIds) ? payload.accountIds.length : 0;
+        summary = `${accIds} account(s) · edit ${payload?.source?.chat ?? "?"}/${payload?.source?.msgId ?? "?"}`;
+      } else {
+        const accIds = Array.isArray(payload.accountIds) ? payload.accountIds.length : 0;
+        const ids = Array.isArray(payload.messageIds) ? payload.messageIds.length : 0;
+        summary = `${accIds} account(s) · delete ${ids} message(s)`;
       }
       return {
         id: r.id as string,
@@ -121,6 +145,8 @@ export const listScheduledBroadcasts = createServerFn({ method: "GET" })
         completedAt: (r.completed_at as string | null) ?? null,
         error: (r.error as string | null) ?? null,
         rowCount: Array.isArray(payload.rows) ? payload.rows.length : 0,
+        totalItems: Number((r as any).total_items ?? 0),
+        processedItems: Number((r as any).processed_items ?? 0),
         createdAt: r.created_at as string,
       };
     });
@@ -137,51 +163,4 @@ export const cancelScheduledBroadcast = createServerFn({ method: "POST" })
       .eq("status", "pending");
     if (error) throw new Error(error.message);
     return { ok: true };
-  });
-
-/**
- * Retry a failed or cancelled scheduled action by re-arming it. Reschedules
- * to `newScheduledAt` (defaults to now + 15 seconds) and resets status/error
- * so the cron hook picks it up on the next tick.
- */
-export const retryScheduledBroadcast = createServerFn({ method: "POST" })
-  .middleware([requireSupabaseAuth])
-  .inputValidator((d: unknown) =>
-    z
-      .object({
-        id: z.string().uuid(),
-        newScheduledAt: z.string().datetime({ offset: true }).optional(),
-      })
-      .parse(d),
-  )
-  .handler(async ({ data, context }) => {
-    const when = data.newScheduledAt
-      ? new Date(data.newScheduledAt)
-      : new Date(Date.now() + 15_000);
-    if (Number.isNaN(when.getTime())) throw new Error("Invalid time");
-
-    // Only the owner's failed/cancelled/done rows may be retried.
-    const { data: existing, error: readErr } = await context.supabase
-      .from("scheduled_broadcasts")
-      .select("id, status")
-      .eq("id", data.id)
-      .maybeSingle();
-    if (readErr) throw new Error(readErr.message);
-    if (!existing) throw new Error("Schedule not found");
-    if (existing.status === "pending" || existing.status === "running") {
-      throw new Error(`Cannot retry a ${existing.status} schedule`);
-    }
-
-    const { error } = await context.supabase
-      .from("scheduled_broadcasts")
-      .update({
-        status: "pending",
-        scheduled_at: when.toISOString(),
-        dispatched_at: null,
-        completed_at: null,
-        error: null,
-      })
-      .eq("id", data.id);
-    if (error) throw new Error(error.message);
-    return { ok: true, scheduledAt: when.toISOString() };
   });

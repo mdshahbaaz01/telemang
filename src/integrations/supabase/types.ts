@@ -209,6 +209,143 @@ export type Database = {
         }
         Relationships: []
       }
+      notification_logs: {
+        Row: {
+          body: string
+          channel: string
+          created_at: string
+          error: string | null
+          event: string
+          id: string
+          status: string
+          title: string
+          user_id: string
+        }
+        Insert: {
+          body: string
+          channel: string
+          created_at?: string
+          error?: string | null
+          event: string
+          id?: string
+          status?: string
+          title: string
+          user_id: string
+        }
+        Update: {
+          body?: string
+          channel?: string
+          created_at?: string
+          error?: string | null
+          event?: string
+          id?: string
+          status?: string
+          title?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
+      notification_settings: {
+        Row: {
+          alert_account: boolean
+          alert_failure: boolean
+          alert_success: boolean
+          created_at: string
+          email_enabled: boolean
+          email_to: string | null
+          telegram_chat: string | null
+          telegram_enabled: boolean
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          alert_account?: boolean
+          alert_failure?: boolean
+          alert_success?: boolean
+          created_at?: string
+          email_enabled?: boolean
+          email_to?: string | null
+          telegram_chat?: string | null
+          telegram_enabled?: boolean
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          alert_account?: boolean
+          alert_failure?: boolean
+          alert_success?: boolean
+          created_at?: string
+          email_enabled?: boolean
+          email_to?: string | null
+          telegram_chat?: string | null
+          telegram_enabled?: boolean
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
+      scheduled_broadcast_items: {
+        Row: {
+          account_id: string
+          attempt_count: number
+          created_at: string
+          error: string | null
+          id: string
+          kind: string
+          locked_at: string | null
+          payload: Json
+          processed_at: string | null
+          schedule_id: string
+          scheduled_for: string
+          status: string
+          target: string | null
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          account_id: string
+          attempt_count?: number
+          created_at?: string
+          error?: string | null
+          id?: string
+          kind: string
+          locked_at?: string | null
+          payload?: Json
+          processed_at?: string | null
+          schedule_id: string
+          scheduled_for: string
+          status?: string
+          target?: string | null
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          account_id?: string
+          attempt_count?: number
+          created_at?: string
+          error?: string | null
+          id?: string
+          kind?: string
+          locked_at?: string | null
+          payload?: Json
+          processed_at?: string | null
+          schedule_id?: string
+          scheduled_for?: string
+          status?: string
+          target?: string | null
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "scheduled_broadcast_items_schedule_id_fkey"
+            columns: ["schedule_id"]
+            isOneToOne: false
+            referencedRelation: "scheduled_broadcasts"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       scheduled_broadcasts: {
         Row: {
           completed_at: string | null
@@ -218,9 +355,11 @@ export type Database = {
           id: string
           label: string | null
           payload: Json
+          processed_items: number
           run_id: string | null
           scheduled_at: string
           status: string
+          total_items: number
           updated_at: string
           user_id: string
         }
@@ -232,9 +371,11 @@ export type Database = {
           id?: string
           label?: string | null
           payload: Json
+          processed_items?: number
           run_id?: string | null
           scheduled_at: string
           status?: string
+          total_items?: number
           updated_at?: string
           user_id: string
         }
@@ -246,9 +387,11 @@ export type Database = {
           id?: string
           label?: string | null
           payload?: Json
+          processed_items?: number
           run_id?: string | null
           scheduled_at?: string
           status?: string
+          total_items?: number
           updated_at?: string
           user_id?: string
         }
