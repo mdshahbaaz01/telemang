@@ -552,7 +552,7 @@ function ActionsPageInner() {
       const res = await createSchedFn({
         data: {
           scheduledAt: when.toISOString(),
-          rows: cleaned,
+          op: { kind: "broadcast", rows: cleaned },
           minDelay,
           maxDelay,
         },
@@ -561,6 +561,102 @@ function ActionsPageInner() {
       setScheduledAt("");
       await qc.invalidateQueries({ queryKey: ["scheduled-broadcasts"] });
       return res;
+    } catch (e) {
+      toast.error((e as Error).message);
+    } finally {
+      setScheduling(false);
+    }
+  };
+
+  const parseScheduledAt = () => {
+    if (!scheduledAt) {
+      toast.error("Pick a schedule time (with seconds)");
+      return null;
+    }
+    const when = new Date(scheduledAt);
+    if (Number.isNaN(when.getTime())) {
+      toast.error("Invalid schedule time");
+      return null;
+    }
+    if (when.getTime() < Date.now() + 5_000) {
+      toast.error("Schedule at least 5 seconds in the future");
+      return null;
+    }
+    return when;
+  };
+
+  const scheduleReply = async () => {
+    const when = parseScheduledAt();
+    if (!when) return;
+    const src = parseMessageLink(source);
+    if (!src) return toast.error("Enter a valid message link");
+    if (allAccountIds.length === 0) return toast.error("No accounts available");
+    let cleaned: { accountId: string; message: string; attachment?: { path: string; filename: string; mimeType?: string } }[] = [];
+    try {
+      if (replyMode === "per-account") {
+        const rs = replyRows.filter((r) => (r.accountId ?? "") && (r.message.trim() || r.file));
+        if (!rs.length) return toast.error("Pick an account and add message or file for each row");
+        cleaned = await Promise.all(rs.map(async (r) => ({
+          accountId: r.accountId!,
+          message: r.message.trim(),
+          attachment: r.file ? await uploadAttachment(r.file) : undefined,
+        })));
+      } else {
+        const rs = replyRows.filter((r) => r.message.trim() || r.file);
+        if (!rs.length) return toast.error("Add at least one message or file");
+        const uploads = await Promise.all(rs.map(async (r) => ({
+          message: r.message.trim(),
+          attachment: r.file ? await uploadAttachment(r.file) : undefined,
+        })));
+        const targetIds = replySelectedIds.length ? replySelectedIds : allAccountIds;
+        if (!targetIds.length) return toast.error("Select at least one account");
+        cleaned = targetIds.map((accountId, i) => ({ accountId, ...uploads[i % uploads.length] }));
+      }
+    } catch (e) {
+      return toast.error((e as Error).message);
+    }
+    setScheduling(true);
+    try {
+      await createSchedFn({
+        data: {
+          scheduledAt: when.toISOString(),
+          op: { kind: "reply", source: src, viaDiscussion: tab === "comment", rows: cleaned },
+          minDelay,
+          maxDelay,
+        },
+      });
+      toast.success(`Scheduled for ${when.toLocaleString()} (fires within ±1s)`);
+      setScheduledAt("");
+      await qc.invalidateQueries({ queryKey: ["scheduled-broadcasts"] });
+    } catch (e) {
+      toast.error((e as Error).message);
+    } finally {
+      setScheduling(false);
+    }
+  };
+
+  const scheduleForward = async () => {
+    const when = parseScheduledAt();
+    if (!when) return;
+    const src = parseMessageLink(source);
+    if (!src) return toast.error("Enter a valid message link");
+    const list = targets.split(/\r?\n|,/).map((s) => s.trim()).filter(Boolean);
+    if (!list.length) return toast.error("Enter at least one destination");
+    const runAccountIds = actionSelectedIds.length ? actionSelectedIds : allAccountIds;
+    if (!runAccountIds.length) return toast.error("No accounts available");
+    setScheduling(true);
+    try {
+      await createSchedFn({
+        data: {
+          scheduledAt: when.toISOString(),
+          op: { kind: "forward", source: src, accountIds: runAccountIds, targets: list },
+          minDelay,
+          maxDelay,
+        },
+      });
+      toast.success(`Scheduled for ${when.toLocaleString()} (fires within ±1s)`);
+      setScheduledAt("");
+      await qc.invalidateQueries({ queryKey: ["scheduled-broadcasts"] });
     } catch (e) {
       toast.error((e as Error).message);
     } finally {
@@ -1179,29 +1275,9 @@ function ActionsPageInner() {
                   <Button onClick={runBroadcast} disabled={running || scheduling}>
                     <Play className="mr-1 h-4 w-4" /> Run broadcast ({rows.length} row{rows.length === 1 ? "" : "s"})
                   </Button>
-                  <div className="flex items-center gap-1 rounded-md border border-border bg-background px-2 py-1">
-                    <Clock className="h-4 w-4 text-muted-foreground" />
-                    <input
-                      type="datetime-local"
-                      step={1}
-                      value={scheduledAt}
-                      onChange={(e) => setScheduledAt(e.target.value)}
-                      className="bg-transparent text-sm outline-none"
-                      title="Schedule time (with seconds — accurate to ±1s)"
-                    />
-                  </div>
-                  <Button
-                    type="button"
-                    variant="secondary"
-                    onClick={scheduleBroadcast}
-                    disabled={scheduling || running || !scheduledAt}
-                  >
-                    <CalendarClock className="mr-1 h-4 w-4" />
-                    {scheduling ? "Scheduling…" : "Schedule"}
-                  </Button>
                 </>
               ) : (tab === "reply" || tab === "comment") ? (
-                <Button onClick={runReply} disabled={running}>
+                <Button onClick={runReply} disabled={running || scheduling}>
                   <Play className="mr-1 h-4 w-4" /> Send {replyRows.length} {tab}{replyRows.length === 1 ? "" : "s"}
                 </Button>
               ) : (
@@ -1209,6 +1285,7 @@ function ActionsPageInner() {
                   onClick={() => run("apply")}
                   disabled={
                     running ||
+                    scheduling ||
                     allAccountIds.length === 0 ||
                     (tab === "vote" && !!pollInfo?.closed)
                   }
@@ -1227,6 +1304,36 @@ function ActionsPageInner() {
                   <RotateCw className="mr-1 h-4 w-4" /> Take back
                 </Button>
               )}
+              {(tab === "broadcast" || tab === "reply" || tab === "comment" || tab === "forward") && (
+                <>
+                  <div className="flex items-center gap-1 rounded-md border border-border bg-background px-2 py-1">
+                    <Clock className="h-4 w-4 text-muted-foreground" />
+                    <input
+                      type="datetime-local"
+                      step={1}
+                      value={scheduledAt}
+                      onChange={(e) => setScheduledAt(e.target.value)}
+                      className="bg-transparent text-sm outline-none"
+                      title="Schedule time (with seconds — accurate to ±1s)"
+                    />
+                  </div>
+                  <Button
+                    type="button"
+                    variant="secondary"
+                    onClick={
+                      tab === "broadcast"
+                        ? scheduleBroadcast
+                        : tab === "forward"
+                          ? scheduleForward
+                          : scheduleReply
+                    }
+                    disabled={scheduling || running || !scheduledAt}
+                  >
+                    <CalendarClock className="mr-1 h-4 w-4" />
+                    {scheduling ? "Scheduling…" : "Schedule"}
+                  </Button>
+                </>
+              )}
               <Button variant="destructive" onClick={stop} disabled={!running}>
                 <Square className="mr-1 h-4 w-4" /> Stop
               </Button>
@@ -1238,11 +1345,11 @@ function ActionsPageInner() {
             </div>
           </div>
 
-          {tab === "broadcast" && (
+          {(tab === "broadcast" || tab === "reply" || tab === "comment" || tab === "forward") && (
             <div className="rounded-lg border border-border bg-card p-4">
               <div className="mb-2 flex items-center gap-2">
                 <CalendarClock className="h-4 w-4 text-muted-foreground" />
-                <div className="text-sm font-medium">Scheduled broadcasts</div>
+                <div className="text-sm font-medium">Scheduled actions</div>
                 <span className="ml-auto text-xs text-muted-foreground">
                   {schedulesQ.data?.length ?? 0} total · fires within ±1s of the target second
                 </span>
@@ -1279,8 +1386,11 @@ function ActionsPageInner() {
                             second: "2-digit",
                           })}
                         </span>
+                        <span className="rounded bg-muted px-1.5 py-0.5 text-[10px] uppercase tracking-wide">
+                          {s.kind}
+                        </span>
                         <span className={`text-xs uppercase tracking-wide ${statusColor}`}>{s.status}</span>
-                        <span className="text-xs text-muted-foreground">· {s.rowCount} row(s)</span>
+                        <span className="text-xs text-muted-foreground">· {s.summary}</span>
                         {s.error && (
                           <span className="text-xs text-destructive truncate max-w-[40ch]" title={s.error}>
                             {s.error}

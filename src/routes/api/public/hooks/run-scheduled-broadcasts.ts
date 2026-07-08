@@ -44,7 +44,7 @@ export const Route = createFileRoute("/api/public/hooks/run-scheduled-broadcasts
           if (!uerr && upd) claimed.push(row);
         }
 
-        const { executeBroadcast } = await import("@/lib/broadcast-executor.server");
+        const { executeBroadcast, executeReply, executeForward } = await import("@/lib/broadcast-executor.server");
 
         // Fire all claimed schedules concurrently. Each waits until its own
         // scheduled_at millisecond, then dispatches.
@@ -54,22 +54,36 @@ export const Route = createFileRoute("/api/public/hooks/run-scheduled-broadcasts
             const delay = Math.max(0, target - Date.now());
             if (delay > 0) await new Promise((r) => setTimeout(r, delay));
 
-            const payload = row.payload as {
-              rows: Array<{
-                accountId: string;
-                message: string;
-                targets: string[];
-                attachment?: { path: string; filename: string; mimeType?: string };
-              }>;
-              minDelay: number;
-              maxDelay: number;
-            };
+            const payload = row.payload as any;
+            const kind: "broadcast" | "reply" | "forward" =
+              payload?.kind === "reply" || payload?.kind === "forward" ? payload.kind : "broadcast";
+            const minDelay = payload?.minDelay ?? 1;
+            const maxDelay = payload?.maxDelay ?? 2;
             try {
-              const res = await executeBroadcast(admin, {
-                rows: payload.rows,
-                minDelay: payload.minDelay ?? 1,
-                maxDelay: payload.maxDelay ?? 2,
-              });
+              let res;
+              if (kind === "reply") {
+                res = await executeReply(admin, {
+                  source: payload.source,
+                  viaDiscussion: !!payload.viaDiscussion,
+                  rows: payload.rows,
+                  minDelay,
+                  maxDelay,
+                });
+              } else if (kind === "forward") {
+                res = await executeForward(admin, {
+                  source: payload.source,
+                  accountIds: payload.accountIds,
+                  targets: payload.targets,
+                  minDelay,
+                  maxDelay,
+                });
+              } else {
+                res = await executeBroadcast(admin, {
+                  rows: payload.rows,
+                  minDelay,
+                  maxDelay,
+                });
+              }
               await admin
                 .from("scheduled_broadcasts")
                 .update({
