@@ -5,7 +5,7 @@ import { useQuery } from "@tanstack/react-query";
 import { useMemo, useRef, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { listAccounts } from "@/lib/accounts.functions";
-import { loadPoll, listActionRuns, deleteActionRun } from "@/lib/actions.functions";
+import { loadPoll, listActionRuns, deleteActionRun, clearActionRuns } from "@/lib/actions.functions";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -138,6 +138,7 @@ function ActionsPageInner() {
   const accountsQ = useQuery({ queryKey: ["accounts"], queryFn: () => listAcc() });
   const listRunsFn = useServerFn(listActionRuns);
   const deleteRunFn = useServerFn(deleteActionRun);
+  const clearRunsFn = useServerFn(clearActionRuns);
   const qc = useQueryClient();
   const runsQ = useQuery({ queryKey: ["action-runs"], queryFn: () => listRunsFn() });
   const [editingRun, setEditingRun] = useState<any | null>(null);
@@ -338,6 +339,17 @@ function ActionsPageInner() {
       await deleteRunFn({ data: { runId } });
       qc.invalidateQueries({ queryKey: ["action-runs"] });
       toast.success("Run deleted");
+    } catch (e) {
+      toast.error((e as Error).message);
+    }
+  };
+
+  const clearAllRuns = async () => {
+    if (!confirm("Delete ALL runs and their logs? This cannot be undone.")) return;
+    try {
+      await clearRunsFn();
+      qc.invalidateQueries({ queryKey: ["action-runs"] });
+      toast.success("History cleared");
     } catch (e) {
       toast.error((e as Error).message);
     }
@@ -1203,6 +1215,7 @@ function ActionsPageInner() {
             onEdit={(r) => setEditingRun(r)}
             onDelete={deleteRun}
             onRefresh={() => qc.invalidateQueries({ queryKey: ["action-runs"] })}
+            onClearAll={clearAllRuns}
           />
         </section>
       </div>
@@ -1313,6 +1326,7 @@ function HistorySection({
   onEdit,
   onDelete,
   onRefresh,
+  onClearAll,
 }: {
   runs: any[];
   accountList: Account[];
@@ -1321,6 +1335,7 @@ function HistorySection({
   onEdit: (run: any) => void;
   onDelete: (id: string) => void;
   onRefresh: () => void;
+  onClearAll: () => void;
 }) {
   return (
     <div className="rounded-lg border border-border bg-card p-4">
@@ -1328,6 +1343,9 @@ function HistorySection({
         <div className="mr-auto text-sm font-medium">History ({runs.length})</div>
         <Button size="sm" variant="outline" onClick={onRefresh}>
           <RotateCw className="mr-1 h-3.5 w-3.5" /> Refresh
+        </Button>
+        <Button size="sm" variant="destructive" onClick={onClearAll} disabled={runs.length === 0}>
+          <Trash2 className="mr-1 h-3.5 w-3.5" /> Clear history
         </Button>
       </div>
       {loading && <p className="text-xs text-muted-foreground">Loading…</p>}

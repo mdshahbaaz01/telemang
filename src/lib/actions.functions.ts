@@ -74,6 +74,19 @@ export const deleteActionRun = createServerFn({ method: "POST" })
     return { ok: true };
   });
 
+export const clearActionRuns = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .handler(async ({ context }) => {
+    await assertAdmin(context.supabase, context.userId);
+    await context.supabase.from("action_logs").delete().not("run_id", "is", null);
+    const { error } = await context.supabase
+      .from("action_runs")
+      .delete()
+      .not("id", "is", null);
+    if (error) throw new Error(error.message);
+    return { ok: true };
+  });
+
 const loadPollSchema = z.object({
   chat: z.string().min(1),
   msgId: z.number().int().positive(),
