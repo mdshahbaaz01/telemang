@@ -139,6 +139,11 @@ function Dashboard() {
                 Bot Flow
               </Button>
             </Link>
+            <Link to="/alerts">
+              <Button variant="ghost" size="sm">
+                Alerts
+              </Button>
+            </Link>
             {NAV.map((n) => (
               <Button key={n} variant="ghost" size="sm" onClick={soon}>
                 {n}
