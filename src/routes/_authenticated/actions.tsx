@@ -146,7 +146,6 @@ function ActionsPageInner() {
   const [source, setSource] = useState("");
   const [emoji, setEmoji] = useState("👍");
   const [customEmojiId, setCustomEmojiId] = useState("");
-  const [retake, setRetake] = useState(false);
   const [targets, setTargets] = useState("");
   const [options, setOptions] = useState("0");
   const [pollInfo, setPollInfo] = useState<{
@@ -237,7 +236,7 @@ function ActionsPageInner() {
     }
   };
 
-  const run = async () => {
+  const run = async (mode: "apply" | "clear" = "apply") => {
     const src = parseMessageLink(source);
     if (!src) {
       toast.error("Enter a valid message link (https://t.me/<chat>/<id>)");
@@ -254,14 +253,14 @@ function ActionsPageInner() {
 
     let op: unknown;
     if (tab === "react") {
-      if (!emoji.trim() && !customEmojiId.trim()) return toast.error("Pick an emoji or custom emoji id");
+      if (mode === "apply" && !emoji.trim() && !customEmojiId.trim()) return toast.error("Pick an emoji or custom emoji id");
       if (customEmojiId.trim() && !/^\d+$/.test(customEmojiId.trim())) return toast.error("Custom emoji document id must contain only digits");
       op = {
         kind: "react",
         source: src,
         emoji: emoji.trim() || "👍",
         ...(customEmojiId.trim() ? { customEmojiId: customEmojiId.trim() } : {}),
-        ...(retake ? { retake: true } : {}),
+        mode,
       };
     } else if (tab === "forward") {
       const list = targets
@@ -277,8 +276,8 @@ function ActionsPageInner() {
             .split(/[,\s]+/)
             .map((s) => Number(s.trim()))
             .filter((n) => Number.isInteger(n) && n >= 0);
-      if (!opts.length) return toast.error("Pick at least one poll option");
-      op = { kind: "vote", source: src, options: opts, ...(retake ? { retake: true } : {}) };
+      if (mode === "apply" && !opts.length) return toast.error("Pick at least one poll option");
+      op = { kind: "vote", source: src, options: opts, mode };
     } else {
       // handled below in runBroadcast
       return;
@@ -574,10 +573,9 @@ function ActionsPageInner() {
                     </p>
                   </div>
                 </div>
-                <label className="flex items-center gap-2 text-sm">
-                  <input type="checkbox" checked={retake} onChange={(e) => setRetake(e.target.checked)} />
-                  Retake (clear previous reaction first)
-                </label>
+                <p className="text-xs text-muted-foreground">
+                  Any previous reaction from the same account is cleared automatically before the new one is applied. Use "Take back" to remove reactions without adding a new one.
+                </p>
                 <DelayFields
                   minDelay={minDelay}
                   maxDelay={maxDelay}
@@ -716,9 +714,9 @@ function ActionsPageInner() {
                     "Already voted" status and per-option "chosen" reflects this account.
                   </p>
                 </div>
-                {pollInfo?.alreadyVoted && !retake && (
+                {pollInfo?.alreadyVoted && (
                   <div className="rounded-md border border-amber-500/50 bg-amber-500/10 p-2 text-xs text-amber-700 dark:text-amber-300">
-                    This account already voted for {pollInfo.answers.filter((a) => a.chosen).map((a) => `"${a.text}"`).join(", ")}. Voting is disabled — enable "Retake" below to retract and vote again.
+                    This account already voted for {pollInfo.answers.filter((a) => a.chosen).map((a) => `"${a.text}"`).join(", ")}. Running "Vote" again will retract it and cast the new selection.
                   </div>
                 )}
                 {pollInfo ? (
@@ -776,10 +774,9 @@ function ActionsPageInner() {
                     />
                   </div>
                 )}
-                <label className="flex items-center gap-2 text-sm">
-                  <input type="checkbox" checked={retake} onChange={(e) => setRetake(e.target.checked)} />
-                  Retake (retract previous vote first)
-                </label>
+                <p className="text-xs text-muted-foreground">
+                  Any previous vote from the same account is retracted automatically before the new one is cast. Use "Take back" to only retract without voting again.
+                </p>
                 <DelayFields
                   minDelay={minDelay}
                   maxDelay={maxDelay}
@@ -1093,16 +1090,25 @@ function ActionsPageInner() {
                 </Button>
               ) : (
                 <Button
-                  onClick={run}
+                  onClick={() => run("apply")}
                   disabled={
                     running ||
                     allAccountIds.length === 0 ||
-                    (tab === "vote" && !!pollInfo?.alreadyVoted && !retake) ||
                     (tab === "vote" && !!pollInfo?.closed)
                   }
                 >
                   <Play className="mr-1 h-4 w-4" />
-                  Run on {allAccountIds.length} account{allAccountIds.length === 1 ? "" : "s"}
+                  {tab === "react" ? "React" : tab === "vote" ? "Vote" : "Run"} on {allAccountIds.length} account{allAccountIds.length === 1 ? "" : "s"}
+                </Button>
+              )}
+              {(tab === "react" || tab === "vote") && (
+                <Button
+                  variant="outline"
+                  onClick={() => run("clear")}
+                  disabled={running || allAccountIds.length === 0}
+                  title={tab === "react" ? "Remove reaction from selected accounts" : "Retract vote from selected accounts"}
+                >
+                  <RotateCw className="mr-1 h-4 w-4" /> Take back
                 </Button>
               )}
               <Button variant="destructive" onClick={stop} disabled={!running}>
