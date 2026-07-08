@@ -376,7 +376,7 @@ export const resetGroupItems = createServerFn({ method: "POST" })
       .update({ status: "pending", error: null, processed_at: null })
       .in("task_id", ids);
     if (data.scope === "failed") q = q.eq("status", "failed");
-    const { error, count } = await q.select("id", { count: "exact" });
+    const { data: updated, error } = await q.select("id");
     if (error) throw new Error(error.message);
     await context.supabase
       .from("join_tasks")
