@@ -314,14 +314,18 @@ export const Route = createFileRoute("/api/public/hooks/run-scheduled-broadcasts
             .eq("id", row.id);
         }
 
-        const processingHorizon = new Date(Date.now() + 22_000).toISOString();
+        // Pick up every item whose scheduled_for falls inside this tick's
+        // window. We fire them in parallel below, so a large batch (e.g. 29
+        // accounts starting at the same minute) all go out within the tick
+        // instead of being sliced across 4-5 minutes.
+        const processingHorizon = new Date(Date.now() + 55_000).toISOString();
         const { data: pendingItems, error: itemErr } = await admin
           .from("scheduled_broadcast_items")
           .select("*")
           .eq("status", "pending")
           .lte("scheduled_for", processingHorizon)
           .order("scheduled_for", { ascending: true })
-          .limit(6);
+          .limit(100);
         if (itemErr) return Response.json({ error: itemErr.message }, { status: 500 });
 
         const touchedSchedules = new Set<string>(claimed.map((r) => r.id));
