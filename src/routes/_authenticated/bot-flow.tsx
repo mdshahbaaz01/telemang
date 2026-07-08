@@ -127,8 +127,8 @@ function BotFlowPage() {
         headers: { "content-type": "application/json", authorization: `Bearer ${token}` },
         body: JSON.stringify({
           accountIds,
-          minDelay: 2,
-          maxDelay: 5,
+          minDelay: 1,
+          maxDelay: 2,
           op: {
             kind: "botflow",
             bot: link,

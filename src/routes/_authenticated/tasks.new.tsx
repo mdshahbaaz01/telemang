@@ -32,8 +32,8 @@ function NewTaskPage() {
 
   const [name, setName] = useState("");
   const [targets, setTargets] = useState("");
-  const [minDelay, setMinDelay] = useState("15");
-  const [maxDelay, setMaxDelay] = useState("45");
+  const [minDelay, setMinDelay] = useState("1");
+  const [maxDelay, setMaxDelay] = useState("2");
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [busy, setBusy] = useState(false);
 
