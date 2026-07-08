@@ -735,14 +735,30 @@ function ActionsPageInner() {
       <header className="border-b border-border bg-card">
         <div className="mx-auto flex max-w-7xl items-center gap-3 px-4 py-3 md:px-8">
           <h1 className="mr-auto text-xl font-semibold">Actions</h1>
+          <Button variant="outline" size="sm" onClick={toggleAccounts}>
+            {showAccounts ? (
+              <>
+                <EyeOff className="mr-1 h-3.5 w-3.5" /> Hide accounts
+              </>
+            ) : (
+              <>
+                <Eye className="mr-1 h-3.5 w-3.5" /> Show accounts ({accountList.length})
+              </>
+            )}
+          </Button>
           <a href="/dashboard" className="text-sm text-muted-foreground underline">
             Back to dashboard
           </a>
         </div>
       </header>
 
-      <div className="mx-auto grid max-w-7xl gap-6 px-4 py-6 md:grid-cols-[280px_1fr] md:px-8">
+      <div
+        className={`mx-auto grid max-w-7xl gap-6 px-4 py-6 md:px-8 ${
+          showAccounts ? "md:grid-cols-[280px_1fr]" : "md:grid-cols-1"
+        }`}
+      >
         {/* Accounts column */}
+        {showAccounts && (
         <aside className="rounded-lg border border-border bg-card p-3">
           <div className="mb-2 text-sm font-medium">
             All accounts ({accountList.length}) will be used
@@ -760,6 +776,7 @@ function ActionsPageInner() {
             )}
           </div>
         </aside>
+        )}
 
         {/* Main panel */}
         <section className="space-y-4">
