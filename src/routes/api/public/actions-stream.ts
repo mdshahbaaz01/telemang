@@ -13,6 +13,8 @@ const reactSchema = z.object({
   kind: z.literal("react"),
   source: msgRefSchema,
   emoji: z.string().min(1).max(20),
+  customEmojiId: z.string().regex(/^\d+$/).optional(),
+  retake: z.boolean().optional(),
 });
 
 const forwardSchema = z.object({
@@ -25,13 +27,25 @@ const voteSchema = z.object({
   kind: z.literal("vote"),
   source: msgRefSchema,
   options: z.array(z.number().int().min(0).max(20)).min(1).max(10),
+  retake: z.boolean().optional(),
+});
+
+const broadcastRowSchema = z.object({
+  accountId: z.string().uuid(),
+  message: z.string().min(1).max(4096),
+  targets: z.array(z.string().min(1).max(200)).min(1).max(500),
+});
+
+const broadcastSchema = z.object({
+  kind: z.literal("broadcast"),
+  rows: z.array(broadcastRowSchema).min(1).max(200),
 });
 
 const bodySchema = z.object({
-  accountIds: z.array(z.string().uuid()).min(1).max(50),
+  accountIds: z.array(z.string().uuid()).min(0).max(200).default([]),
   minDelay: z.number().int().min(0).max(60).default(2),
   maxDelay: z.number().int().min(0).max(60).default(6),
-  op: z.discriminatedUnion("kind", [reactSchema, forwardSchema, voteSchema]),
+  op: z.discriminatedUnion("kind", [reactSchema, forwardSchema, voteSchema, broadcastSchema]),
 });
 
 function sseEncode(event: string, data: unknown): Uint8Array {
@@ -160,8 +174,7 @@ export const Route = createFileRoute("/api/public/actions-stream")({
             const { Api } = await import("telegram");
 
             // Resolve source peer & get message once per account (needed for react/vote/forward source)
-            const resolveSource = async (client: any) => {
-              const src = body.op.source;
+            const resolveSource = async (client: any, src: { chat: string; msgId: number }) => {
               let peer: any;
               if (src.chat.startsWith("c/")) {
                 // Private channel numeric id
@@ -175,7 +188,27 @@ export const Route = createFileRoute("/api/public/actions-stream")({
               return peer;
             };
 
+            const resolveTarget = async (client: any, t: string) => {
+              const cleaned = t.trim().replace(/^https?:\/\/(t\.me|telegram\.me)\//i, "").replace(/^@/, "");
+              if (/^c\/\d+/.test(cleaned)) {
+                const raw = cleaned.split("/")[1];
+                const { default: bigInt } = await import("big-integer");
+                return await client.getEntity(bigInt(raw));
+              }
+              return await client.getEntity(cleaned);
+            };
+
+            const buildReaction = async (emoji: string, customEmojiId?: string) => {
+              if (customEmojiId) {
+                const { default: bigInt } = await import("big-integer");
+                return new Api.ReactionCustomEmoji({ documentId: bigInt(customEmojiId) });
+              }
+              return new Api.ReactionEmoji({ emoticon: emoji });
+            };
+
             const runOne = async (accountId: string) => {
+              if (body.op.kind === "broadcast") return { ok: 0, fail: 0 };
+              const op = body.op;
               send("log", { accountId, level: "info", message: "Connecting…" });
               let client;
               try {
@@ -189,10 +222,10 @@ export const Route = createFileRoute("/api/public/actions-stream")({
               let ok = 0;
               let fail = 0;
               try {
-                const src = body.op.source;
+                const src = op.source;
                 let sourcePeer: any;
                 try {
-                  sourcePeer = await resolveSource(client);
+                  sourcePeer = await resolveSource(client, src);
                 } catch (e) {
                   const msg = `Resolve source failed: ${(e as Error).message}`;
                   send("log", { accountId, level: "error", message: msg });
@@ -200,7 +233,7 @@ export const Route = createFileRoute("/api/public/actions-stream")({
                   return { ok: 0, fail: 1 };
                 }
 
-                if (body.op.kind === "react") {
+                if (op.kind === "react") {
                   try {
                     await new Promise((r) =>
                       setTimeout(r, jitter(body.minDelay, body.maxDelay)),
@@ -216,17 +249,23 @@ export const Route = createFileRoute("/api/public/actions-stream")({
                       );
                       send("log", { accountId, level: "info", target: `${src.chat}/${src.msgId}`, message: "Viewed post" });
                     } catch {}
+                    if (op.retake) {
+                      try {
+                        await client.invoke(
+                          new Api.messages.SendReaction({ peer: sourcePeer, msgId: src.msgId, reaction: [] }),
+                        );
+                        send("log", { accountId, level: "info", target: `${src.chat}/${src.msgId}`, message: "Cleared previous reaction" });
+                      } catch {}
+                    }
                     await client.invoke(
                       new Api.messages.SendReaction({
                         peer: sourcePeer,
                         msgId: src.msgId,
-                        reaction: [
-                          new Api.ReactionEmoji({ emoticon: body.op.emoji }),
-                        ],
+                        reaction: [await buildReaction(op.emoji, op.customEmojiId)],
                       }),
                     );
                     ok++;
-                    const m = `Reacted ${body.op.emoji}`;
+                    const m = op.customEmojiId ? `Reacted custom:${op.customEmojiId}` : `Reacted ${op.emoji}`;
                     send("log", { accountId, level: "success", target: `${src.chat}/${src.msgId}`, message: m });
                     await logDb(accountId, `${src.chat}/${src.msgId}`, "success", m);
                   } catch (e) {
@@ -235,7 +274,7 @@ export const Route = createFileRoute("/api/public/actions-stream")({
                     send("log", { accountId, level: "error", target: `${src.chat}/${src.msgId}`, message: m });
                     await logDb(accountId, `${src.chat}/${src.msgId}`, "error", m);
                   }
-                } else if (body.op.kind === "vote") {
+                } else if (op.kind === "vote") {
                   try {
                     await new Promise((r) =>
                       setTimeout(r, jitter(body.minDelay, body.maxDelay)),
@@ -254,11 +293,19 @@ export const Route = createFileRoute("/api/public/actions-stream")({
                     if (!msg?.poll) throw new Error("Message is not a poll");
                     const pollObj = (msg.poll as { poll?: { answers?: Array<{ option: Uint8Array }> } }).poll;
                     const answers = pollObj?.answers ?? [];
-                    const chosen = body.op.options
+                    const chosen = op.options
                       .map((i) => answers[i]?.option)
                       .filter((x): x is Uint8Array => !!x)
                       .map((x) => Buffer.from(x));
                     if (chosen.length === 0) throw new Error("No matching poll options");
+                    if (op.retake) {
+                      try {
+                        await client.invoke(
+                          new Api.messages.SendVote({ peer: sourcePeer, msgId: src.msgId, options: [] }),
+                        );
+                        send("log", { accountId, level: "info", target: `${src.chat}/${src.msgId}`, message: "Retracted previous vote" });
+                      } catch {}
+                    }
                     await client.invoke(
                       new Api.messages.SendVote({
                         peer: sourcePeer,
@@ -267,7 +314,7 @@ export const Route = createFileRoute("/api/public/actions-stream")({
                       }),
                     );
                     ok++;
-                    const m = `Voted options ${body.op.options.join(",")}`;
+                    const m = `Voted options ${op.options.join(",")}`;
                     send("log", { accountId, level: "success", target: `${src.chat}/${src.msgId}`, message: m });
                     await logDb(accountId, `${src.chat}/${src.msgId}`, "success", m);
                   } catch (e) {
@@ -276,13 +323,11 @@ export const Route = createFileRoute("/api/public/actions-stream")({
                     send("log", { accountId, level: "error", target: `${src.chat}/${src.msgId}`, message: m });
                     await logDb(accountId, `${src.chat}/${src.msgId}`, "error", m);
                   }
-                } else if (body.op.kind === "forward") {
-                  for (const t of body.op.targets) {
+                } else if (op.kind === "forward") {
+                  for (const t of op.targets) {
                     if (stopRequested) break;
                     try {
-                      const dest = await client.getEntity(
-                        t.replace(/^https?:\/\/(t\.me|telegram\.me)\//i, "").replace(/^@/, ""),
-                      );
+                      const dest = await resolveTarget(client, t);
                       const { default: bigInt } = await import("big-integer");
                       await client.invoke(
                         new Api.messages.ForwardMessages({
@@ -326,12 +371,66 @@ export const Route = createFileRoute("/api/public/actions-stream")({
               return { ok, fail };
             };
 
+            const runBroadcastRow = async (row: { accountId: string; message: string; targets: string[] }) => {
+              const accountId = row.accountId;
+              send("log", { accountId, level: "info", message: "Connecting…" });
+              let client;
+              try {
+                client = await openClientForAccount(supabase, accountId);
+              } catch (e) {
+                const msg = `Connect failed: ${(e as Error).message}`;
+                send("log", { accountId, level: "error", message: msg });
+                await logDb(accountId, null, "error", msg);
+                return { ok: 0, fail: 1 };
+              }
+              let ok = 0;
+              let fail = 0;
+              try {
+                for (const t of row.targets) {
+                  if (stopRequested) break;
+                  try {
+                    const dest = await resolveTarget(client, t);
+                    await client.sendMessage(dest, { message: row.message });
+                    ok++;
+                    const m = `Sent to ${t}`;
+                    send("log", { accountId, level: "success", target: t, message: m });
+                    await logDb(accountId, t, "success", m);
+                  } catch (e) {
+                    fail++;
+                    const em = (e as Error).message || String(e);
+                    const floodMatch = em.match(/FLOOD_WAIT_?(\d+)/i);
+                    if (floodMatch) {
+                      const secs = Number(floodMatch[1]);
+                      const pausedUntil = new Date(Date.now() + secs * 1000).toISOString();
+                      await supabase
+                        .from("telegram_accounts")
+                        .update({ paused_until: pausedUntil, last_error: em })
+                        .eq("id", accountId);
+                      send("log", { accountId, level: "warn", target: t, message: `FloodWait ${secs}s — account paused` });
+                      await logDb(accountId, t, "warn", `FloodWait ${secs}s`);
+                      break;
+                    }
+                    send("log", { accountId, level: "error", target: t, message: em });
+                    await logDb(accountId, t, "error", em);
+                  }
+                  await new Promise((r) =>
+                    setTimeout(r, jitter(body.minDelay, body.maxDelay)),
+                  );
+                }
+              } finally {
+                await client.disconnect().catch(() => {});
+                send("done", { accountId, ok, fail });
+              }
+              return { ok, fail };
+            };
+
             let totalOk = 0;
             let totalFail = 0;
             try {
-              const results = await Promise.all(
-                body.accountIds.map((id) => runOne(id)),
-              );
+              const results =
+                body.op.kind === "broadcast"
+                  ? await Promise.all(body.op.rows.map((r) => runBroadcastRow(r)))
+                  : await Promise.all(body.accountIds.map((id) => runOne(id)));
               for (const r of results) {
                 totalOk += r.ok;
                 totalFail += r.fail;
