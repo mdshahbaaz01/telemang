@@ -267,15 +267,23 @@ function ActionsPage() {
             </div>
 
             {tab === "react" && (
-              <div>
-                <Label>Emoji</Label>
-                <Input
-                  value={emoji}
-                  onChange={(e) => setEmoji(e.target.value)}
-                  maxLength={20}
-                  className="w-24"
+              <>
+                <div>
+                  <Label>Emoji</Label>
+                  <Input
+                    value={emoji}
+                    onChange={(e) => setEmoji(e.target.value)}
+                    maxLength={20}
+                    className="w-24"
+                  />
+                </div>
+                <DelayFields
+                  minDelay={minDelay}
+                  maxDelay={maxDelay}
+                  setMin={setMinDelay}
+                  setMax={setMaxDelay}
                 />
-              </div>
+              </>
             )}
 
             {tab === "forward" && (
@@ -311,14 +319,22 @@ function ActionsPage() {
             )}
 
             {tab === "vote" && (
-              <div>
-                <Label>Option indexes (0-based, comma-separated)</Label>
-                <Input
-                  value={options}
-                  onChange={(e) => setOptions(e.target.value)}
-                  placeholder="0 or 0,2 for multi-select polls"
+              <>
+                <div>
+                  <Label>Option indexes (0-based, comma-separated)</Label>
+                  <Input
+                    value={options}
+                    onChange={(e) => setOptions(e.target.value)}
+                    placeholder="0 or 0,2 for multi-select polls"
+                  />
+                </div>
+                <DelayFields
+                  minDelay={minDelay}
+                  maxDelay={maxDelay}
+                  setMin={setMinDelay}
+                  setMax={setMaxDelay}
                 />
-              </div>
+              </>
             )}
 
             <div className="flex gap-2 pt-2">
