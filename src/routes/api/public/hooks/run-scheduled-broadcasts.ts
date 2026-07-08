@@ -129,6 +129,11 @@ function buildQueueItems(row: ScheduleRow) {
 }
 
 async function finalizeSchedule(admin: AdminClient, scheduleId: string) {
+  const { data: schedule } = await admin
+    .from("scheduled_broadcasts")
+    .select("user_id, payload")
+    .eq("id", scheduleId)
+    .maybeSingle();
   const { data: items, error } = await admin
     .from("scheduled_broadcast_items")
     .select("status, error")
@@ -141,15 +146,29 @@ async function finalizeSchedule(admin: AdminClient, scheduleId: string) {
     return;
   }
   const failed = items.filter((i) => i.status === "failed");
+  const status = failed.length === items.length ? "failed" : "done";
+  const errorText = failed.length ? failed.slice(0, 5).map((i) => i.error).filter(Boolean).join(" | ") : null;
   await admin
     .from("scheduled_broadcasts")
     .update({
-      status: failed.length === items.length ? "failed" : "done",
+      status,
       processed_items: processed,
       completed_at: new Date().toISOString(),
-      error: failed.length ? failed.slice(0, 5).map((i) => i.error).filter(Boolean).join(" | ") : null,
+      error: errorText,
     })
     .eq("id", scheduleId);
+  if (schedule?.user_id) {
+    const kind = (schedule.payload as any)?.kind ?? "broadcast";
+    await admin.from("notification_logs").insert({
+      user_id: schedule.user_id,
+      channel: "app",
+      event: failed.length ? "failure" : "success",
+      title: failed.length ? "Scheduled action finished with failures" : "Scheduled action completed",
+      body: `${kind}: ${processed - failed.length} delivered, ${failed.length} failed`,
+      status: "logged",
+      error: errorText,
+    });
+  }
 }
 
 async function executeQueueItem(admin: AdminClient, item: QueueItem) {
