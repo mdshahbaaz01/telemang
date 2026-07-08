@@ -1583,10 +1583,20 @@ function ActionsPageInner() {
                             {s.error}
                           </span>
                         )}
+                        <button
+                          type="button"
+                          className="ml-auto text-xs text-primary underline"
+                          onClick={() => {
+                            setReportId(s.id);
+                            setReportOpen(true);
+                          }}
+                        >
+                          Report
+                        </button>
                         {s.status === "pending" && (
                           <button
                             type="button"
-                            className="ml-auto text-xs text-destructive underline"
+                            className="text-xs text-destructive underline"
                             onClick={async () => {
                               try {
                                 await cancelSchedFn({ data: { id: s.id } });
