@@ -275,15 +275,20 @@ export const Route = createFileRoute("/api/public/actions-stream")({
               return await client.getEntity(cleaned);
             };
 
-            const pickDiscussionChat = (disc: any) => {
+            const pickDiscussionTarget = (disc: any) => {
               const chats = (disc?.chats ?? []) as any[];
-              const rootMsg = disc?.messages?.[0];
+              const messages = (disc?.messages ?? []) as any[];
+              const rootMsg = messages.reduce((best, msg) => {
+                if (!best) return msg;
+                return Number(msg?.id ?? 0) < Number(best?.id ?? 0) ? msg : best;
+              }, null as any);
               const peerId = rootMsg?.peerId?.channelId ?? rootMsg?.peerId?.chatId;
               if (peerId) {
                 const match = chats.find((chat) => String(chat?.id) === String(peerId));
-                if (match) return match;
+                if (match) return { chat: match, msgId: rootMsg.id as number };
               }
-              return chats.find((chat) => chat?.megagroup || chat?.gigagroup || chat?.forum) ?? chats.find((chat) => !chat?.broadcast) ?? chats[0];
+              const fallback = chats.find((chat) => chat?.megagroup || chat?.gigagroup || chat?.forum) ?? chats.find((chat) => !chat?.broadcast) ?? chats[0];
+              return fallback && rootMsg ? { chat: fallback, msgId: rootMsg.id as number } : null;
             };
 
             const pauseAccountOnFlood = async (accountId: string, message: string) => {
@@ -578,14 +583,12 @@ export const Route = createFileRoute("/api/public/actions-stream")({
                       msgId: src.msgId,
                     }),
                   );
-                  const rootMsg = disc?.messages?.[0];
-                  if (!rootMsg) throw new Error("No discussion group linked to this channel");
                   // Resolve discussion group peer from the returned chats
-                  const discChat = pickDiscussionChat(disc);
-                  if (!discChat) throw new Error("Discussion chat missing");
-                  replyPeer = await client.getEntity(discChat);
-                  replyToId = rootMsg.id;
-                  topMsgId = rootMsg.id;
+                  const discussionTarget = pickDiscussionTarget(disc);
+                  if (!discussionTarget) throw new Error("No discussion group linked to this channel");
+                  replyPeer = await client.getEntity(discussionTarget.chat);
+                  replyToId = discussionTarget.msgId;
+                  topMsgId = discussionTarget.msgId;
                   // View the post like a real reader before commenting
                   try {
                     await client.invoke(
@@ -597,21 +600,19 @@ export const Route = createFileRoute("/api/public/actions-stream")({
                     );
                   } catch {}
                 }
-                const replyTo = new Api.InputReplyToMessage({
-                  replyToMsgId: replyToId,
-                  ...(topMsgId ? { topMsgId } : {}),
-                }) as any;
                 if (row.attachment) {
                   const att = await loadAttachment(row.attachment);
                   await client.sendFile(replyPeer, {
                     file: buildCustomFile(att),
                     caption: row.message || undefined,
-                    replyTo,
+                    replyTo: replyToId,
+                    ...(topMsgId ? { topMsgId } : {}),
                   });
                 } else {
                   await client.sendMessage(replyPeer, {
                     message: row.message,
-                    replyTo,
+                    replyTo: replyToId,
+                    ...(topMsgId ? { topMsgId } : {}),
                   });
                 }
                 ok++;
