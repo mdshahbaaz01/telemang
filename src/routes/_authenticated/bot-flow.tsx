@@ -241,6 +241,28 @@ function BotFlowPage() {
               <Button type="button" size="sm" variant="outline" onClick={() => setSelectedIds(allIds)}>Select all</Button>
               <Button type="button" size="sm" variant="outline" onClick={() => setSelectedIds([])}>Deselect all</Button>
             </div>
+
+            <div className="rounded-md border border-dashed border-border p-3 space-y-2">
+              <Label className="text-xs uppercase tracking-wide text-muted-foreground">
+                Paste IDs to auto-select (optional)
+              </Label>
+              <Textarea
+                rows={3}
+                value={pastedIds}
+                onChange={(e) => setPastedIds(e.target.value)}
+                placeholder="Paste phone numbers, usernames, or account IDs — one per line, or separated by commas/spaces"
+                className="font-mono text-xs"
+              />
+              <div className="flex gap-2">
+                <Button type="button" size="sm" variant="secondary" onClick={applyPastedIds}>
+                  Select matching
+                </Button>
+                <Button type="button" size="sm" variant="ghost" onClick={() => setPastedIds("")}>
+                  Clear
+                </Button>
+              </div>
+            </div>
+
             <div className="grid grid-cols-1 gap-1 sm:grid-cols-2 lg:grid-cols-3 max-h-72 overflow-auto rounded-md border border-border p-2">
               {accountList.map((a) => {
                 const checked = selectedIds.includes(a.id);
