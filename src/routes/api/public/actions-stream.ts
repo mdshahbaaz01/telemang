@@ -76,8 +76,8 @@ const botFlowSchema = z.object({
 
 const bodySchema = z.object({
   accountIds: z.array(z.string().uuid()).min(0).max(200).default([]),
-  minDelay: z.number().int().min(0).max(60).default(2),
-  maxDelay: z.number().int().min(0).max(60).default(6),
+  minDelay: z.number().int().min(0).max(60).default(1),
+  maxDelay: z.number().int().min(0).max(60).default(2),
   op: z.discriminatedUnion("kind", [reactSchema, forwardSchema, voteSchema, broadcastSchema, replySchema, botFlowSchema]),
 });
 

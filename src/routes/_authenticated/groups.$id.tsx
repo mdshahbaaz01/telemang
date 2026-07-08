@@ -278,8 +278,8 @@ function TaskColumn({
           toast.warning(`${accountLabel}: ${r.message ?? "paused"}`);
           break;
         }
-        const min = taskQ.data?.task?.min_delay ?? 15;
-        const max = taskQ.data?.task?.max_delay ?? 45;
+        const min = taskQ.data?.task?.min_delay ?? 1;
+        const max = taskQ.data?.task?.max_delay ?? 2;
         const wait = (min + Math.random() * (max - min)) * 1000;
         await new Promise((res) => setTimeout(res, wait));
       }

@@ -164,8 +164,8 @@ function ActionsPageInner() {
   const [pollCheckAccountId, setPollCheckAccountId] = useState<string>("");
   const [showResults, setShowResults] = useState(false);
   const loadPollFn = useServerFn(loadPoll);
-  const [minDelay, setMinDelay] = useState(2);
-  const [maxDelay, setMaxDelay] = useState(6);
+  const [minDelay, setMinDelay] = useState(1);
+  const [maxDelay, setMaxDelay] = useState(2);
   const [rows, setRows] = useState<BroadcastRow[]>([
     { id: "broadcast-row-1", message: "", targets: "" },
   ]);
@@ -1437,8 +1437,8 @@ function EditRunDialog({
   const op = initial.op ?? {};
   const kind: Tab = op.kind;
 
-  const [minDelay, setMinDelay] = useState<number>(initial.minDelay ?? 2);
-  const [maxDelay, setMaxDelay] = useState<number>(initial.maxDelay ?? 6);
+  const [minDelay, setMinDelay] = useState<number>(initial.minDelay ?? 1);
+  const [maxDelay, setMaxDelay] = useState<number>(initial.maxDelay ?? 2);
   const [sourceUrl, setSourceUrl] = useState<string>(linkFromSource(op.source));
   const [selectedAccounts, setSelectedAccounts] = useState<string[]>(
     initial.accountIds ?? [],
