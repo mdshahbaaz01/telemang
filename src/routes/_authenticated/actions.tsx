@@ -54,6 +54,48 @@ function ActionsPage() {
   return <ActionsPageInner />;
 }
 
+function AttachmentField({ file, onChange }: { file: File | null; onChange: (f: File | null) => void }) {
+  const inputRef = useRef<HTMLInputElement | null>(null);
+  return (
+    <div>
+      <Label>Attachment (optional)</Label>
+      <input
+        ref={inputRef}
+        type="file"
+        className="hidden"
+        onChange={(e) => onChange(e.target.files?.[0] ?? null)}
+      />
+      {file ? (
+        <div className="flex items-center gap-2 rounded-md border border-border bg-background px-2 py-1.5 text-sm">
+          <Paperclip className="h-4 w-4 text-muted-foreground" />
+          <span className="truncate">{file.name}</span>
+          <span className="ml-auto text-xs text-muted-foreground">{(file.size / 1024).toFixed(1)} KB</span>
+          <button
+            type="button"
+            className="text-muted-foreground hover:text-destructive"
+            onClick={() => {
+              onChange(null);
+              if (inputRef.current) inputRef.current.value = "";
+            }}
+            aria-label="Remove attachment"
+          >
+            <X className="h-4 w-4" />
+          </button>
+        </div>
+      ) : (
+        <Button type="button" variant="outline" size="sm" onClick={() => inputRef.current?.click()}>
+          <Paperclip className="mr-1 h-4 w-4" /> Attach file
+        </Button>
+      )}
+      {file && (
+        <p className="mt-1 text-xs text-muted-foreground">
+          The message text above will be sent as the caption.
+        </p>
+      )}
+    </div>
+  );
+}
+
 function DelayFields({
   minDelay,
   maxDelay,
