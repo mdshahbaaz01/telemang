@@ -325,11 +325,4 @@ function AddAccountDialog({ onDone }: { onDone: () => void }) {
   );
 }
 
-type AccountRow = {
-  id: string;
-  phone: string;
-  username: string | null;
-  first_name: string | null;
-};
-
 // NewTaskDialog moved to route /tasks/new
