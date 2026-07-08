@@ -5,6 +5,7 @@ import { useQuery } from "@tanstack/react-query";
 import { useMemo, useRef, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { listAccounts } from "@/lib/accounts.functions";
+import { loadPoll } from "@/lib/actions.functions";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -141,6 +142,15 @@ function ActionsPageInner() {
   const [retake, setRetake] = useState(false);
   const [targets, setTargets] = useState("");
   const [options, setOptions] = useState("0");
+  const [pollInfo, setPollInfo] = useState<{
+    question: string;
+    answers: string[];
+    multipleChoice: boolean;
+    closed: boolean;
+  } | null>(null);
+  const [pollSelected, setPollSelected] = useState<number[]>([]);
+  const [pollLoading, setPollLoading] = useState(false);
+  const loadPollFn = useServerFn(loadPoll);
   const [minDelay, setMinDelay] = useState(2);
   const [maxDelay, setMaxDelay] = useState(6);
   const [rows, setRows] = useState<BroadcastRow[]>([
@@ -204,11 +214,13 @@ function ActionsPageInner() {
       if (!list.length) return toast.error("Enter at least one destination");
       op = { kind: "forward", source: src, targets: list };
     } else if (tab === "vote") {
-      const opts = options
-        .split(/[,\s]+/)
-        .map((s) => Number(s.trim()))
-        .filter((n) => Number.isInteger(n) && n >= 0);
-      if (!opts.length) return toast.error("Enter option indexes (e.g. 0,2)");
+      const opts = pollSelected.length
+        ? [...pollSelected].sort((a, b) => a - b)
+        : options
+            .split(/[,\s]+/)
+            .map((s) => Number(s.trim()))
+            .filter((n) => Number.isInteger(n) && n >= 0);
+      if (!opts.length) return toast.error("Pick at least one poll option");
       op = { kind: "vote", source: src, options: opts, ...(retake ? { retake: true } : {}) };
     } else {
       // handled below in runBroadcast
