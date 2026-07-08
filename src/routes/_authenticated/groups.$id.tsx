@@ -1,4 +1,4 @@
-import { createFileRoute, Link } from "@tanstack/react-router";
+import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useServerFn } from "@tanstack/react-start";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useMemo, useRef, useState } from "react";
@@ -8,23 +8,11 @@ import {
   getTask,
   processNextJoin,
   setTaskStatus,
-  addAccountsToGroup,
-  deleteJoinTask,
   groupLogs,
 } from "@/lib/tasks.functions";
-import { listAccounts } from "@/lib/accounts.functions";
 import { Button } from "@/components/ui/button";
 import { AdminGate } from "@/components/AdminGate";
-import { ArrowLeft, Play, Square, Users2, X } from "lucide-react";
 import { toast } from "sonner";
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-  DialogTrigger,
-} from "@/components/ui/dialog";
-import { Checkbox } from "@/components/ui/checkbox";
 
 export const Route = createFileRoute("/_authenticated/groups/$id")({
   component: () => (
@@ -36,9 +24,9 @@ export const Route = createFileRoute("/_authenticated/groups/$id")({
 
 function GroupRunner() {
   const { id } = Route.useParams();
+  const nav = useNavigate();
   const qc = useQueryClient();
   const listFn = useServerFn(getGroup);
-  const delTask = useServerFn(deleteJoinTask);
   const logsFn = useServerFn(groupLogs);
   const groupQ = useQuery({
     queryKey: ["group", id],
@@ -64,48 +52,82 @@ function GroupRunner() {
   };
 
   const tasks = groupQ.data ?? [];
-  const removeAccount = async (taskId: string, label: string) => {
-    if (!confirm(`Remove ${label} from this group?`)) return;
-    try {
-      await delTask({ data: { id: taskId } });
-      toast.success(`${label} removed`);
-      qc.invalidateQueries({ queryKey: ["group", id] });
-    } catch (err) {
-      toast.error((err as Error).message);
+
+  // Per-task counts collected via child callbacks so header totals stay in sync.
+  const [taskStats, setTaskStats] = useState<
+    Record<string, { total: number; done: number }>
+  >({});
+  const reportStats = (taskId: string, s: { total: number; done: number }) =>
+    setTaskStats((prev) => {
+      const cur = prev[taskId];
+      if (cur && cur.total === s.total && cur.done === s.done) return prev;
+      return { ...prev, [taskId]: s };
+    });
+
+  const totals = useMemo(() => {
+    let total = 0;
+    let done = 0;
+    for (const t of tasks) {
+      const s = taskStats[t.id];
+      if (s) {
+        total += s.total;
+        done += s.done;
+      }
     }
+    return { total, done };
+  }, [tasks, taskStats]);
+
+  const baseName = ((tasks[0]?.name ?? "Task").split(" · ")[0] ?? "Task").trim();
+  const minDelay = tasks[0]?.min_delay ?? 1;
+  const maxDelay = tasks[0]?.max_delay ?? 2;
+  const allDone = totals.total > 0 && totals.done >= totals.total;
+  const groupStatus: "running" | "done" | "idle" = allRunning
+    ? "running"
+    : allDone
+      ? "done"
+      : "idle";
+
+  const cancel = () => {
+    if (allRunning) stopAll();
+    nav({ to: "/dashboard" });
   };
 
   return (
     <main className="min-h-screen bg-background">
       <div className="mx-auto max-w-[100rem] px-4 py-6 md:px-8">
-        <div className="mb-6 flex items-center justify-between gap-3">
-          <div className="flex items-center gap-3">
-            <Link to="/dashboard">
-              <Button variant="ghost" size="icon" aria-label="Back">
-                <ArrowLeft className="h-4 w-4" />
-              </Button>
+        <header className="mb-6 grid grid-cols-[minmax(0,1fr)_auto] items-end gap-4">
+          <div className="min-w-0">
+            <Link
+              to="/dashboard"
+              className="text-xs text-muted-foreground hover:underline"
+            >
+              ← Dashboard
             </Link>
-            <div>
-              <h1 className="text-2xl font-semibold tracking-tight">Parallel run</h1>
-              <p className="text-sm text-muted-foreground">
-                {tasks.length} account{tasks.length === 1 ? "" : "s"} running side-by-side
-              </p>
-            </div>
+            <h1 className="mt-1 truncate text-2xl font-semibold tracking-tight">
+              {baseName}
+            </h1>
+            <p className="mt-1 text-sm text-muted-foreground">
+              {totals.done}/{totals.total} done · {tasks.length} account
+              {tasks.length === 1 ? "" : "s"} in parallel · delay {minDelay}-
+              {maxDelay}s
+            </p>
           </div>
-          <div className="flex gap-2">
-            <EditAccountsDialog
-              groupId={id}
-              existingIds={tasks.map((t) => t.account_id)}
-              onDone={() => qc.invalidateQueries({ queryKey: ["group", id] })}
-            />
-            <Button onClick={startAll} disabled={allRunning || !tasks.length}>
-              <Play className="mr-1 h-4 w-4" /> Start all
-            </Button>
-            <Button variant="destructive" onClick={stopAll} disabled={!allRunning}>
-              <Square className="mr-1 h-4 w-4" /> Stop all
+          <div className="flex shrink-0 items-center gap-2">
+            <GroupStatusPill status={groupStatus} />
+            {allRunning ? (
+              <Button variant="outline" onClick={stopAll}>
+                Pause
+              </Button>
+            ) : (
+              <Button onClick={startAll} disabled={!tasks.length}>
+                Run all in parallel
+              </Button>
+            )}
+            <Button variant="destructive" onClick={cancel}>
+              Cancel
             </Button>
           </div>
-        </div>
+        </header>
 
         {groupQ.isLoading ? (
           <p className="text-sm text-muted-foreground">Loading…</p>
@@ -123,7 +145,7 @@ function GroupRunner() {
                 }
                 registerStart={(fn) => startAllRef.current.set(t.id, fn)}
                 registerStop={(fn) => runAllRef.current.set(t.id, fn)}
-                onRemove={(label) => removeAccount(t.id, label)}
+                onStats={reportStats}
               />
             ))}
           </div>
@@ -168,100 +190,43 @@ function GroupRunner() {
   );
 }
 
-function EditAccountsDialog({
-  groupId,
-  existingIds,
-  onDone,
+function GroupStatusPill({
+  status,
 }: {
-  groupId: string;
-  existingIds: string[];
-  onDone: () => void;
+  status: "running" | "done" | "idle";
 }) {
-  const [open, setOpen] = useState(false);
-  const listAcc = useServerFn(listAccounts);
-  const addAcc = useServerFn(addAccountsToGroup);
-  const accountsQ = useQuery({
-    queryKey: ["accounts"],
-    queryFn: () => listAcc(),
-    enabled: open,
-  });
-  const [picked, setPicked] = useState<Set<string>>(new Set());
-  const [busy, setBusy] = useState(false);
-
-  const existing = useMemo(() => new Set(existingIds), [existingIds]);
-  const candidates = (accountsQ.data ?? []).filter((a) => !existing.has(a.id));
-
-  const toggle = (accId: string) => {
-    setPicked((prev) => {
-      const next = new Set(prev);
-      if (next.has(accId)) next.delete(accId);
-      else next.add(accId);
-      return next;
-    });
-  };
-
-  const submit = async () => {
-    if (!picked.size) return toast.error("Pick at least one account");
-    setBusy(true);
-    try {
-      const r = await addAcc({
-        data: { groupId, accountIds: [...picked] },
-      });
-      toast.success(`${r.added} account${r.added === 1 ? "" : "s"} added`);
-      onDone();
-      setOpen(false);
-      setPicked(new Set());
-    } catch (err) {
-      toast.error((err as Error).message);
-    } finally {
-      setBusy(false);
-    }
-  };
-
+  const tone =
+    status === "running"
+      ? "bg-primary text-primary-foreground"
+      : status === "done"
+        ? "bg-green-500/15 text-green-600 border border-green-500/30"
+        : "bg-muted text-muted-foreground border border-border";
   return (
-    <Dialog open={open} onOpenChange={setOpen}>
-      <DialogTrigger asChild>
-        <Button variant="outline">
-          <Users2 className="mr-1 h-4 w-4" /> Edit accounts
-        </Button>
-      </DialogTrigger>
-      <DialogContent>
-        <DialogHeader>
-          <DialogTitle>Add accounts to this group</DialogTitle>
-        </DialogHeader>
-        <p className="text-xs text-muted-foreground">
-          New accounts inherit the group's targets. Remove existing accounts from
-          their column.
-        </p>
-        <div className="max-h-72 space-y-1 overflow-auto">
-          {candidates.length === 0 && (
-            <p className="text-sm text-muted-foreground">
-              No other accounts available.
-            </p>
-          )}
-          {candidates.map((a) => (
-            <label
-              key={a.id}
-              className="flex cursor-pointer items-center gap-3 rounded-md border border-border px-3 py-2 hover:bg-accent"
-            >
-              <Checkbox
-                checked={picked.has(a.id)}
-                onCheckedChange={() => toggle(a.id)}
-              />
-              <span className="text-sm font-medium">
-                {a.first_name || a.username || a.phone}
-              </span>
-              <span className="ml-auto text-xs text-muted-foreground">
-                {a.phone}
-              </span>
-            </label>
-          ))}
-        </div>
-        <Button onClick={submit} disabled={busy || !picked.size}>
-          {busy ? "Adding…" : `Add ${picked.size} account${picked.size === 1 ? "" : "s"}`}
-        </Button>
-      </DialogContent>
-    </Dialog>
+    <span className={`rounded-md px-3 py-1.5 text-sm font-medium ${tone}`}>
+      {status === "idle" ? "idle" : status}
+    </span>
+  );
+}
+
+function AccountStatusPill({
+  status,
+}: {
+  status: "running" | "done" | "idle" | "failed";
+}) {
+  const tone =
+    status === "running"
+      ? "bg-primary text-primary-foreground"
+      : status === "done"
+        ? "bg-muted text-foreground border border-border"
+        : status === "failed"
+          ? "bg-destructive/10 text-destructive border border-destructive/30"
+          : "bg-muted text-muted-foreground border border-border";
+  return (
+    <span
+      className={`rounded-md px-2.5 py-0.5 text-xs font-medium ${tone}`}
+    >
+      {status}
+    </span>
   );
 }
 
@@ -270,13 +235,16 @@ function TaskColumn({
   accountLabel,
   registerStart,
   registerStop,
-  onRemove,
+  onStats,
 }: {
   taskId: string;
   accountLabel: string;
   registerStart: (fn: () => void) => void;
   registerStop: (fn: () => void) => void;
-  onRemove: (label: string) => void;
+  onStats: (
+    taskId: string,
+    stats: { total: number; done: number },
+  ) => void;
 }) {
   const qc = useQueryClient();
   const getT = useServerFn(getTask);
@@ -363,68 +331,58 @@ function TaskColumn({
   const requested = items.filter((i) => i.status === "requested").length;
   const failed = items.filter((i) => i.status === "failed").length;
   const pending = items.filter((i) => i.status === "pending").length;
-  const current = items.find((i) => i.status === "pending");
+  const done = joined + requested;
+
+  useEffect(() => {
+    onStats(taskId, { total, done });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [taskId, total, done]);
+
+  const status: "running" | "done" | "idle" | "failed" = running
+    ? "running"
+    : total > 0 && pending === 0
+      ? failed > 0 && done === 0
+        ? "failed"
+        : "done"
+      : "idle";
 
   return (
-    <article className="flex h-[32rem] flex-col rounded-lg border border-border bg-card">
-      <header className="border-b border-border p-3">
-        <div className="mb-1 flex items-center justify-between gap-2">
-          <div className="truncate font-semibold">{accountLabel}</div>
-          <div className="flex items-center gap-1">
-            {running ? (
-              <Button size="sm" variant="destructive" onClick={stop}>
-                Stop
-              </Button>
-            ) : (
-              <Button size="sm" onClick={loop} disabled={pending === 0}>
-                Run
-              </Button>
-            )}
-            <button
-              type="button"
-              onClick={() => onRemove(accountLabel)}
-              className="rounded p-1 text-muted-foreground hover:bg-muted hover:text-destructive"
-              aria-label="Remove account from group"
-              title="Remove account from group"
-            >
-              <X className="h-4 w-4" />
-            </button>
-          </div>
+    <article className="flex min-h-[18rem] flex-col rounded-lg border border-border bg-card p-4">
+      <header className="mb-2 grid grid-cols-[minmax(0,1fr)_auto] items-center gap-2">
+        <div className="min-w-0 truncate font-semibold">{accountLabel}</div>
+        <div className="flex shrink-0 items-center gap-2">
+          <AccountStatusPill status={status} />
+          {running ? (
+            <Button size="sm" variant="outline" onClick={stop}>
+              Stop
+            </Button>
+          ) : null}
         </div>
-        <div className="text-xs text-muted-foreground">
-          {joined}/{total} joined · {requested} requested · {failed} failed · {pending} pending
-        </div>
-        {current && (
-          <div className="mt-1 truncate text-xs">
-            <span className="text-muted-foreground">next:</span> @{current.target}
-          </div>
-        )}
       </header>
-      <div className="flex-1 overflow-auto p-2 text-xs">
+      <div className="mb-2 text-sm text-muted-foreground">
+        {done}/{total} processed
+        {failed > 0 ? (
+          <span className="text-destructive"> · {failed} failed</span>
+        ) : null}
+      </div>
+      <div className="flex-1 overflow-auto rounded-md bg-muted/40 p-3 font-mono text-xs leading-relaxed">
         {items.length === 0 ? (
           <div className="text-muted-foreground">No targets</div>
         ) : (
-          items.map((i) => (
-            <div
-              key={i.id}
-              className="flex items-center justify-between border-b border-border/40 py-1"
-            >
-              <span className="truncate">@{i.target}</span>
-              <span
-                className={
-                  i.status === "joined" || i.status === "requested"
-                    ? "text-green-500"
-                    : i.status === "failed"
-                      ? "text-destructive"
-                      : "text-muted-foreground"
-                }
-                title={i.error ?? undefined}
-              >
-                {i.status}
-                {i.status === "failed" && i.error ? ` · ${i.error}` : ""}
-              </span>
-            </div>
-          ))
+          items.map((i) => {
+            const color =
+              i.status === "joined" || i.status === "requested"
+                ? "text-green-500"
+                : i.status === "failed"
+                  ? "text-destructive"
+                  : "text-muted-foreground";
+            return (
+              <div key={i.id} className={color} title={i.error ?? undefined}>
+                [{i.status}] t.me/{i.target}
+                {i.status === "failed" && i.error ? ` — ${i.error}` : ""}
+              </div>
+            );
+          })
         )}
       </div>
     </article>
