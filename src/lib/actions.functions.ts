@@ -57,3 +57,65 @@ export const stopActionRun = createServerFn({ method: "POST" })
     if (error) throw new Error(error.message);
     return { ok: true };
   });
+
+const loadPollSchema = z.object({
+  chat: z.string().min(1),
+  msgId: z.number().int().positive(),
+  accountId: z.string().uuid().optional(),
+});
+
+export const loadPoll = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((d: unknown) => loadPollSchema.parse(d))
+  .handler(async ({ data, context }) => {
+    await assertAdmin(context.supabase, context.userId);
+    const { openClientForAccount } = await import("./cleanup.server");
+
+    let accountId = data.accountId;
+    if (!accountId) {
+      const { data: acct, error } = await context.supabase
+        .from("telegram_accounts")
+        .select("id")
+        .eq("status", "active")
+        .limit(1)
+        .maybeSingle();
+      if (error) throw new Error(error.message);
+      if (!acct) throw new Error("No active accounts available");
+      accountId = acct.id;
+    }
+
+    const client = await openClientForAccount(context.supabase, accountId);
+    try {
+      let peer: any;
+      if (data.chat.startsWith("c/")) {
+        const raw = data.chat.slice(2);
+        const { default: bigInt } = await import("big-integer");
+        peer = await client.getEntity(bigInt(raw));
+      } else {
+        peer = await client.getEntity(data.chat.replace(/^@/, ""));
+      }
+      const [msg] = await client.getMessages(peer, { ids: [data.msgId] });
+      if (!msg?.poll) throw new Error("Message is not a poll");
+      const media = msg.poll as {
+        poll?: {
+          question?: { text?: string } | string;
+          answers?: Array<{ text?: { text?: string } | string }>;
+          multipleChoice?: boolean;
+          closed?: boolean;
+        };
+      };
+      const p = media.poll ?? {};
+      const q = typeof p.question === "string" ? p.question : p.question?.text ?? "";
+      const answers = (p.answers ?? []).map((a) =>
+        typeof a.text === "string" ? a.text : a.text?.text ?? "",
+      );
+      return {
+        question: q,
+        answers,
+        multipleChoice: !!p.multipleChoice,
+        closed: !!p.closed,
+      };
+    } finally {
+      await client.disconnect().catch(() => {});
+    }
+  });
