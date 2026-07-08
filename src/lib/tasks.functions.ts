@@ -2,12 +2,14 @@ import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
 
+const delaySchema = z.coerce.number().int().min(0).max(3600);
+
 const createTaskSchema = z.object({
   accountId: z.string().uuid(),
   name: z.string().min(1).max(100),
   targets: z.array(z.string().min(1).max(200)).min(1).max(2000),
-  minDelay: z.number().int().min(0).max(3600).default(15),
-  maxDelay: z.number().int().min(0).max(3600).default(45),
+  minDelay: delaySchema.default(15),
+  maxDelay: delaySchema.default(45),
   groupId: z.string().uuid().optional(),
 });
 
@@ -216,8 +218,8 @@ export const updateGroup = createServerFn({ method: "POST" })
       .object({
         groupId: z.string().uuid(),
         name: z.string().min(1).max(100),
-        minDelay: z.number().int().min(1).max(600),
-        maxDelay: z.number().int().min(1).max(600),
+        minDelay: delaySchema,
+        maxDelay: delaySchema,
         targets: z.array(z.string().min(1).max(200)).max(2000),
         accountIds: z.array(z.string().uuid()).max(100),
       })
