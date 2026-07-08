@@ -361,6 +361,8 @@ function EditGroupDialog({
   const [minDelay, setMinDelay] = useState("1");
   const [maxDelay, setMaxDelay] = useState("2");
   const [targets, setTargets] = useState<string[]>([]);
+  const [editingTarget, setEditingTarget] = useState<string | null>(null);
+  const [editingValue, setEditingValue] = useState("");
   const [newLinks, setNewLinks] = useState("");
   const [accountIds, setAccountIds] = useState<Set<string>>(new Set());
   const [busy, setBusy] = useState(false);
@@ -378,6 +380,34 @@ function EditGroupDialog({
 
   const removeTarget = (t: string) =>
     setTargets((prev) => prev.filter((x) => x !== t));
+
+  const startEditTarget = (t: string) => {
+    setEditingTarget(t);
+    setEditingValue(t);
+  };
+  const cancelEditTarget = () => {
+    setEditingTarget(null);
+    setEditingValue("");
+  };
+  const commitEditTarget = () => {
+    if (editingTarget == null) return;
+    const cleaned = editingValue
+      .trim()
+      .replace(/^https?:\/\//i, "")
+      .replace(/^t\.me\//i, "")
+      .replace(/^@/, "")
+      .replace(/\/+$/, "");
+    if (!cleaned) {
+      cancelEditTarget();
+      return;
+    }
+    setTargets((prev) => {
+      const next = prev.map((x) => (x === editingTarget ? cleaned : x));
+      // de-dupe while preserving order
+      return Array.from(new Set(next));
+    });
+    cancelEditTarget();
+  };
 
   const addNewLinks = () => {
     const cleaned = newLinks
