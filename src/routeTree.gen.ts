@@ -15,6 +15,7 @@ import { Route as IndexRouteImport } from './routes/index'
 import { Route as AuthenticatedOwnerRouteImport } from './routes/_authenticated/owner'
 import { Route as AuthenticatedDashboardRouteImport } from './routes/_authenticated/dashboard'
 import { Route as AuthenticatedCleanupRouteImport } from './routes/_authenticated/cleanup'
+import { Route as AuthenticatedBotFlowRouteImport } from './routes/_authenticated/bot-flow'
 import { Route as AuthenticatedActionsRouteImport } from './routes/_authenticated/actions'
 import { Route as ApiPublicCleanupStreamRouteImport } from './routes/api/public/cleanup-stream'
 import { Route as ApiPublicActionsStreamRouteImport } from './routes/api/public/actions-stream'
@@ -49,6 +50,11 @@ const AuthenticatedDashboardRoute = AuthenticatedDashboardRouteImport.update({
 const AuthenticatedCleanupRoute = AuthenticatedCleanupRouteImport.update({
   id: '/cleanup',
   path: '/cleanup',
+  getParentRoute: () => AuthenticatedRouteRoute,
+} as any)
+const AuthenticatedBotFlowRoute = AuthenticatedBotFlowRouteImport.update({
+  id: '/bot-flow',
+  path: '/bot-flow',
   getParentRoute: () => AuthenticatedRouteRoute,
 } as any)
 const AuthenticatedActionsRoute = AuthenticatedActionsRouteImport.update({
@@ -86,6 +92,7 @@ export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/auth': typeof AuthRoute
   '/actions': typeof AuthenticatedActionsRoute
+  '/bot-flow': typeof AuthenticatedBotFlowRoute
   '/cleanup': typeof AuthenticatedCleanupRoute
   '/dashboard': typeof AuthenticatedDashboardRoute
   '/owner': typeof AuthenticatedOwnerRoute
@@ -99,6 +106,7 @@ export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/auth': typeof AuthRoute
   '/actions': typeof AuthenticatedActionsRoute
+  '/bot-flow': typeof AuthenticatedBotFlowRoute
   '/cleanup': typeof AuthenticatedCleanupRoute
   '/dashboard': typeof AuthenticatedDashboardRoute
   '/owner': typeof AuthenticatedOwnerRoute
@@ -114,6 +122,7 @@ export interface FileRoutesById {
   '/_authenticated': typeof AuthenticatedRouteRouteWithChildren
   '/auth': typeof AuthRoute
   '/_authenticated/actions': typeof AuthenticatedActionsRoute
+  '/_authenticated/bot-flow': typeof AuthenticatedBotFlowRoute
   '/_authenticated/cleanup': typeof AuthenticatedCleanupRoute
   '/_authenticated/dashboard': typeof AuthenticatedDashboardRoute
   '/_authenticated/owner': typeof AuthenticatedOwnerRoute
@@ -129,6 +138,7 @@ export interface FileRouteTypes {
     | '/'
     | '/auth'
     | '/actions'
+    | '/bot-flow'
     | '/cleanup'
     | '/dashboard'
     | '/owner'
@@ -142,6 +152,7 @@ export interface FileRouteTypes {
     | '/'
     | '/auth'
     | '/actions'
+    | '/bot-flow'
     | '/cleanup'
     | '/dashboard'
     | '/owner'
@@ -156,6 +167,7 @@ export interface FileRouteTypes {
     | '/_authenticated'
     | '/auth'
     | '/_authenticated/actions'
+    | '/_authenticated/bot-flow'
     | '/_authenticated/cleanup'
     | '/_authenticated/dashboard'
     | '/_authenticated/owner'
@@ -218,6 +230,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedCleanupRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
+    '/_authenticated/bot-flow': {
+      id: '/_authenticated/bot-flow'
+      path: '/bot-flow'
+      fullPath: '/bot-flow'
+      preLoaderRoute: typeof AuthenticatedBotFlowRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
     '/_authenticated/actions': {
       id: '/_authenticated/actions'
       path: '/actions'
@@ -265,6 +284,7 @@ declare module '@tanstack/react-router' {
 
 interface AuthenticatedRouteRouteChildren {
   AuthenticatedActionsRoute: typeof AuthenticatedActionsRoute
+  AuthenticatedBotFlowRoute: typeof AuthenticatedBotFlowRoute
   AuthenticatedCleanupRoute: typeof AuthenticatedCleanupRoute
   AuthenticatedDashboardRoute: typeof AuthenticatedDashboardRoute
   AuthenticatedOwnerRoute: typeof AuthenticatedOwnerRoute
@@ -275,6 +295,7 @@ interface AuthenticatedRouteRouteChildren {
 
 const AuthenticatedRouteRouteChildren: AuthenticatedRouteRouteChildren = {
   AuthenticatedActionsRoute: AuthenticatedActionsRoute,
+  AuthenticatedBotFlowRoute: AuthenticatedBotFlowRoute,
   AuthenticatedCleanupRoute: AuthenticatedCleanupRoute,
   AuthenticatedDashboardRoute: AuthenticatedDashboardRoute,
   AuthenticatedOwnerRoute: AuthenticatedOwnerRoute,
