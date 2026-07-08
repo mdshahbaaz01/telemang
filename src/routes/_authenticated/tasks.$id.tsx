@@ -8,10 +8,15 @@ import {
   processNextJoin,
   recentLogs,
   setTaskStatus,
+  addTaskItems,
+  deleteTaskItem,
+  parseTargets,
 } from "@/lib/tasks.functions";
 import { Button } from "@/components/ui/button";
+import { Textarea } from "@/components/ui/textarea";
 import { toast } from "sonner";
 import { AdminGate } from "@/components/AdminGate";
+import { Trash2 } from "lucide-react";
 
 export const Route = createFileRoute("/_authenticated/tasks/$id")({
   component: () => (
@@ -35,6 +40,36 @@ function TaskDetail() {
   const runNext = useServerFn(processNextJoin);
   const setStatus = useServerFn(setTaskStatus);
   const getLogs = useServerFn(recentLogs);
+  const addItems = useServerFn(addTaskItems);
+  const delItem = useServerFn(deleteTaskItem);
+
+  const [newLinks, setNewLinks] = useState("");
+  const [busyEdit, setBusyEdit] = useState(false);
+
+  const addLinks = async () => {
+    const parsed = parseTargets(newLinks);
+    if (!parsed.length) return toast.error("Add at least one link");
+    setBusyEdit(true);
+    try {
+      const r = await addItems({ data: { taskId: id, targets: parsed } });
+      toast.success(`${r.added} link${r.added === 1 ? "" : "s"} added`);
+      setNewLinks("");
+      qc.invalidateQueries({ queryKey: ["task", id] });
+    } catch (err) {
+      toast.error((err as Error).message);
+    } finally {
+      setBusyEdit(false);
+    }
+  };
+
+  const removeItem = async (itemId: string) => {
+    try {
+      await delItem({ data: { itemId } });
+      qc.invalidateQueries({ queryKey: ["task", id] });
+    } catch (err) {
+      toast.error((err as Error).message);
+    }
+  };
 
   const taskQ = useQuery({ queryKey: ["task", id], queryFn: () => getT({ data: { id } }) });
   const logsQ = useQuery({
@@ -160,22 +195,45 @@ function TaskDetail() {
 
         <section className="rounded-lg border border-border bg-card p-4">
           <h2 className="mb-2 text-sm font-semibold">Targets</h2>
+          <div className="mb-3 space-y-2 rounded-md border border-dashed border-border p-3">
+            <Textarea
+              rows={3}
+              value={newLinks}
+              onChange={(e) => setNewLinks(e.target.value)}
+              placeholder="@username, t.me/+invite, one per line…"
+            />
+            <div className="flex justify-end">
+              <Button size="sm" onClick={addLinks} disabled={busyEdit}>
+                {busyEdit ? "Adding…" : "Add links"}
+              </Button>
+            </div>
+          </div>
           <ul className="max-h-72 space-y-1 overflow-auto text-sm">
             {items.map((i) => (
               <li key={i.id} className="flex items-center justify-between border-b border-border/50 py-1">
                 <span>@{i.target}</span>
-                <span
-                  className={
-                    i.status === "joined" || i.status === "requested"
-                      ? "text-xs text-green-500"
-                      : i.status === "failed"
-                        ? "text-xs text-destructive"
-                        : "text-xs text-muted-foreground"
-                  }
-                >
-                  {i.status}
-                  {i.error ? ` · ${i.error}` : ""}
-                </span>
+                <div className="flex items-center gap-2">
+                  <span
+                    className={
+                      i.status === "joined" || i.status === "requested"
+                        ? "text-xs text-green-500"
+                        : i.status === "failed"
+                          ? "text-xs text-destructive"
+                          : "text-xs text-muted-foreground"
+                    }
+                  >
+                    {i.status}
+                    {i.error ? ` · ${i.error}` : ""}
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => removeItem(i.id)}
+                    className="text-muted-foreground hover:text-destructive"
+                    aria-label="Remove"
+                  >
+                    <Trash2 className="h-3.5 w-3.5" />
+                  </button>
+                </div>
               </li>
             ))}
           </ul>

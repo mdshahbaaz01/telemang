@@ -1,18 +1,29 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useServerFn } from "@tanstack/react-start";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import {
   getGroup,
   getTask,
   processNextJoin,
   setTaskStatus,
+  addAccountsToGroup,
+  deleteJoinTask,
 } from "@/lib/tasks.functions";
+import { listAccounts } from "@/lib/accounts.functions";
 import { Button } from "@/components/ui/button";
 import { AdminGate } from "@/components/AdminGate";
-import { ArrowLeft, Play, Square } from "lucide-react";
+import { ArrowLeft, Play, Square, Users2, X } from "lucide-react";
 import { toast } from "sonner";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from "@/components/ui/dialog";
+import { Checkbox } from "@/components/ui/checkbox";
 
 export const Route = createFileRoute("/_authenticated/groups/")({
   component: () => (
@@ -24,7 +35,9 @@ export const Route = createFileRoute("/_authenticated/groups/")({
 
 function GroupRunner() {
   const { id } = Route.useParams();
+  const qc = useQueryClient();
   const listFn = useServerFn(getGroup);
+  const delTask = useServerFn(deleteJoinTask);
   const groupQ = useQuery({
     queryKey: ["group", id],
     queryFn: () => listFn({ data: { groupId: id } }),
@@ -44,6 +57,16 @@ function GroupRunner() {
   };
 
   const tasks = groupQ.data ?? [];
+  const removeAccount = async (taskId: string, label: string) => {
+    if (!confirm(`Remove ${label} from this group?`)) return;
+    try {
+      await delTask({ data: { id: taskId } });
+      toast.success(`${label} removed`);
+      qc.invalidateQueries({ queryKey: ["group", id] });
+    } catch (err) {
+      toast.error((err as Error).message);
+    }
+  };
 
   return (
     <main className="min-h-screen bg-background">
@@ -63,6 +86,11 @@ function GroupRunner() {
             </div>
           </div>
           <div className="flex gap-2">
+            <EditAccountsDialog
+              groupId={id}
+              existingIds={tasks.map((t) => t.account_id)}
+              onDone={() => qc.invalidateQueries({ queryKey: ["group", id] })}
+            />
             <Button onClick={startAll} disabled={allRunning || !tasks.length}>
               <Play className="mr-1 h-4 w-4" /> Start all
             </Button>
@@ -88,6 +116,7 @@ function GroupRunner() {
                 }
                 registerStart={(fn) => startAllRef.current.set(t.id, fn)}
                 registerStop={(fn) => runAllRef.current.set(t.id, fn)}
+                onRemove={(label) => removeAccount(t.id, label)}
               />
             ))}
           </div>
@@ -97,16 +126,115 @@ function GroupRunner() {
   );
 }
 
+function EditAccountsDialog({
+  groupId,
+  existingIds,
+  onDone,
+}: {
+  groupId: string;
+  existingIds: string[];
+  onDone: () => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const listAcc = useServerFn(listAccounts);
+  const addAcc = useServerFn(addAccountsToGroup);
+  const accountsQ = useQuery({
+    queryKey: ["accounts"],
+    queryFn: () => listAcc(),
+    enabled: open,
+  });
+  const [picked, setPicked] = useState<Set<string>>(new Set());
+  const [busy, setBusy] = useState(false);
+
+  const existing = useMemo(() => new Set(existingIds), [existingIds]);
+  const candidates = (accountsQ.data ?? []).filter((a) => !existing.has(a.id));
+
+  const toggle = (accId: string) => {
+    setPicked((prev) => {
+      const next = new Set(prev);
+      if (next.has(accId)) next.delete(accId);
+      else next.add(accId);
+      return next;
+    });
+  };
+
+  const submit = async () => {
+    if (!picked.size) return toast.error("Pick at least one account");
+    setBusy(true);
+    try {
+      const r = await addAcc({
+        data: { groupId, accountIds: [...picked] },
+      });
+      toast.success(`${r.added} account${r.added === 1 ? "" : "s"} added`);
+      onDone();
+      setOpen(false);
+      setPicked(new Set());
+    } catch (err) {
+      toast.error((err as Error).message);
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <Dialog open={open} onOpenChange={setOpen}>
+      <DialogTrigger asChild>
+        <Button variant="outline">
+          <Users2 className="mr-1 h-4 w-4" /> Edit accounts
+        </Button>
+      </DialogTrigger>
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle>Add accounts to this group</DialogTitle>
+        </DialogHeader>
+        <p className="text-xs text-muted-foreground">
+          New accounts inherit the group's targets. Remove existing accounts from
+          their column.
+        </p>
+        <div className="max-h-72 space-y-1 overflow-auto">
+          {candidates.length === 0 && (
+            <p className="text-sm text-muted-foreground">
+              No other accounts available.
+            </p>
+          )}
+          {candidates.map((a) => (
+            <label
+              key={a.id}
+              className="flex cursor-pointer items-center gap-3 rounded-md border border-border px-3 py-2 hover:bg-accent"
+            >
+              <Checkbox
+                checked={picked.has(a.id)}
+                onCheckedChange={() => toggle(a.id)}
+              />
+              <span className="text-sm font-medium">
+                {a.first_name || a.username || a.phone}
+              </span>
+              <span className="ml-auto text-xs text-muted-foreground">
+                {a.phone}
+              </span>
+            </label>
+          ))}
+        </div>
+        <Button onClick={submit} disabled={busy || !picked.size}>
+          {busy ? "Adding…" : `Add ${picked.size} account${picked.size === 1 ? "" : "s"}`}
+        </Button>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
 function TaskColumn({
   taskId,
   accountLabel,
   registerStart,
   registerStop,
+  onRemove,
 }: {
   taskId: string;
   accountLabel: string;
   registerStart: (fn: () => void) => void;
   registerStop: (fn: () => void) => void;
+  onRemove: (label: string) => void;
 }) {
   const qc = useQueryClient();
   const getT = useServerFn(getTask);
@@ -200,15 +328,26 @@ function TaskColumn({
       <header className="border-b border-border p-3">
         <div className="mb-1 flex items-center justify-between gap-2">
           <div className="truncate font-semibold">{accountLabel}</div>
-          {running ? (
-            <Button size="sm" variant="destructive" onClick={stop}>
-              Stop
-            </Button>
-          ) : (
-            <Button size="sm" onClick={loop} disabled={pending === 0}>
-              Run
-            </Button>
-          )}
+          <div className="flex items-center gap-1">
+            {running ? (
+              <Button size="sm" variant="destructive" onClick={stop}>
+                Stop
+              </Button>
+            ) : (
+              <Button size="sm" onClick={loop} disabled={pending === 0}>
+                Run
+              </Button>
+            )}
+            <button
+              type="button"
+              onClick={() => onRemove(accountLabel)}
+              className="rounded p-1 text-muted-foreground hover:bg-muted hover:text-destructive"
+              aria-label="Remove account from group"
+              title="Remove account from group"
+            >
+              <X className="h-4 w-4" />
+            </button>
+          </div>
         </div>
         <div className="text-xs text-muted-foreground">
           {joined}/{total} joined · {requested} requested · {failed} failed · {pending} pending
