@@ -606,6 +606,17 @@ function EditGroupDialog({
                   </button>
                 </div>
               </div>
+              <AccountIdPaste
+                accounts={accountsQ.data ?? []}
+                onSelect={(ids) =>
+                  setAccountIds((prev) => {
+                    const next = new Set(prev);
+                    for (const id of ids) next.add(id);
+                    return next;
+                  })
+                }
+                className="mb-2"
+              />
               <div className="max-h-64 space-y-1 overflow-auto rounded-md border border-border p-2">
                 {(accountsQ.data ?? []).map((a) => (
                   <label
