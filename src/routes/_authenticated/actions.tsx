@@ -237,6 +237,15 @@ function ActionsPageInner() {
   const listSchedFn = useServerFn(listScheduledBroadcasts);
   const createSchedFn = useServerFn(createScheduledBroadcast);
   const cancelSchedFn = useServerFn(cancelScheduledBroadcast);
+  const reportSchedFn = useServerFn(getScheduleReport);
+  const [reportOpen, setReportOpen] = useState(false);
+  const [reportId, setReportId] = useState<string | null>(null);
+  const reportQ = useQuery({
+    queryKey: ["schedule-report", reportId],
+    queryFn: () => reportSchedFn({ data: { id: reportId! } }),
+    enabled: !!reportId && reportOpen,
+    refetchInterval: reportOpen ? 3000 : false,
+  });
   const schedulesQ = useQuery({
     queryKey: ["scheduled-broadcasts"],
     queryFn: () => listSchedFn(),
