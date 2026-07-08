@@ -418,7 +418,7 @@ function AccountColumn({
       </div>
       <ScrollArea className="h-80">
         {dialogs?.isLoading ? (
-          <p className="p-3 text-sm text-muted-foreground">Loading…</p>
+          <div className="p-3"><Loader size="sm" /></div>
         ) : dialogs?.error ? (
           <p className="p-3 text-sm text-destructive">{(dialogs.error as Error).message}</p>
         ) : filtered.length === 0 ? (

@@ -127,7 +127,7 @@ function Dashboard() {
           </div>
 
           {accountsQ.isLoading ? (
-            <p className="text-sm text-muted-foreground">Loading…</p>
+            <Loader size="sm" />
           ) : accountsQ.data?.length ? (
             <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
               {accountsQ.data.map((a) => {
@@ -202,7 +202,7 @@ function Dashboard() {
             </Button>
           </div>
           {groupsQ.isLoading ? (
-            <p className="text-sm text-muted-foreground">Loading…</p>
+            <Loader size="sm" />
           ) : groupsQ.data?.length ? (
             <ul className="space-y-3">
               {groupsQ.data.map((g) => (
@@ -431,7 +431,7 @@ function EditGroupDialog({
           <DialogTitle>Edit task</DialogTitle>
         </DialogHeader>
         {editQ.isLoading || !editQ.data ? (
-          <p className="text-sm text-muted-foreground">Loading…</p>
+          <Loader size="sm" />
         ) : (
           <div className="space-y-5">
             <div>

@@ -1797,7 +1797,7 @@ function HistorySection({
           <Trash2 className="mr-1 h-3.5 w-3.5" /> Clear history
         </Button>
       </div>
-      {loading && <p className="text-xs text-muted-foreground">Loading…</p>}
+      {loading && <Loader size="sm" />}
       {!loading && runs.length === 0 && (
         <p className="text-xs text-muted-foreground">No runs yet.</p>
       )}
