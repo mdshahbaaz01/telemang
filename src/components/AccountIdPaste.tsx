@@ -9,6 +9,7 @@ export type PasteAccount = {
   phone?: string | null;
   username?: string | null;
   first_name?: string | null;
+  telegram_user_id?: number | string | null;
 };
 
 type Props = {
@@ -41,10 +42,12 @@ export function AccountIdPaste({ accounts, onSelect, className }: Props) {
       const digits = tok.replace(/\D/g, "");
       const hit = accounts.find((a) => {
         const phone = (a.phone ?? "").replace(/\D/g, "");
+        const tgId = a.telegram_user_id != null ? String(a.telegram_user_id) : "";
         return (
           a.id.toLowerCase() === tok ||
           (a.username ?? "").toLowerCase() === tok ||
           (a.first_name ?? "").toLowerCase() === tok ||
+          (digits.length > 0 && tgId === digits) ||
           (digits.length > 0 && phone.endsWith(digits))
         );
       });
