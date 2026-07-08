@@ -11,7 +11,7 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { toast } from "sonner";
 import { AdminGate } from "@/components/AdminGate";
-import { Square, Play } from "lucide-react";
+import { Square, Play, Paperclip, X } from "lucide-react";
 
 export const Route = createFileRoute("/_authenticated/actions")({
   validateSearch: (s: Record<string, unknown>) =>
@@ -115,6 +115,16 @@ function ActionsPageInner() {
   const [running, setRunning] = useState(false);
   const [totals, setTotals] = useState<{ ok: number; fail: number } | null>(null);
   const abortRef = useRef<AbortController | null>(null);
+
+  const uploadAttachment = async (file: File) => {
+    const ext = file.name.includes(".") ? file.name.slice(file.name.lastIndexOf(".")) : "";
+    const path = `${Date.now()}-${crypto.randomUUID()}${ext}`;
+    const { error } = await supabase.storage
+      .from("action-attachments")
+      .upload(path, file, { contentType: file.type || undefined, upsert: false });
+    if (error) throw new Error(error.message);
+    return { path, filename: file.name, mimeType: file.type || undefined };
+  };
 
   const accountList = accountsQ.data ?? [];
   const allAccountIds = useMemo(() => accountList.map((a) => a.id), [accountList]);
@@ -303,19 +313,28 @@ function ActionsPageInner() {
     const src = parseMessageLink(source);
     if (!src) return toast.error("Enter a valid message link");
     if (allAccountIds.length === 0) return toast.error("No accounts available");
-    let cleaned: { accountId: string; message: string }[] = [];
-    if (replyMode === "per-account") {
-      cleaned = replyRows
-        .map((r) => ({ accountId: r.accountId ?? "", message: r.message.trim() }))
-        .filter((r) => r.accountId && r.message);
-      if (!cleaned.length) return toast.error("Pick an account and message for each row");
-    } else {
-      const messages = replyRows.map((r) => r.message.trim()).filter(Boolean);
-      if (!messages.length) return toast.error("Add at least one message");
-      // Same message(s) across all IDs — round-robin messages across accounts.
-      cleaned = allAccountIds.flatMap((accountId, i) => [
-        { accountId, message: messages[i % messages.length] },
-      ]);
+    let cleaned: { accountId: string; message: string; attachment?: { path: string; filename: string; mimeType?: string } }[] = [];
+    try {
+      if (replyMode === "per-account") {
+        const rows = replyRows.filter((r) => (r.accountId ?? "") && (r.message.trim() || r.file));
+        if (!rows.length) return toast.error("Pick an account and add message or file for each row");
+        cleaned = await Promise.all(rows.map(async (r) => ({
+          accountId: r.accountId!,
+          message: r.message.trim(),
+          attachment: r.file ? await uploadAttachment(r.file) : undefined,
+        })));
+      } else {
+        const rows = replyRows.filter((r) => r.message.trim() || r.file);
+        if (!rows.length) return toast.error("Add at least one message or file");
+        const uploads = await Promise.all(rows.map(async (r) => ({
+          message: r.message.trim(),
+          attachment: r.file ? await uploadAttachment(r.file) : undefined,
+        })));
+        // Round-robin rows across accounts.
+        cleaned = allAccountIds.map((accountId, i) => ({ accountId, ...uploads[i % uploads.length] }));
+      }
+    } catch (e) {
+      return toast.error((e as Error).message);
     }
     await streamRun({
       accountIds: [],
@@ -338,21 +357,35 @@ function ActionsPageInner() {
           .split(/\r?\n|,/)
           .map((s) => s.trim())
           .filter(Boolean),
+        file: r.file ?? null,
       }))
-      .filter((r) => r.message && r.targets.length);
+      .filter((r) => (r.message || r.file) && r.targets.length);
     if (!baseRows.length) {
-      toast.error("Add at least one row with message and targets");
+      toast.error("Add at least one row with message/file and targets");
       return;
     }
-    let cleaned: { accountId: string; message: string; targets: string[] }[] = [];
-    if (broadcastMode === "per-account") {
-      cleaned = baseRows.filter((r) => r.accountId);
-      if (!cleaned.length) return toast.error("Pick an account for each row");
-    } else {
-      // Same message across all IDs — each account runs each row in parallel.
-      cleaned = allAccountIds.flatMap((accountId) =>
-        baseRows.map((r) => ({ accountId, message: r.message, targets: r.targets })),
+    let cleaned: { accountId: string; message: string; targets: string[]; attachment?: { path: string; filename: string; mimeType?: string } }[] = [];
+    try {
+      // Upload each unique file once.
+      const uploaded = await Promise.all(
+        baseRows.map(async (r) => (r.file ? await uploadAttachment(r.file) : undefined)),
       );
+      const withAtt = baseRows.map((r, i) => ({
+        accountId: r.accountId,
+        message: r.message,
+        targets: r.targets,
+        attachment: uploaded[i],
+      }));
+      if (broadcastMode === "per-account") {
+        cleaned = withAtt.filter((r) => r.accountId);
+        if (!cleaned.length) return toast.error("Pick an account for each row");
+      } else {
+        cleaned = allAccountIds.flatMap((accountId) =>
+          withAtt.map((r) => ({ accountId, message: r.message, targets: r.targets, attachment: r.attachment })),
+        );
+      }
+    } catch (e) {
+      return toast.error((e as Error).message);
     }
     const { data: sess } = await supabase.auth.getSession();
     const token = sess.session?.access_token;
