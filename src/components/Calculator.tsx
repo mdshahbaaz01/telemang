@@ -7,9 +7,11 @@ export type HistoryEntry = {
   id: string;
   expression: string;
   result: string;
+  pinned?: boolean;
 };
 
 const STORAGE_KEY = "calc-history-v1";
+const MAX_UNPINNED = 50;
 
 function compute(a: number, b: number, op: Op): number {
   switch (op) {
@@ -38,6 +40,7 @@ export function Calculator() {
   const [expression, setExpression] = useState("");
   const [history, setHistory] = useState<HistoryEntry[]>([]);
   const [historyQuery, setHistoryQuery] = useState("");
+  const [copiedId, setCopiedId] = useState<string | null>(null);
 
   // Load history from localStorage after mount (avoids SSR hydration mismatch).
   useEffect(() => {
@@ -133,10 +136,19 @@ export function Calculator() {
     setExpression(`${expr} =`);
     setDisplay(resStr);
     if (resStr !== "Error") {
-      setHistory((h) => [
-        { id: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`, expression: expr, result: resStr },
-        ...h,
-      ].slice(0, 50));
+      const entry: HistoryEntry = {
+        id: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+        expression: expr,
+        result: resStr,
+      };
+      setHistory((h) => {
+        const pinned = h.filter((e) => e.pinned);
+        const unpinned = [entry, ...h.filter((e) => !e.pinned)].slice(
+          0,
+          MAX_UNPINNED,
+        );
+        return [...pinned, ...unpinned];
+      });
     }
     setPrevious(null);
     setOp(null);
@@ -189,14 +201,67 @@ export function Calculator() {
 
   const clearHistory = () => setHistory([]);
 
+  const togglePin = (id: string) => {
+    setHistory((h) => h.map((e) => (e.id === id ? { ...e, pinned: !e.pinned } : e)));
+  };
+
+  const copyEntry = async (e: HistoryEntry) => {
+    const text = `${e.expression} = ${e.result}`;
+    try {
+      await navigator.clipboard.writeText(text);
+      setCopiedId(e.id);
+      window.setTimeout(() => setCopiedId((c) => (c === e.id ? null : c)), 1200);
+    } catch {
+      // ignore
+    }
+  };
+
+  const download = (filename: string, mime: string, content: string) => {
+    const blob = new Blob([content], { type: mime });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  };
+
+  const exportJSON = () => {
+    download(
+      `calculator-history-${new Date().toISOString().slice(0, 10)}.json`,
+      "application/json",
+      JSON.stringify(history, null, 2),
+    );
+  };
+
+  const exportCSV = () => {
+    const esc = (s: string) => `"${s.replace(/"/g, '""')}"`;
+    const rows = [
+      ["expression", "result", "pinned"].join(","),
+      ...history.map((h) =>
+        [esc(h.expression), esc(h.result), h.pinned ? "true" : "false"].join(","),
+      ),
+    ].join("\n");
+    download(
+      `calculator-history-${new Date().toISOString().slice(0, 10)}.csv`,
+      "text/csv",
+      rows,
+    );
+  };
+
   const q = historyQuery.trim().toLowerCase();
+  const sortedHistory = [...history].sort(
+    (a, b) => (b.pinned ? 1 : 0) - (a.pinned ? 1 : 0),
+  );
   const filteredHistory = q
-    ? history.filter(
+    ? sortedHistory.filter(
         (h) =>
           h.expression.toLowerCase().includes(q) ||
           h.result.toLowerCase().includes(q),
       )
-    : history;
+    : sortedHistory;
 
   return (
     <div className="flex w-full flex-col gap-4 md:flex-row md:items-start md:justify-center">
@@ -273,13 +338,31 @@ export function Calculator() {
           <h2 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground">
             History
           </h2>
-          <button
-            onClick={clearHistory}
-            disabled={history.length === 0}
-            className="rounded-md px-2 py-1 text-xs text-muted-foreground hover:bg-muted disabled:opacity-40 disabled:hover:bg-transparent"
-          >
-            Clear
-          </button>
+          <div className="flex items-center gap-1">
+            <button
+              onClick={exportCSV}
+              disabled={history.length === 0}
+              title="Export as CSV"
+              className="rounded-md px-2 py-1 text-xs text-muted-foreground hover:bg-muted disabled:opacity-40 disabled:hover:bg-transparent"
+            >
+              CSV
+            </button>
+            <button
+              onClick={exportJSON}
+              disabled={history.length === 0}
+              title="Export as JSON"
+              className="rounded-md px-2 py-1 text-xs text-muted-foreground hover:bg-muted disabled:opacity-40 disabled:hover:bg-transparent"
+            >
+              JSON
+            </button>
+            <button
+              onClick={clearHistory}
+              disabled={history.length === 0}
+              className="rounded-md px-2 py-1 text-xs text-muted-foreground hover:bg-muted disabled:opacity-40 disabled:hover:bg-transparent"
+            >
+              Clear
+            </button>
+          </div>
         </div>
         <div className="relative mb-3">
           <input
@@ -312,19 +395,44 @@ export function Calculator() {
         ) : (
           <ul className="max-h-96 space-y-1 overflow-y-auto pr-1">
             {filteredHistory.map((h) => (
-              <li key={h.id}>
+              <li
+                key={h.id}
+                className={cn(
+                  "group relative flex items-stretch gap-1 rounded-xl transition-colors hover:bg-muted",
+                  h.pinned && "bg-muted/60",
+                )}
+              >
                 <button
                   onClick={() => useHistoryResult(h.result)}
-                  className="w-full rounded-xl px-3 py-2 text-right transition-colors hover:bg-muted"
+                  className="flex-1 min-w-0 rounded-xl px-3 py-2 text-right"
                   title="Use this result"
                 >
-                  <div className="text-xs text-muted-foreground truncate">
-                    {h.expression} =
+                  <div className="flex items-center justify-end gap-1 text-xs text-muted-foreground truncate">
+                    {h.pinned && <span aria-label="Pinned">📌</span>}
+                    <span className="truncate">{h.expression} =</span>
                   </div>
                   <div className="text-lg font-medium text-foreground truncate">
                     {h.result}
                   </div>
                 </button>
+                <div className="flex flex-col items-center justify-center gap-0.5 pr-1 opacity-0 transition-opacity group-hover:opacity-100 focus-within:opacity-100">
+                  <button
+                    onClick={() => copyEntry(h)}
+                    title="Copy to clipboard"
+                    aria-label="Copy to clipboard"
+                    className="rounded-md px-1.5 py-0.5 text-xs text-muted-foreground hover:bg-background"
+                  >
+                    {copiedId === h.id ? "✓" : "⧉"}
+                  </button>
+                  <button
+                    onClick={() => togglePin(h.id)}
+                    title={h.pinned ? "Unpin" : "Pin"}
+                    aria-label={h.pinned ? "Unpin entry" : "Pin entry"}
+                    className="rounded-md px-1.5 py-0.5 text-xs text-muted-foreground hover:bg-background"
+                  >
+                    {h.pinned ? "📍" : "📌"}
+                  </button>
+                </div>
               </li>
             ))}
           </ul>
