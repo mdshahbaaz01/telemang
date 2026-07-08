@@ -159,15 +159,14 @@ async function finalizeSchedule(admin: AdminClient, scheduleId: string) {
     .eq("id", scheduleId);
   if (schedule?.user_id) {
     const kind = (schedule.payload as any)?.kind ?? "broadcast";
-    await admin.from("notification_logs").insert({
-      user_id: schedule.user_id,
-      channel: "app",
-      event: failed.length ? "failure" : "success",
-      title: failed.length ? "Scheduled action finished with failures" : "Scheduled action completed",
-      body: `${kind}: ${processed - failed.length} delivered, ${failed.length} failed`,
-      status: "logged",
-      error: errorText,
-    });
+    const { notifyUser } = await import("@/lib/notifications.server");
+    await notifyUser(
+      admin,
+      schedule.user_id,
+      failed.length ? "failure" : "success",
+      failed.length ? "Scheduled action finished with failures" : "Scheduled action completed",
+      `${kind}: ${processed - failed.length} delivered, ${failed.length} failed${errorText ? ` — ${errorText}` : ""}`,
+    ).catch(() => undefined);
   }
 }
 
