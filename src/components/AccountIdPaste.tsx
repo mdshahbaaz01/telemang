@@ -1,4 +1,7 @@
 import { useState } from "react";
+import { useServerFn } from "@tanstack/react-start";
+import { useQueryClient } from "@tanstack/react-query";
+import { backfillTelegramIds } from "@/lib/accounts.functions";
 import { Textarea } from "@/components/ui/textarea";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
@@ -26,6 +29,23 @@ type Props = {
  */
 export function AccountIdPaste({ accounts, onSelect, className }: Props) {
   const [value, setValue] = useState("");
+  const [refreshing, setRefreshing] = useState(false);
+  const backfill = useServerFn(backfillTelegramIds);
+  const qc = useQueryClient();
+  const missingIds = accounts.filter((a) => a.telegram_user_id == null).length;
+
+  const runBackfill = async () => {
+    setRefreshing(true);
+    try {
+      const res = (await backfill({})) as { updated: number; failed: number; total: number };
+      toast.success(`Updated ${res.updated}/${res.total} Telegram IDs${res.failed ? ` · ${res.failed} failed` : ""}`);
+      await qc.invalidateQueries({ queryKey: ["accounts"] });
+    } catch (e) {
+      toast.error(`Refresh failed: ${(e as Error).message}`);
+    } finally {
+      setRefreshing(false);
+    }
+  };
 
   const apply = () => {
     const tokens = value
@@ -80,6 +100,19 @@ export function AccountIdPaste({ accounts, onSelect, className }: Props) {
         <Button type="button" size="sm" variant="ghost" onClick={() => setValue("")}>
           Clear
         </Button>
+        {missingIds > 0 && (
+          <Button
+            type="button"
+            size="sm"
+            variant="outline"
+            className="ml-auto"
+            onClick={runBackfill}
+            disabled={refreshing}
+            title="Fetch Telegram user IDs for accounts that don't have one yet"
+          >
+            {refreshing ? "Refreshing…" : `Refresh IDs (${missingIds})`}
+          </Button>
+        )}
       </div>
     </div>
   );
