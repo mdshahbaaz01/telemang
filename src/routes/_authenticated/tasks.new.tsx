@@ -161,6 +161,13 @@ function NewTaskPage() {
                 </Button>
               </div>
             </div>
+            <AccountIdPaste
+              className="mb-3"
+              accounts={accounts}
+              onSelect={(ids) =>
+                setSelectedIds((prev) => Array.from(new Set([...prev, ...ids])))
+              }
+            />
             <div className="space-y-2">
               {accounts.map((a) => (
                 <label
