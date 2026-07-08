@@ -40,6 +40,43 @@ function parseMessageLink(input: string): { chat: string; msgId: number } | null
 }
 
 function ActionsPage() {
+  return <ActionsPageInner />;
+}
+
+function DelayFields({
+  minDelay,
+  maxDelay,
+  setMin,
+  setMax,
+}: {
+  minDelay: number;
+  maxDelay: number;
+  setMin: (n: number) => void;
+  setMax: (n: number) => void;
+}) {
+  return (
+    <div className="grid grid-cols-2 gap-3">
+      <div>
+        <Label>Min delay (s)</Label>
+        <Input
+          type="number"
+          value={minDelay}
+          onChange={(e) => setMin(Number(e.target.value))}
+        />
+      </div>
+      <div>
+        <Label>Max delay (s)</Label>
+        <Input
+          type="number"
+          value={maxDelay}
+          onChange={(e) => setMax(Number(e.target.value))}
+        />
+      </div>
+    </div>
+  );
+}
+
+function ActionsPageInner() {
   const listAcc = useServerFn(listAccounts);
   const accountsQ = useQuery({ queryKey: ["accounts"], queryFn: () => listAcc() });
 
