@@ -335,7 +335,6 @@ function AccountColumn({
   mode,
   action,
   query,
-  dialogs,
   selected,
   setSelected,
   done,
@@ -346,12 +345,16 @@ function AccountColumn({
   mode: "chats" | "personal";
   action: Action;
   query: string;
-  dialogs: ReturnType<typeof useQuery<Dialog[]>>;
   selected: Set<string>;
   setSelected: (n: Set<string>) => void;
   done?: { ok: number; fail: number };
   running: boolean;
 }) {
+  const listDlg = useServerFn(listDialogs);
+  const dialogs = useQuery({
+    queryKey: ["dialogs", accountId],
+    queryFn: () => listDlg({ data: { accountId } }) as Promise<Dialog[]>,
+  });
   const filtered = useMemo(() => {
     const rows = (dialogs?.data ?? []) as Dialog[];
     return rows.filter((r) => {
