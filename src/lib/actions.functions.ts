@@ -99,21 +99,44 @@ export const loadPoll = createServerFn({ method: "POST" })
       const media = msg.poll as {
         poll?: {
           question?: { text?: string } | string;
-          answers?: Array<{ text?: { text?: string } | string }>;
+          answers?: Array<{ text?: { text?: string } | string; option?: Uint8Array }>;
           multipleChoice?: boolean;
           closed?: boolean;
+          publicVoters?: boolean;
+        };
+        results?: {
+          results?: Array<{ option?: Uint8Array; voters?: number; chosen?: boolean; correct?: boolean }>;
+          totalVoters?: number;
         };
       };
       const p = media.poll ?? {};
+      const r = media.results ?? {};
       const q = typeof p.question === "string" ? p.question : p.question?.text ?? "";
-      const answers = (p.answers ?? []).map((a) =>
-        typeof a.text === "string" ? a.text : a.text?.text ?? "",
-      );
+      const rawAnswers = p.answers ?? [];
+      const rawResults = r.results ?? [];
+      const bufEq = (a?: Uint8Array, b?: Uint8Array) => {
+        if (!a || !b || a.length !== b.length) return false;
+        for (let i = 0; i < a.length; i++) if (a[i] !== b[i]) return false;
+        return true;
+      };
+      const answers = rawAnswers.map((a, i) => {
+        const text = typeof a.text === "string" ? a.text : a.text?.text ?? "";
+        const match = rawResults.find((rr) => bufEq(rr.option, a.option)) ?? rawResults[i];
+        return {
+          text,
+          voters: Number(match?.voters ?? 0),
+          chosen: !!match?.chosen,
+        };
+      });
+      const chosenAny = answers.some((a) => a.chosen);
       return {
         question: q,
         answers,
         multipleChoice: !!p.multipleChoice,
         closed: !!p.closed,
+        totalVoters: Number(r.totalVoters ?? 0),
+        alreadyVoted: chosenAny,
+        checkedAccountId: accountId,
       };
     } finally {
       await client.disconnect().catch(() => {});
