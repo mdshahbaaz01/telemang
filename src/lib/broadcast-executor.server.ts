@@ -20,6 +20,30 @@ export type BroadcastExecResult = {
   logs: Array<{ accountId: string | null; target: string | null; level: string; message: string }>;
 };
 
+export type SourceRef = { chat: string; msgId: number };
+
+export type ReplyRowInput = {
+  accountId: string;
+  message: string;
+  attachment?: { path: string; filename: string; mimeType?: string };
+};
+
+export type ReplyExecInput = {
+  source: SourceRef;
+  viaDiscussion: boolean;
+  rows: ReplyRowInput[];
+  minDelay: number;
+  maxDelay: number;
+};
+
+export type ForwardExecInput = {
+  source: SourceRef;
+  accountIds: string[];
+  targets: string[];
+  minDelay: number;
+  maxDelay: number;
+};
+
 function jitter(min: number, max: number) {
   const lo = Math.min(min, max);
   const hi = Math.max(min, max);
@@ -29,6 +53,52 @@ function jitter(min: number, max: number) {
 function errorText(error: unknown) {
   if (error instanceof Error) return error.message || error.name;
   return String(error);
+}
+
+async function resolveTargetEntity(client: any, Api: any, t: string) {
+  const cleaned = t.trim().replace(/^https?:\/\/(t\.me|telegram\.me)\//i, "").replace(/^@/, "");
+  if (/^c\/\d+/.test(cleaned)) {
+    const raw = cleaned.split("/")[1];
+    const { default: bigInt } = await import("big-integer");
+    try {
+      return await client.getEntity(new Api.PeerChannel({ channelId: bigInt(raw) }));
+    } catch {
+      return await client.getEntity(`https://t.me/${cleaned}`);
+    }
+  }
+  return await client.getEntity(cleaned);
+}
+
+async function resolveSourcePeer(client: any, Api: any, src: SourceRef) {
+  if (src.chat.startsWith("c/")) {
+    const raw = src.chat.slice(2);
+    const { default: bigInt } = await import("big-integer");
+    try {
+      return await client.getEntity(new Api.PeerChannel({ channelId: bigInt(raw) }));
+    } catch {
+      return await client.getEntity(`https://t.me/c/${raw}/${src.msgId}`);
+    }
+  }
+  return await client.getEntity(src.chat.replace(/^@/, ""));
+}
+
+function pickDiscussionTarget(disc: any) {
+  const chats = (disc?.chats ?? []) as any[];
+  const messages = (disc?.messages ?? []) as any[];
+  const rootMsg = messages.reduce((best, msg) => {
+    if (!best) return msg;
+    return Number(msg?.id ?? 0) < Number(best?.id ?? 0) ? msg : best;
+  }, null as any);
+  const peerId = rootMsg?.peerId?.channelId ?? rootMsg?.peerId?.chatId;
+  if (peerId) {
+    const match = chats.find((chat) => String(chat?.id) === String(peerId));
+    if (match) return { chat: match, msgId: rootMsg.id as number };
+  }
+  const fallback =
+    chats.find((chat) => chat?.megagroup || chat?.gigagroup || chat?.forum) ??
+    chats.find((chat) => !chat?.broadcast) ??
+    chats[0];
+  return fallback && rootMsg ? { chat: fallback, msgId: rootMsg.id as number } : null;
 }
 
 /**
@@ -65,19 +135,7 @@ export async function executeBroadcast(
     return val;
   };
 
-  const resolveTarget = async (client: any, t: string) => {
-    const cleaned = t.trim().replace(/^https?:\/\/(t\.me|telegram\.me)\//i, "").replace(/^@/, "");
-    if (/^c\/\d+/.test(cleaned)) {
-      const raw = cleaned.split("/")[1];
-      const { default: bigInt } = await import("big-integer");
-      try {
-        return await client.getEntity(new Api.PeerChannel({ channelId: bigInt(raw) }));
-      } catch {
-        return await client.getEntity(`https://t.me/${cleaned}`);
-      }
-    }
-    return await client.getEntity(cleaned);
-  };
+  const resolveTarget = (client: any, t: string) => resolveTargetEntity(client, Api, t);
 
   // Group rows by account so each account only connects once.
   const byAccount = new Map<string, BroadcastRowInput[]>();
@@ -136,6 +194,174 @@ export async function executeBroadcast(
             await new Promise((r) => setTimeout(r, jitter(input.minDelay, input.maxDelay)));
           }
         }
+      } finally {
+        await client.disconnect().catch(() => {});
+      }
+    }),
+  );
+
+  return { ok, fail, logs };
+}
+
+/**
+ * Scheduled reply/comment dispatcher. `viaDiscussion=true` routes replies
+ * into the channel's linked discussion group (comment on a channel post).
+ */
+export async function executeReply(
+  supabase: SupabaseClient<Database>,
+  input: ReplyExecInput,
+): Promise<BroadcastExecResult> {
+  const { openClientForAccount } = await import("./cleanup.server");
+  const { Api } = await import("telegram");
+  const { CustomFile } = await import("telegram/client/uploads");
+
+  const logs: BroadcastExecResult["logs"] = [];
+  const push = (l: (typeof logs)[number]) => logs.push(l);
+
+  const attachmentCache = new Map<string, { buf: Buffer; filename: string; mimeType?: string }>();
+  const loadAttachment = async (att: { path: string; filename: string; mimeType?: string }) => {
+    const cached = attachmentCache.get(att.path);
+    if (cached) return cached;
+    const { data, error } = await supabase.storage
+      .from("action-attachments")
+      .createSignedUrl(att.path, 300);
+    if (error || !data?.signedUrl) throw new Error(`Attachment fetch failed: ${error?.message ?? "no url"}`);
+    const res = await fetch(data.signedUrl);
+    if (!res.ok) throw new Error(`Attachment download failed: ${res.status}`);
+    const buf = Buffer.from(await res.arrayBuffer());
+    const val = { buf, filename: att.filename, mimeType: att.mimeType };
+    attachmentCache.set(att.path, val);
+    return val;
+  };
+
+  // Group rows by account.
+  const byAccount = new Map<string, ReplyRowInput[]>();
+  for (const row of input.rows) {
+    const arr = byAccount.get(row.accountId) ?? [];
+    arr.push(row);
+    byAccount.set(row.accountId, arr);
+  }
+
+  let ok = 0;
+  let fail = 0;
+  const targetLabel = `${input.source.chat}/${input.source.msgId}`;
+
+  await Promise.all(
+    Array.from(byAccount.entries()).map(async ([accountId, rows]) => {
+      let client;
+      try {
+        client = await openClientForAccount(supabase, accountId);
+      } catch (e) {
+        const m = `Connect failed: ${errorText(e)}`;
+        push({ accountId, target: null, level: "error", message: m });
+        fail += rows.length;
+        return;
+      }
+      try {
+        const sourcePeer = await resolveSourcePeer(client, Api, input.source);
+        let replyPeer: any = sourcePeer;
+        let replyToId = input.source.msgId;
+        let topMsgId: number | undefined;
+        if (input.viaDiscussion) {
+          const disc: any = await client.invoke(
+            new Api.messages.GetDiscussionMessage({ peer: sourcePeer, msgId: input.source.msgId }),
+          );
+          const dt = pickDiscussionTarget(disc);
+          if (!dt) throw new Error("No discussion group linked to this channel");
+          replyPeer = await client.getEntity(dt.chat);
+          replyToId = dt.msgId;
+          topMsgId = dt.msgId;
+        }
+        for (const row of rows) {
+          try {
+            let attData: { buf: Buffer; filename: string; mimeType?: string } | null = null;
+            if (row.attachment) attData = await loadAttachment(row.attachment);
+            if (attData) {
+              await client.sendFile(replyPeer, {
+                file: new CustomFile(attData.filename, attData.buf.length, attData.filename, attData.buf),
+                caption: row.message || undefined,
+                replyTo: replyToId,
+                ...(topMsgId ? { topMsgId } : {}),
+              });
+            } else {
+              await client.sendMessage(replyPeer, {
+                message: row.message,
+                replyTo: replyToId,
+                ...(topMsgId ? { topMsgId } : {}),
+              });
+            }
+            ok++;
+            push({ accountId, target: targetLabel, level: "success", message: `${input.viaDiscussion ? "Commented" : "Replied"} on ${targetLabel}` });
+          } catch (e) {
+            fail++;
+            push({ accountId, target: targetLabel, level: "error", message: errorText(e) });
+          }
+          await new Promise((r) => setTimeout(r, jitter(input.minDelay, input.maxDelay)));
+        }
+      } catch (e) {
+        fail += rows.length;
+        push({ accountId, target: targetLabel, level: "error", message: errorText(e) });
+      } finally {
+        await client.disconnect().catch(() => {});
+      }
+    }),
+  );
+
+  return { ok, fail, logs };
+}
+
+/**
+ * Scheduled forward dispatcher — each account forwards the source message
+ * to every target.
+ */
+export async function executeForward(
+  supabase: SupabaseClient<Database>,
+  input: ForwardExecInput,
+): Promise<BroadcastExecResult> {
+  const { openClientForAccount } = await import("./cleanup.server");
+  const { Api } = await import("telegram");
+
+  const logs: BroadcastExecResult["logs"] = [];
+  const push = (l: (typeof logs)[number]) => logs.push(l);
+
+  let ok = 0;
+  let fail = 0;
+
+  await Promise.all(
+    input.accountIds.map(async (accountId) => {
+      let client;
+      try {
+        client = await openClientForAccount(supabase, accountId);
+      } catch (e) {
+        push({ accountId, target: null, level: "error", message: `Connect failed: ${errorText(e)}` });
+        fail += input.targets.length;
+        return;
+      }
+      try {
+        const sourcePeer = await resolveSourcePeer(client, Api, input.source);
+        const { default: bigInt } = await import("big-integer");
+        for (const t of input.targets) {
+          try {
+            const dest = await resolveTargetEntity(client, Api, t);
+            await client.invoke(
+              new Api.messages.ForwardMessages({
+                fromPeer: sourcePeer,
+                id: [input.source.msgId],
+                randomId: [bigInt(Math.floor(Math.random() * 1e18))],
+                toPeer: dest,
+              }),
+            );
+            ok++;
+            push({ accountId, target: t, level: "success", message: `Forwarded to ${t}` });
+          } catch (e) {
+            fail++;
+            push({ accountId, target: t, level: "error", message: errorText(e) });
+          }
+          await new Promise((r) => setTimeout(r, jitter(input.minDelay, input.maxDelay)));
+        }
+      } catch (e) {
+        fail += input.targets.length;
+        push({ accountId, target: null, level: "error", message: errorText(e) });
       } finally {
         await client.disconnect().catch(() => {});
       }
