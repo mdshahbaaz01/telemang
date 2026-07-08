@@ -20,9 +20,9 @@ function parseTargets(raw: string): string[] {
     .filter(Boolean)
     .map((s) =>
       s
-        .replace(/^https?:\/\/(?:t\.me|telegram\.me)\//i, "")
+        .replace(/^@/, "")
+        .replace(/^(?:https?:\/\/)?(?:www\.)?(?:t\.me|telegram\.me)\//i, "")
         .replace(/[?#].*$/, "")
-        .replace(/^@/, ""),
     );
 }
 export { parseTargets };
@@ -507,7 +507,12 @@ export const processNextJoin = createServerFn({ method: "POST" })
         `Joining @${item.target}…`,
       );
       try {
-        const target = item.target.trim().replace(/^@/, "").replace(/[?#].*$/, "");
+        const target = item.target
+          .trim()
+          .replace(/^@/, "")
+          .replace(/[?#].*$/, "")
+          .replace(/^(?:https?:\/\/)?(?:www\.)?(?:t\.me|telegram\.me)\//i, "")
+          .replace(/^@/, "");
         const inviteHash = target.startsWith("+")
           ? target.slice(1)
           : target.toLowerCase().startsWith("joinchat/")
