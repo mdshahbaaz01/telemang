@@ -30,6 +30,64 @@ import {
   SAMPLE_OTHERS,
 } from "@/lib/proof-render";
 
+function ProofPreview({
+  format,
+  channelLink,
+}: {
+  format: "auto" | "chat_list" | "channel_view";
+  channelLink: string;
+}) {
+  const svg = useMemo(() => {
+    const cleaned = (channelLink || "")
+      .trim()
+      .replace(/^https?:\/\/(?:www\.)?(?:t\.me|telegram\.me)\//i, "")
+      .replace(/^@/, "")
+      .replace(/^\+/, "")
+      .replace(/[?#].*$/, "")
+      .replace(/^joinchat\//i, "");
+    const title =
+      cleaned
+        .split(/[-_.\s/]+/)
+        .filter(Boolean)
+        .map((w) => w[0].toUpperCase() + w.slice(1))
+        .join(" ") || "Sample Channel";
+    const info = { title, username: cleaned || null, subscribers: 12_500 };
+    const isPrivateLike = /^[+]|^joinchat\//i.test(channelLink.trim());
+    const effective =
+      format === "auto" ? (isPrivateLike ? "chat_list" : "channel_view") : format;
+    return effective === "chat_list"
+      ? buildChatListSvg(info, SAMPLE_OTHERS)
+      : buildChannelViewSvg(info);
+  }, [format, channelLink]);
+
+  const dataUrl = `data:image/svg+xml;utf8,${encodeURIComponent(svg)}`;
+  const label =
+    format === "auto"
+      ? "Auto — preview shows chat list for private links, channel view otherwise"
+      : format === "chat_list"
+        ? "Chat list style"
+        : "Channel view style";
+
+  return (
+    <section className="rounded-lg border border-border bg-card p-4 md:p-6">
+      <div className="mb-3 flex items-center justify-between">
+        <h2 className="text-lg font-semibold">Live preview</h2>
+        <span className="text-xs text-muted-foreground">{label}</span>
+      </div>
+      <div className="flex justify-center rounded-md bg-[#0a1826] p-4">
+        <img
+          src={dataUrl}
+          alt="Screenshot preview"
+          className="max-h-[480px] w-auto rounded-md shadow-lg"
+        />
+      </div>
+      <p className="mt-2 text-center text-xs text-muted-foreground">
+        Preview uses sample data. Real screenshot uses the actual channel title, subscribers, and (for chat list) the account's recent chats.
+      </p>
+    </section>
+  );
+}
+
 export const Route = createFileRoute("/_authenticated/proof")({
   component: () => (
     <AdminGate>
