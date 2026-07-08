@@ -349,3 +349,157 @@ export const recentLogs = createServerFn({ method: "GET" })
     if (error) throw new Error(error.message);
     return rows ?? [];
   });
+
+// ---- Editing tasks: add/remove target items, add/remove accounts in a group ----
+
+export const addTaskItems = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((d: unknown) =>
+    z
+      .object({
+        taskId: z.string().uuid(),
+        targets: z.array(z.string().min(1).max(200)).min(1).max(2000),
+      })
+      .parse(d),
+  )
+  .handler(async ({ data, context }) => {
+    const { data: task, error: terr } = await context.supabase
+      .from("join_tasks")
+      .select("id, user_id")
+      .eq("id", data.taskId)
+      .single();
+    if (terr || !task) throw new Error("Task not found");
+    const { data: last } = await context.supabase
+      .from("join_task_items")
+      .select("position")
+      .eq("task_id", data.taskId)
+      .order("position", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    const start = (last?.position ?? -1) + 1;
+    const rows = data.targets.map((t, i) => ({
+      task_id: data.taskId,
+      user_id: task.user_id,
+      target: t,
+      position: start + i,
+    }));
+    const { error } = await context.supabase.from("join_task_items").insert(rows);
+    if (error) throw new Error(error.message);
+    return { added: rows.length };
+  });
+
+export const deleteTaskItem = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((d: unknown) =>
+    z.object({ itemId: z.string().uuid() }).parse(d),
+  )
+  .handler(async ({ data, context }) => {
+    const { error } = await context.supabase
+      .from("join_task_items")
+      .delete()
+      .eq("id", data.itemId);
+    if (error) throw new Error(error.message);
+    return { ok: true };
+  });
+
+export const deleteJoinTask = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((d: unknown) =>
+    z.object({ id: z.string().uuid() }).parse(d),
+  )
+  .handler(async ({ data, context }) => {
+    const { error } = await context.supabase
+      .from("join_tasks")
+      .delete()
+      .eq("id", data.id);
+    if (error) throw new Error(error.message);
+    return { ok: true };
+  });
+
+export const addAccountsToGroup = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((d: unknown) =>
+    z
+      .object({
+        groupId: z.string().uuid(),
+        accountIds: z.array(z.string().uuid()).min(1).max(50),
+      })
+      .parse(d),
+  )
+  .handler(async ({ data, context }) => {
+    // Use first existing task in the group as template
+    const { data: tpl, error: terr } = await context.supabase
+      .from("join_tasks")
+      .select("id, name, min_delay, max_delay, account_id")
+      .eq("group_id", data.groupId)
+      .order("created_at")
+      .limit(1)
+      .maybeSingle();
+    if (terr) throw new Error(terr.message);
+    if (!tpl) throw new Error("Group has no template task");
+
+    // Skip accounts already in the group
+    const { data: existing } = await context.supabase
+      .from("join_tasks")
+      .select("account_id")
+      .eq("group_id", data.groupId);
+    const existingIds = new Set(
+      (existing ?? []).map((r: { account_id: string }) => r.account_id),
+    );
+    const toAdd = data.accountIds.filter((id) => !existingIds.has(id));
+    if (!toAdd.length) return { added: 0, skipped: data.accountIds.length };
+
+    // Load templates targets once
+    const { data: templateItems, error: ierr } = await context.supabase
+      .from("join_task_items")
+      .select("target, position")
+      .eq("task_id", tpl.id)
+      .order("position");
+    if (ierr) throw new Error(ierr.message);
+
+    // Load account labels for naming
+    const { data: accs } = await context.supabase
+      .from("telegram_accounts")
+      .select("id, phone, username, first_name")
+      .in("id", toAdd);
+    const accMap = new Map(
+      (accs ?? []).map((a: {
+        id: string;
+        phone: string | null;
+        username: string | null;
+        first_name: string | null;
+      }) => [a.id, a]),
+    );
+    const baseName = tpl.name.split(" · ")[0];
+
+    let added = 0;
+    for (const accountId of toAdd) {
+      const acc = accMap.get(accountId);
+      const label = acc?.username || acc?.first_name || acc?.phone || "acct";
+      const { data: newTask, error: crErr } = await context.supabase
+        .from("join_tasks")
+        .insert({
+          user_id: context.userId,
+          account_id: accountId,
+          name: `${baseName} · ${label}`,
+          status: "idle",
+          min_delay: tpl.min_delay,
+          max_delay: tpl.max_delay,
+          group_id: data.groupId,
+        })
+        .select("id")
+        .single();
+      if (crErr || !newTask) continue;
+      if (templateItems?.length) {
+        const rows = templateItems.map((it: { target: string; position: number }) => ({
+          task_id: newTask.id,
+          user_id: context.userId,
+          target: it.target,
+          position: it.position,
+        }));
+        await context.supabase.from("join_task_items").insert(rows);
+      }
+      added++;
+    }
+    return { added, skipped: data.accountIds.length - toAdd.length };
+  });
