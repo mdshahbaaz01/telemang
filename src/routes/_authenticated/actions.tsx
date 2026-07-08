@@ -29,8 +29,8 @@ export const Route = createFileRoute("/_authenticated/actions")({
 
 type Tab = "react" | "forward" | "vote" | "broadcast" | "reply";
 
-type BroadcastRow = { id: string; message: string; targets: string; accountId?: string };
-type ReplyRow = { id: string; message: string; accountId?: string };
+type BroadcastRow = { id: string; message: string; targets: string; accountId?: string; file?: File | null };
+type ReplyRow = { id: string; message: string; accountId?: string; file?: File | null };
 type SendMode = "per-account" | "all-ids";
 
 type LogEntry = {
