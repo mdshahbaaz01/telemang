@@ -1750,6 +1750,12 @@ function EditRunDialog({
                   ? `${selectedAccounts.length} account(s) selected`
                   : `None selected — will use all ${accountList.length} account(s)`}
               </p>
+              <AccountIdPaste
+                accounts={accountList}
+                onSelect={(ids) =>
+                  setSelectedAccounts((prev) => Array.from(new Set([...prev, ...ids])))
+                }
+              />
             </div>
           )}
 
