@@ -1,24 +1,22 @@
 import { createFileRoute } from "@tanstack/react-router";
+import { Calculator } from "@/components/Calculator";
 
-// No head() here: the home route inherits title/description/og/twitter from
-// __root.tsx, and ships no og:image so serve-time hosting can inject the
-// project's social preview (explicit og:image or latest screenshot).
 export const Route = createFileRoute("/")({
   component: Index,
 });
 
-// IMPORTANT: Replace this placeholder. See ./README.md for routing conventions.
 function Index() {
   return (
-    <div
-      className="flex min-h-screen items-center justify-center"
-      style={{ backgroundColor: "#fcfbf8" }}
-    >
-      <img
-        data-lovable-blank-page-placeholder="REMOVE_THIS"
-        src="https://cdn.gpteng.co/blank-app-v1.svg"
-        alt="Your app will live here!"
-      />
-    </div>
+    <main className="flex min-h-screen items-center justify-center bg-background p-4">
+      <div className="w-full max-w-sm">
+        <h1 className="mb-4 text-center text-2xl font-semibold tracking-tight text-foreground">
+          Calculator
+        </h1>
+        <Calculator />
+        <p className="mt-4 text-center text-xs text-muted-foreground">
+          Tip: use your keyboard — numbers, + − * /, Enter, Backspace, Esc
+        </p>
+      </div>
+    </main>
   );
 }
