@@ -1275,29 +1275,9 @@ function ActionsPageInner() {
                   <Button onClick={runBroadcast} disabled={running || scheduling}>
                     <Play className="mr-1 h-4 w-4" /> Run broadcast ({rows.length} row{rows.length === 1 ? "" : "s"})
                   </Button>
-                  <div className="flex items-center gap-1 rounded-md border border-border bg-background px-2 py-1">
-                    <Clock className="h-4 w-4 text-muted-foreground" />
-                    <input
-                      type="datetime-local"
-                      step={1}
-                      value={scheduledAt}
-                      onChange={(e) => setScheduledAt(e.target.value)}
-                      className="bg-transparent text-sm outline-none"
-                      title="Schedule time (with seconds — accurate to ±1s)"
-                    />
-                  </div>
-                  <Button
-                    type="button"
-                    variant="secondary"
-                    onClick={scheduleBroadcast}
-                    disabled={scheduling || running || !scheduledAt}
-                  >
-                    <CalendarClock className="mr-1 h-4 w-4" />
-                    {scheduling ? "Scheduling…" : "Schedule"}
-                  </Button>
                 </>
               ) : (tab === "reply" || tab === "comment") ? (
-                <Button onClick={runReply} disabled={running}>
+                <Button onClick={runReply} disabled={running || scheduling}>
                   <Play className="mr-1 h-4 w-4" /> Send {replyRows.length} {tab}{replyRows.length === 1 ? "" : "s"}
                 </Button>
               ) : (
@@ -1305,6 +1285,7 @@ function ActionsPageInner() {
                   onClick={() => run("apply")}
                   disabled={
                     running ||
+                    scheduling ||
                     allAccountIds.length === 0 ||
                     (tab === "vote" && !!pollInfo?.closed)
                   }
@@ -1323,6 +1304,36 @@ function ActionsPageInner() {
                   <RotateCw className="mr-1 h-4 w-4" /> Take back
                 </Button>
               )}
+              {(tab === "broadcast" || tab === "reply" || tab === "comment" || tab === "forward") && (
+                <>
+                  <div className="flex items-center gap-1 rounded-md border border-border bg-background px-2 py-1">
+                    <Clock className="h-4 w-4 text-muted-foreground" />
+                    <input
+                      type="datetime-local"
+                      step={1}
+                      value={scheduledAt}
+                      onChange={(e) => setScheduledAt(e.target.value)}
+                      className="bg-transparent text-sm outline-none"
+                      title="Schedule time (with seconds — accurate to ±1s)"
+                    />
+                  </div>
+                  <Button
+                    type="button"
+                    variant="secondary"
+                    onClick={
+                      tab === "broadcast"
+                        ? scheduleBroadcast
+                        : tab === "forward"
+                          ? scheduleForward
+                          : scheduleReply
+                    }
+                    disabled={scheduling || running || !scheduledAt}
+                  >
+                    <CalendarClock className="mr-1 h-4 w-4" />
+                    {scheduling ? "Scheduling…" : "Schedule"}
+                  </Button>
+                </>
+              )}
               <Button variant="destructive" onClick={stop} disabled={!running}>
                 <Square className="mr-1 h-4 w-4" /> Stop
               </Button>
@@ -1334,11 +1345,11 @@ function ActionsPageInner() {
             </div>
           </div>
 
-          {tab === "broadcast" && (
+          {(tab === "broadcast" || tab === "reply" || tab === "comment" || tab === "forward") && (
             <div className="rounded-lg border border-border bg-card p-4">
               <div className="mb-2 flex items-center gap-2">
                 <CalendarClock className="h-4 w-4 text-muted-foreground" />
-                <div className="text-sm font-medium">Scheduled broadcasts</div>
+                <div className="text-sm font-medium">Scheduled actions</div>
                 <span className="ml-auto text-xs text-muted-foreground">
                   {schedulesQ.data?.length ?? 0} total · fires within ±1s of the target second
                 </span>
@@ -1375,8 +1386,11 @@ function ActionsPageInner() {
                             second: "2-digit",
                           })}
                         </span>
+                        <span className="rounded bg-muted px-1.5 py-0.5 text-[10px] uppercase tracking-wide">
+                          {s.kind}
+                        </span>
                         <span className={`text-xs uppercase tracking-wide ${statusColor}`}>{s.status}</span>
-                        <span className="text-xs text-muted-foreground">· {s.rowCount} row(s)</span>
+                        <span className="text-xs text-muted-foreground">· {s.summary}</span>
                         {s.error && (
                           <span className="text-xs text-destructive truncate max-w-[40ch]" title={s.error}>
                             {s.error}
