@@ -1326,6 +1326,7 @@ function HistorySection({
   onEdit,
   onDelete,
   onRefresh,
+  onClearAll,
 }: {
   runs: any[];
   accountList: Account[];
@@ -1334,6 +1335,7 @@ function HistorySection({
   onEdit: (run: any) => void;
   onDelete: (id: string) => void;
   onRefresh: () => void;
+  onClearAll: () => void;
 }) {
   return (
     <div className="rounded-lg border border-border bg-card p-4">
@@ -1341,6 +1343,9 @@ function HistorySection({
         <div className="mr-auto text-sm font-medium">History ({runs.length})</div>
         <Button size="sm" variant="outline" onClick={onRefresh}>
           <RotateCw className="mr-1 h-3.5 w-3.5" /> Refresh
+        </Button>
+        <Button size="sm" variant="destructive" onClick={onClearAll} disabled={runs.length === 0}>
+          <Trash2 className="mr-1 h-3.5 w-3.5" /> Clear history
         </Button>
       </div>
       {loading && <p className="text-xs text-muted-foreground">Loading…</p>}
