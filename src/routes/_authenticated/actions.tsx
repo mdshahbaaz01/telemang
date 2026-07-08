@@ -188,6 +188,17 @@ function ActionsPageInner() {
   const [totals, setTotals] = useState<{ ok: number; fail: number } | null>(null);
   const abortRef = useRef<AbortController | null>(null);
 
+  const [scheduledAt, setScheduledAt] = useState<string>("");
+  const [scheduling, setScheduling] = useState(false);
+  const listSchedFn = useServerFn(listScheduledBroadcasts);
+  const createSchedFn = useServerFn(createScheduledBroadcast);
+  const cancelSchedFn = useServerFn(cancelScheduledBroadcast);
+  const schedulesQ = useQuery({
+    queryKey: ["scheduled-broadcasts"],
+    queryFn: () => listSchedFn(),
+    refetchInterval: 15_000,
+  });
+
   const uploadAttachment = async (file: File) => {
     const ext = file.name.includes(".") ? file.name.slice(file.name.lastIndexOf(".")) : "";
     const path = `${Date.now()}-${crypto.randomUUID()}${ext}`;
