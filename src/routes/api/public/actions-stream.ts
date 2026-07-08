@@ -244,10 +244,9 @@ export const Route = createFileRoute("/api/public/actions-stream")({
             };
 
             const alertLog = async (event: string, title: string, bodyText: string) => {
-              await supabase
-                .from("notification_logs")
-                .insert({ user_id: userId, channel: "app", event, title, body: bodyText })
-                .then(() => undefined, () => undefined);
+              const { notifyUser } = await import("@/lib/notifications.server");
+              await notifyUser(supabase, userId, event as "success" | "failure" | "account", title, bodyText)
+                .catch(() => undefined);
             };
 
             let stopRequested = false;
