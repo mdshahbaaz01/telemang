@@ -568,7 +568,7 @@ export const Route = createFileRoute("/api/public/actions-stream")({
               return { ok, fail };
             };
 
-            const runBroadcastRowsForAccount = async (accountId: string, rows: Array<{ accountId: string; message: string; targets: string[]; attachment?: { path: string; filename: string; mimeType?: string }; format?: "plain" | "mono" }>) => {
+            const runBroadcastRowsForAccount = async (accountId: string, rows: Array<{ accountId: string; message: string; targets: string[]; attachment?: { path: string; filename: string; mimeType?: string; isVoice?: boolean }; format?: "plain" | "mono" }>) => {
               send("log", { accountId, level: "info", message: "Connecting…" });
               let client;
               try {
@@ -641,7 +641,7 @@ export const Route = createFileRoute("/api/public/actions-stream")({
             };
 
             const runReplyRow = async (
-              row: { accountId: string; message: string; attachment?: { path: string; filename: string; mimeType?: string }; format?: "plain" | "mono" },
+              row: { accountId: string; message: string; attachment?: { path: string; filename: string; mimeType?: string; isVoice?: boolean }; format?: "plain" | "mono" },
               src: { chat: string; msgId: number },
               viaDiscussion: boolean,
             ) => {
