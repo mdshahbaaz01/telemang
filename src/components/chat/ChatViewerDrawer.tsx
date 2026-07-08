@@ -300,7 +300,7 @@ function ChatViewerInner({ target, accountId }: { target: string; accountId: str
               <div className="text-xs text-muted-foreground mb-2">
                 {membersQ.data.total.toLocaleString()} total · showing {membersQ.data.participants.length}
               </div>
-              {membersQ.data.participants.map((p, i) => (
+              {membersQ.data.participants.map((p: any, i: number) => (
                 <div key={`${p.userId}-${i}`} className="flex items-center gap-2 rounded border border-border/50 px-2 py-1.5 text-xs">
                   <div className="h-6 w-6 rounded-full bg-primary/20 flex items-center justify-center text-primary text-[10px] font-semibold shrink-0">
                     {p.name.slice(0, 1).toUpperCase()}
