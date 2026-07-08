@@ -151,6 +151,19 @@ function ActionsPageInner() {
   const [editingRun, setEditingRun] = useState<any | null>(null);
 
   const [tab, setTab] = useState<Tab>(search.tab ?? "react");
+  const [showAccounts, setShowAccounts] = useState<boolean>(() => {
+    if (typeof window === "undefined") return false;
+    return window.localStorage.getItem("actions-show-accounts") === "1";
+  });
+  const toggleAccounts = () => {
+    setShowAccounts((prev) => {
+      const next = !prev;
+      if (typeof window !== "undefined") {
+        window.localStorage.setItem("actions-show-accounts", next ? "1" : "0");
+      }
+      return next;
+    });
+  };
   const [source, setSource] = useState("");
   const [emoji, setEmoji] = useState("👍");
   const [customEmojiId, setCustomEmojiId] = useState("");
