@@ -1218,6 +1218,64 @@ function ActionsPageInner() {
 
 type Account = { id: string; phone: string | null; username: string | null; first_name: string | null };
 
+function AccountMultiPicker({
+  accountList,
+  selectedIds,
+  setSelectedIds,
+  allAccountIds,
+}: {
+  accountList: Account[];
+  selectedIds: string[];
+  setSelectedIds: (updater: string[] | ((prev: string[]) => string[])) => void;
+  allAccountIds: string[];
+}) {
+  return (
+    <div className="rounded-md border border-border p-3 space-y-2">
+      <div className="flex items-center gap-2">
+        <Label className="mr-auto">Send from accounts</Label>
+        <button
+          type="button"
+          className="text-xs underline text-muted-foreground"
+          onClick={() => setSelectedIds(allAccountIds)}
+        >
+          Select all
+        </button>
+        <button
+          type="button"
+          className="text-xs underline text-muted-foreground"
+          onClick={() => setSelectedIds([])}
+        >
+          Clear
+        </button>
+      </div>
+      <div className="max-h-48 overflow-auto grid grid-cols-1 sm:grid-cols-2 gap-1">
+        {accountList.map((a) => {
+          const checked = selectedIds.includes(a.id);
+          return (
+            <label key={a.id} className="flex items-center gap-2 text-sm rounded px-2 py-1 hover:bg-muted/40">
+              <input
+                type="checkbox"
+                checked={checked}
+                onChange={(e) =>
+                  setSelectedIds((ids) =>
+                    e.target.checked ? [...ids, a.id] : ids.filter((x) => x !== a.id),
+                  )
+                }
+              />
+              <span className="truncate">{a.first_name || a.username || a.phone}</span>
+            </label>
+          );
+        })}
+      </div>
+      <p className="text-xs text-muted-foreground">
+        {selectedIds.length
+          ? `${selectedIds.length} account(s) selected`
+          : `None selected — will use all ${allAccountIds.length} account(s)`}
+      </p>
+    </div>
+  );
+}
+
 function accountLabel(a?: Account | null) {
   if (!a) return "—";
   return a.first_name || a.username || a.phone || a.id.slice(0, 8);
