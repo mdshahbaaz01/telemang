@@ -12,6 +12,7 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { toast } from "sonner";
 import { AdminGate } from "@/components/AdminGate";
+import { AccountIdPaste } from "@/components/AccountIdPaste";
 import { Square, Play, Paperclip, X, AlertTriangle, Copy, Trash2, RotateCw, Pencil } from "lucide-react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { useQueryClient } from "@tanstack/react-query";
@@ -870,6 +871,12 @@ function ActionsPageInner() {
                         ? `${broadcastSelectedIds.length} account(s) selected`
                         : `None selected — will use all ${allAccountIds.length} account(s)`}
                     </p>
+                    <AccountIdPaste
+                      accounts={accountList}
+                      onSelect={(ids) =>
+                        setBroadcastSelectedIds((prev) => Array.from(new Set([...prev, ...ids])))
+                      }
+                    />
                   </div>
                 )}
                 {rows.map((row, idx) => (
@@ -1025,6 +1032,12 @@ function ActionsPageInner() {
                         ? `${replySelectedIds.length} account(s) selected`
                         : `None selected — will use all ${allAccountIds.length} account(s)`}
                     </p>
+                    <AccountIdPaste
+                      accounts={accountList}
+                      onSelect={(ids) =>
+                        setReplySelectedIds((prev) => Array.from(new Set([...prev, ...ids])))
+                      }
+                    />
                   </div>
                 )}
                 {replyRows.map((row, idx) => (
@@ -1291,6 +1304,12 @@ function AccountMultiPicker({
           ? `${selectedIds.length} account(s) selected`
           : `None selected — will use all ${allAccountIds.length} account(s)`}
       </p>
+      <AccountIdPaste
+        accounts={accountList}
+        onSelect={(ids) =>
+          setSelectedIds((prev) => Array.from(new Set([...prev, ...ids])))
+        }
+      />
     </div>
   );
 }
@@ -1731,6 +1750,12 @@ function EditRunDialog({
                   ? `${selectedAccounts.length} account(s) selected`
                   : `None selected — will use all ${accountList.length} account(s)`}
               </p>
+              <AccountIdPaste
+                accounts={accountList}
+                onSelect={(ids) =>
+                  setSelectedAccounts((prev) => Array.from(new Set([...prev, ...ids])))
+                }
+              />
             </div>
           )}
 

@@ -20,6 +20,7 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { toast } from "sonner";
 import { AdminGate } from "@/components/AdminGate";
 import { ArrowLeft, RefreshCw, Square, Play } from "lucide-react";
+import { AccountIdPaste } from "@/components/AccountIdPaste";
 
 export const Route = createFileRoute("/_authenticated/cleanup")({
   component: () => (
@@ -236,6 +237,17 @@ function CleanupPanel({ mode }: { mode: "chats" | "personal" }) {
             </label>
           ))}
         </div>
+        <AccountIdPaste
+          className="mt-3"
+          accounts={accountsQ.data ?? []}
+          onSelect={(ids) =>
+            setAccountIds((prev) => {
+              const next = new Set(prev);
+              for (const id of ids) next.add(id);
+              return next;
+            })
+          }
+        />
       </div>
 
       {/* Controls */}

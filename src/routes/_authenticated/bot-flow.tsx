@@ -8,9 +8,9 @@ import { AdminGate } from "@/components/AdminGate";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Textarea } from "@/components/ui/textarea";
 import { toast } from "sonner";
 import { Play, Square, ArrowLeft } from "lucide-react";
+import { AccountIdPaste } from "@/components/AccountIdPaste";
 
 export const Route = createFileRoute("/_authenticated/bot-flow")({
   component: () => (
@@ -34,7 +34,6 @@ function BotFlowPage() {
 
   const [referLink, setReferLink] = useState("");
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
-  const [pastedIds, setPastedIds] = useState("");
   const [logs, setLogs] = useState<LogEntry[]>([]);
   const [running, setRunning] = useState(false);
   const [totals, setTotals] = useState<{ ok: number; fail: number } | null>(null);
@@ -42,40 +41,6 @@ function BotFlowPage() {
 
   const accountList = accountsQ.data ?? [];
   const allIds = useMemo(() => accountList.map((a) => a.id), [accountList]);
-
-  // Match pasted identifiers (phone, username, first name, or account id — one
-  // per line or comma/space separated) against known accounts and auto-select.
-  const applyPastedIds = () => {
-    const tokens = pastedIds
-      .split(/[\s,]+/)
-      .map((t) => t.trim().replace(/^@/, "").toLowerCase())
-      .filter(Boolean);
-    if (!tokens.length) {
-      toast.error("Paste at least one identifier");
-      return;
-    }
-    const matched = new Set<string>();
-    const misses: string[] = [];
-    for (const tok of tokens) {
-      const digits = tok.replace(/\D/g, "");
-      const hit = accountList.find((a) => {
-        const phone = (a.phone ?? "").replace(/\D/g, "");
-        return (
-          a.id.toLowerCase() === tok ||
-          (a.username ?? "").toLowerCase() === tok ||
-          (a.first_name ?? "").toLowerCase() === tok ||
-          (digits.length > 0 && phone.endsWith(digits))
-        );
-      });
-      if (hit) matched.add(hit.id);
-      else misses.push(tok);
-    }
-    setSelectedIds((prev) => Array.from(new Set([...prev, ...matched])));
-    toast.success(
-      `Selected ${matched.size} account${matched.size === 1 ? "" : "s"}` +
-        (misses.length ? ` · ${misses.length} not found` : ""),
-    );
-  };
 
   // Parse a bot referral link/handle preview for the user.
   const parsed = useMemo(() => {
@@ -242,26 +207,12 @@ function BotFlowPage() {
               <Button type="button" size="sm" variant="outline" onClick={() => setSelectedIds([])}>Deselect all</Button>
             </div>
 
-            <div className="rounded-md border border-dashed border-border p-3 space-y-2">
-              <Label className="text-xs uppercase tracking-wide text-muted-foreground">
-                Paste IDs to auto-select (optional)
-              </Label>
-              <Textarea
-                rows={3}
-                value={pastedIds}
-                onChange={(e) => setPastedIds(e.target.value)}
-                placeholder="Paste phone numbers, usernames, or account IDs — one per line, or separated by commas/spaces"
-                className="font-mono text-xs"
-              />
-              <div className="flex gap-2">
-                <Button type="button" size="sm" variant="secondary" onClick={applyPastedIds}>
-                  Select matching
-                </Button>
-                <Button type="button" size="sm" variant="ghost" onClick={() => setPastedIds("")}>
-                  Clear
-                </Button>
-              </div>
-            </div>
+            <AccountIdPaste
+              accounts={accountList}
+              onSelect={(ids) =>
+                setSelectedIds((prev) => Array.from(new Set([...prev, ...ids])))
+              }
+            />
 
             <div className="grid grid-cols-1 gap-1 sm:grid-cols-2 lg:grid-cols-3 max-h-72 overflow-auto rounded-md border border-border p-2">
               {accountList.map((a) => {

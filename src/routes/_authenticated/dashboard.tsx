@@ -31,6 +31,7 @@ import {
 import { toast } from "sonner";
 import { LogOut, Pencil, Plus, RefreshCw, RotateCcw, Trash2 } from "lucide-react";
 import { AdminGate } from "@/components/AdminGate";
+import { AccountIdPaste } from "@/components/AccountIdPaste";
 
 export const Route = createFileRoute("/_authenticated/dashboard")({
   component: () => (
@@ -606,6 +607,17 @@ function EditGroupDialog({
                   </button>
                 </div>
               </div>
+              <AccountIdPaste
+                accounts={accountsQ.data ?? []}
+                onSelect={(ids) =>
+                  setAccountIds((prev) => {
+                    const next = new Set(prev);
+                    for (const id of ids) next.add(id);
+                    return next;
+                  })
+                }
+                className="mb-2"
+              />
               <div className="max-h-64 space-y-1 overflow-auto rounded-md border border-border p-2">
                 {(accountsQ.data ?? []).map((a) => (
                   <label
