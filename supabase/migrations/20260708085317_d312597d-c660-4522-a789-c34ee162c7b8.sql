@@ -1,0 +1,2 @@
+ALTER TABLE public.action_runs DROP CONSTRAINT IF EXISTS action_runs_kind_check;
+ALTER TABLE public.action_runs ADD CONSTRAINT action_runs_kind_check CHECK (kind IN ('react','forward','vote','broadcast','reply','botflow'));
