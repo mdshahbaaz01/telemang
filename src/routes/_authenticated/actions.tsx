@@ -20,7 +20,7 @@ export const Route = createFileRoute("/_authenticated/actions")({
   validateSearch: (s: Record<string, unknown>) =>
     z
       .object({
-        tab: z.enum(["react", "forward", "vote", "broadcast", "reply"]).optional(),
+        tab: z.enum(["react", "forward", "vote", "broadcast", "comment", "reply"]).optional(),
       })
       .parse(s),
   component: () => (
@@ -30,7 +30,7 @@ export const Route = createFileRoute("/_authenticated/actions")({
   ),
 });
 
-type Tab = "react" | "forward" | "vote" | "broadcast" | "reply";
+type Tab = "react" | "forward" | "vote" | "broadcast" | "comment" | "reply";
 
 type BroadcastRow = { id: string; message: string; targets: string; accountId?: string; file?: File | null };
 type ReplyRow = { id: string; message: string; accountId?: string; file?: File | null };
@@ -171,7 +171,6 @@ function ActionsPageInner() {
   const [replyRows, setReplyRows] = useState<ReplyRow[]>([
     { id: "reply-row-1", message: "" },
   ]);
-  const [viaDiscussion, setViaDiscussion] = useState(true);
   const [broadcastMode, setBroadcastMode] = useState<SendMode>("per-account");
   const [replyMode, setReplyMode] = useState<SendMode>("per-account");
   const [broadcastSelectedIds, setBroadcastSelectedIds] = useState<string[]>([]);
@@ -407,7 +406,7 @@ function ActionsPageInner() {
       accountIds: [],
       minDelay,
       maxDelay,
-      op: { kind: "reply", source: src, viaDiscussion, rows: cleaned },
+      op: { kind: "reply", source: src, viaDiscussion: tab === "comment", rows: cleaned },
     });
   };
 
@@ -524,7 +523,7 @@ function ActionsPageInner() {
         {/* Main panel */}
         <section className="space-y-4">
           <div className="flex gap-2 border-b border-border">
-            {(["react", "forward", "vote", "broadcast", "reply"] as Tab[]).map((t) => (
+            {(["react", "forward", "vote", "broadcast", "comment", "reply"] as Tab[]).map((t) => (
               <button
                 key={t}
                 onClick={() => setTab(t)}
@@ -534,7 +533,7 @@ function ActionsPageInner() {
                     : "text-muted-foreground"
                 }`}
               >
-                {t === "react" ? "Reactions" : t === "forward" ? "Forwarder" : t === "vote" ? "Poll voter" : t === "broadcast" ? "Broadcast" : "Reply / Comment"}
+                {t === "react" ? "Reactions" : t === "forward" ? "Forwarder" : t === "vote" ? "Poll voter" : t === "broadcast" ? "Broadcast" : t === "comment" ? "Comment" : "Reply"}
               </button>
             ))}
           </div>
@@ -946,7 +945,7 @@ function ActionsPageInner() {
               </div>
             )}
 
-            {tab === "reply" && (
+            {(tab === "reply" || tab === "comment") && (
               <div className="space-y-3">
                 <div className="flex flex-wrap gap-2">
                   <button
@@ -964,14 +963,15 @@ function ActionsPageInner() {
                     Same message from all IDs
                   </button>
                 </div>
-                <label className="flex items-center gap-2 text-sm">
-                  <input type="checkbox" checked={viaDiscussion} onChange={(e) => setViaDiscussion(e.target.checked)} />
-                  Comment under a channel post (reply lands in the channel's linked discussion group)
-                </label>
+                <p className="text-xs text-muted-foreground">
+                  {tab === "comment"
+                    ? "Comment under a channel post — reply lands in the channel's linked discussion group."
+                    : "Reply directly to a message inside a group or chat."}
+                </p>
                 <p className="text-xs text-muted-foreground">
                   {replyMode === "per-account"
-                    ? "Each row: the chosen account sends this reply/comment. Rows run in parallel — different accounts can post different replies on the same post."
-                    : "Same reply text goes out from every selected account (round-robin if you add multiple rows)."}
+                    ? `Each row: the chosen account sends this ${tab}. Rows run in parallel — different accounts can post different ${tab}s on the same post.`
+                    : `Same ${tab} text goes out from every selected account (round-robin if you add multiple rows).`}
                 </p>
                 {replyMode === "all-ids" && (
                   <div className="rounded-md border border-border p-3 space-y-2">
@@ -1087,9 +1087,9 @@ function ActionsPageInner() {
                 <Button onClick={runBroadcast} disabled={running}>
                   <Play className="mr-1 h-4 w-4" /> Run broadcast ({rows.length} row{rows.length === 1 ? "" : "s"})
                 </Button>
-              ) : tab === "reply" ? (
+              ) : (tab === "reply" || tab === "comment") ? (
                 <Button onClick={runReply} disabled={running}>
-                  <Play className="mr-1 h-4 w-4" /> Send {replyRows.length} {viaDiscussion ? "comment" : "reply"}{replyRows.length === 1 ? "" : "s"}
+                  <Play className="mr-1 h-4 w-4" /> Send {replyRows.length} {tab}{replyRows.length === 1 ? "" : "s"}
                 </Button>
               ) : (
                 <Button
