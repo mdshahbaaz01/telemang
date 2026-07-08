@@ -149,8 +149,23 @@ function ProofPage() {
                   </SelectContent>
                 </Select>
               </div>
+              <div>
+                <Label>Parallel accounts</Label>
+                <Input
+                  type="number"
+                  min={1}
+                  max={20}
+                  value={parallel}
+                  onChange={(e) => setParallel(Number(e.target.value) || 1)}
+                />
+                <p className="mt-1 text-xs text-muted-foreground">
+                  How many accounts run at the same time (1–20). Higher = faster, more Telegram rate-limit risk.
+                </p>
+              </div>
             </div>
           </section>
+
+          <ProofPreview format={format} channelLink={channelLink} />
 
           <section className="rounded-lg border border-border bg-card p-4 md:p-6">
             <h2 className="mb-4 text-lg font-semibold">Accounts</h2>
