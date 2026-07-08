@@ -1,4 +1,4 @@
-import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
+import { createFileRoute, Link } from "@tanstack/react-router";
 import { useServerFn } from "@tanstack/react-start";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useState } from "react";
@@ -44,7 +44,6 @@ export const Route = createFileRoute("/_authenticated/dashboard")({
 const NAV: string[] = [];
 
 function Dashboard() {
-  const nav = useNavigate();
   const qc = useQueryClient();
   const listAcc = useServerFn(listAccounts);
   const listGroupsFn = useServerFn(listTaskGroups);
