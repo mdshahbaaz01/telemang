@@ -438,7 +438,137 @@ function ActionsPageInner() {
     });
   };
 
+  const buildBroadcastCleaned = async (): Promise<
+    { accountId: string; message: string; targets: string[]; attachment?: { path: string; filename: string; mimeType?: string } }[] | null
+  > => {
+    const baseRows = rows
+      .map((r) => ({
+        accountId: r.accountId ?? "",
+        message: r.message.trim(),
+        targets: r.targets
+          .split(/\r?\n|,/)
+          .map((s) => s.trim())
+          .filter(Boolean),
+        file: r.file ?? null,
+      }))
+      .filter((r) => (r.message || r.file) && r.targets.length);
+    if (!baseRows.length) {
+      toast.error("Add at least one row with message/file and targets");
+      return null;
+    }
+    try {
+      const uploaded = await Promise.all(
+        baseRows.map(async (r) => (r.file ? await uploadAttachment(r.file) : undefined)),
+      );
+      const withAtt = baseRows.map((r, i) => ({
+        accountId: r.accountId,
+        message: r.message,
+        targets: r.targets,
+        attachment: uploaded[i],
+      }));
+      if (broadcastMode === "per-account") {
+        const c = withAtt.filter((r) => r.accountId);
+        if (!c.length) {
+          toast.error("Pick an account for each row");
+          return null;
+        }
+        return c;
+      }
+      const targetIds = broadcastSelectedIds.length ? broadcastSelectedIds : allAccountIds;
+      if (!targetIds.length) {
+        toast.error("Select at least one account");
+        return null;
+      }
+      return targetIds.flatMap((accountId) =>
+        withAtt.map((r) => ({ accountId, message: r.message, targets: r.targets, attachment: r.attachment })),
+      );
+    } catch (e) {
+      toast.error((e as Error).message);
+      return null;
+    }
+  };
+
   const runBroadcast = async () => {
+    if (allAccountIds.length === 0) {
+      toast.error("No accounts available");
+      return;
+    }
+    const cleaned = await buildBroadcastCleaned();
+    if (!cleaned) return;
+
+    const { data: sess } = await supabase.auth.getSession();
+    const token = sess.session?.access_token;
+    if (!token) return toast.error("Not signed in");
+
+    setLogs([]);
+    setTotals(null);
+    setRunning(true);
+    const ac = new AbortController();
+    abortRef.current = ac;
+    try {
+      const res = await fetch("/api/public/actions-stream", {
+        method: "POST",
+        headers: { "content-type": "application/json", authorization: `Bearer ${token}` },
+        body: JSON.stringify({
+          accountIds: [],
+          minDelay,
+          maxDelay,
+          op: { kind: "broadcast", rows: cleaned },
+        }),
+        signal: ac.signal,
+      });
+      await readStream(res);
+    } catch (e) {
+      if ((e as Error).name !== "AbortError") {
+        const message = (e as Error).message;
+        addLog({ level: "error", message });
+        toast.error(message);
+      }
+    } finally {
+      setRunning(false);
+      abortRef.current = null;
+    }
+  };
+
+  const scheduleBroadcast = async () => {
+    if (!scheduledAt) {
+      toast.error("Pick a schedule time (with seconds)");
+      return;
+    }
+    // datetime-local returns local wall-clock without a timezone — convert to ISO.
+    const when = new Date(scheduledAt);
+    if (Number.isNaN(when.getTime())) return toast.error("Invalid schedule time");
+    if (when.getTime() < Date.now() + 5_000) {
+      return toast.error("Schedule at least 5 seconds in the future");
+    }
+    if (allAccountIds.length === 0) {
+      toast.error("No accounts available");
+      return;
+    }
+    const cleaned = await buildBroadcastCleaned();
+    if (!cleaned) return;
+    setScheduling(true);
+    try {
+      const res = await createSchedFn({
+        data: {
+          scheduledAt: when.toISOString(),
+          rows: cleaned,
+          minDelay,
+          maxDelay,
+        },
+      });
+      toast.success(`Scheduled for ${when.toLocaleString()} (fires within ±1s)`);
+      setScheduledAt("");
+      await qc.invalidateQueries({ queryKey: ["scheduled-broadcasts"] });
+      return res;
+    } catch (e) {
+      toast.error((e as Error).message);
+    } finally {
+      setScheduling(false);
+    }
+  };
+
+  const _oldRunBroadcastStub = async () => {
     if (allAccountIds.length === 0) {
       toast.error("No accounts available");
       return;
