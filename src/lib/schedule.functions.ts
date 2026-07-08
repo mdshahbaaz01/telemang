@@ -164,3 +164,74 @@ export const cancelScheduledBroadcast = createServerFn({ method: "POST" })
     if (error) throw new Error(error.message);
     return { ok: true };
   });
+
+export const getScheduleReport = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((d: unknown) => z.object({ id: z.string().uuid() }).parse(d))
+  .handler(async ({ data, context }) => {
+    const { data: schedule, error: sErr } = await context.supabase
+      .from("scheduled_broadcasts")
+      .select("id, scheduled_at, dispatched_at, completed_at, status, label, payload")
+      .eq("id", data.id)
+      .maybeSingle();
+    if (sErr) throw new Error(sErr.message);
+    if (!schedule) throw new Error("Schedule not found");
+
+    const { data: items, error: iErr } = await context.supabase
+      .from("scheduled_broadcast_items")
+      .select("id, account_id, target, scheduled_for, processed_at, status, error, attempt_count, kind")
+      .eq("schedule_id", data.id)
+      .order("scheduled_for", { ascending: true })
+      .limit(1000);
+    if (iErr) throw new Error(iErr.message);
+
+    const accountIds = Array.from(new Set((items ?? []).map((i) => i.account_id))).filter(Boolean);
+    const accountMap = new Map<string, { label: string; phone: string | null }>();
+    if (accountIds.length) {
+      const { data: accs } = await context.supabase
+        .from("telegram_accounts")
+        .select("id, first_name, last_name, username, phone")
+        .in("id", accountIds);
+      for (const a of accs ?? []) {
+        const label =
+          [a.first_name, a.last_name].filter(Boolean).join(" ").trim() ||
+          (a.username ? `@${a.username}` : null) ||
+          a.phone ||
+          a.id;
+        accountMap.set(a.id as string, { label, phone: (a.phone as string | null) ?? null });
+      }
+    }
+
+    return {
+      schedule: {
+        id: schedule.id as string,
+        scheduledAt: schedule.scheduled_at as string,
+        dispatchedAt: (schedule.dispatched_at as string | null) ?? null,
+        completedAt: (schedule.completed_at as string | null) ?? null,
+        status: schedule.status as string,
+        label: (schedule.label as string | null) ?? null,
+      },
+      items: (items ?? []).map((i) => {
+        const acc = accountMap.get(i.account_id as string);
+        const scheduledFor = i.scheduled_for as string;
+        const processedAt = (i.processed_at as string | null) ?? null;
+        const deltaMs = processedAt
+          ? new Date(processedAt).getTime() - new Date(scheduledFor).getTime()
+          : null;
+        return {
+          id: i.id as string,
+          accountId: i.account_id as string,
+          accountLabel: acc?.label ?? (i.account_id as string),
+          accountPhone: acc?.phone ?? null,
+          target: (i.target as string | null) ?? null,
+          kind: i.kind as string,
+          scheduledFor,
+          processedAt,
+          deltaMs,
+          status: i.status as string,
+          error: (i.error as string | null) ?? null,
+          attemptCount: Number(i.attempt_count ?? 0),
+        };
+      }),
+    };
+  });

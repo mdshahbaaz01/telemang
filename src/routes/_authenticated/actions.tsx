@@ -11,6 +11,7 @@ import {
   createScheduledBroadcast,
   listScheduledBroadcasts,
   cancelScheduledBroadcast,
+  getScheduleReport,
 } from "@/lib/schedule.functions";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -236,6 +237,15 @@ function ActionsPageInner() {
   const listSchedFn = useServerFn(listScheduledBroadcasts);
   const createSchedFn = useServerFn(createScheduledBroadcast);
   const cancelSchedFn = useServerFn(cancelScheduledBroadcast);
+  const reportSchedFn = useServerFn(getScheduleReport);
+  const [reportOpen, setReportOpen] = useState(false);
+  const [reportId, setReportId] = useState<string | null>(null);
+  const reportQ = useQuery({
+    queryKey: ["schedule-report", reportId],
+    queryFn: () => reportSchedFn({ data: { id: reportId! } }),
+    enabled: !!reportId && reportOpen,
+    refetchInterval: reportOpen ? 3000 : false,
+  });
   const schedulesQ = useQuery({
     queryKey: ["scheduled-broadcasts"],
     queryFn: () => listSchedFn(),
@@ -1573,10 +1583,20 @@ function ActionsPageInner() {
                             {s.error}
                           </span>
                         )}
+                        <button
+                          type="button"
+                          className="ml-auto text-xs text-primary underline"
+                          onClick={() => {
+                            setReportId(s.id);
+                            setReportOpen(true);
+                          }}
+                        >
+                          Report
+                        </button>
                         {s.status === "pending" && (
                           <button
                             type="button"
-                            className="ml-auto text-xs text-destructive underline"
+                            className="text-xs text-destructive underline"
                             onClick={async () => {
                               try {
                                 await cancelSchedFn({ data: { id: s.id } });
@@ -1597,6 +1617,125 @@ function ActionsPageInner() {
               )}
             </div>
           )}
+
+          <Dialog open={reportOpen} onOpenChange={(o) => { setReportOpen(o); if (!o) setReportId(null); }}>
+            <DialogContent className="max-w-3xl">
+              <DialogHeader>
+                <DialogTitle>Broadcast timing report (IST)</DialogTitle>
+              </DialogHeader>
+              {reportQ.isLoading || !reportQ.data ? (
+                <p className="text-sm text-muted-foreground">Loading…</p>
+              ) : (
+                <div className="space-y-3">
+                  <div className="rounded border border-border p-3 text-xs space-y-1">
+                    <div>
+                      <span className="text-muted-foreground">Scheduled: </span>
+                      <span className="font-mono">{formatIst(new Date(reportQ.data.schedule.scheduledAt))}</span>
+                    </div>
+                    {reportQ.data.schedule.dispatchedAt && (
+                      <div>
+                        <span className="text-muted-foreground">Dispatched (cron picked up): </span>
+                        <span className="font-mono">{formatIst(new Date(reportQ.data.schedule.dispatchedAt))}</span>
+                        <span className="ml-2 text-muted-foreground">
+                          ({(new Date(reportQ.data.schedule.dispatchedAt).getTime() - new Date(reportQ.data.schedule.scheduledAt).getTime()) / 1000}s)
+                        </span>
+                      </div>
+                    )}
+                    {reportQ.data.schedule.completedAt && (
+                      <div>
+                        <span className="text-muted-foreground">Completed: </span>
+                        <span className="font-mono">{formatIst(new Date(reportQ.data.schedule.completedAt))}</span>
+                      </div>
+                    )}
+                    <div>
+                      <span className="text-muted-foreground">Status: </span>
+                      <span className="uppercase tracking-wide">{reportQ.data.schedule.status}</span>
+                    </div>
+                  </div>
+                  <div className="max-h-[420px] overflow-auto rounded border border-border">
+                    <table className="w-full text-xs">
+                      <thead className="sticky top-0 bg-muted">
+                        <tr className="text-left">
+                          <th className="px-2 py-1.5">Account</th>
+                          <th className="px-2 py-1.5">Target</th>
+                          <th className="px-2 py-1.5">Scheduled (IST)</th>
+                          <th className="px-2 py-1.5">Sent (IST)</th>
+                          <th className="px-2 py-1.5">Δ</th>
+                          <th className="px-2 py-1.5">Status</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {reportQ.data.items.map((it) => (
+                          <tr key={it.id} className="border-t border-border/50 align-top">
+                            <td className="px-2 py-1.5">
+                              <div className="font-medium">{it.accountLabel}</div>
+                              {it.accountPhone && <div className="text-muted-foreground">{it.accountPhone}</div>}
+                            </td>
+                            <td className="px-2 py-1.5 font-mono max-w-[16ch] truncate" title={it.target ?? ""}>
+                              {it.target ?? "—"}
+                            </td>
+                            <td className="px-2 py-1.5 font-mono">{formatIst(new Date(it.scheduledFor))}</td>
+                            <td className="px-2 py-1.5 font-mono">
+                              {it.processedAt ? formatIst(new Date(it.processedAt)) : "—"}
+                            </td>
+                            <td className="px-2 py-1.5 font-mono">
+                              {it.deltaMs === null ? "—" : `${(it.deltaMs / 1000).toFixed(2)}s`}
+                            </td>
+                            <td className="px-2 py-1.5">
+                              <span
+                                className={
+                                  it.status === "done"
+                                    ? "text-emerald-500"
+                                    : it.status === "failed"
+                                    ? "text-destructive"
+                                    : it.status === "processing"
+                                    ? "text-yellow-500"
+                                    : "text-muted-foreground"
+                                }
+                              >
+                                {it.status}
+                              </span>
+                              {it.error && (
+                                <div className="text-destructive text-[10px] mt-0.5 max-w-[30ch]" title={it.error}>
+                                  {it.error}
+                                </div>
+                              )}
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                  <div className="flex justify-end">
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      onClick={() => {
+                        const rows = reportQ.data!.items.map((it) =>
+                          [
+                            it.accountLabel,
+                            it.accountPhone ?? "",
+                            it.target ?? "",
+                            formatIst(new Date(it.scheduledFor)),
+                            it.processedAt ? formatIst(new Date(it.processedAt)) : "",
+                            it.deltaMs === null ? "" : `${(it.deltaMs / 1000).toFixed(2)}s`,
+                            it.status,
+                            (it.error ?? "").replace(/\s+/g, " "),
+                          ].join("\t"),
+                        );
+                        const header = ["Account", "Phone", "Target", "Scheduled (IST)", "Sent (IST)", "Delta", "Status", "Error"].join("\t");
+                        void navigator.clipboard.writeText([header, ...rows].join("\n"));
+                        toast.success("Report copied");
+                      }}
+                    >
+                      <Copy className="mr-2 h-3.5 w-3.5" /> Copy report
+                    </Button>
+                  </div>
+                </div>
+              )}
+            </DialogContent>
+          </Dialog>
 
           {errorLogs.length > 0 && (
             <div className="rounded-lg border border-destructive/40 bg-destructive/5 p-4">
