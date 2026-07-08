@@ -29,8 +29,9 @@ export const Route = createFileRoute("/_authenticated/actions")({
 
 type Tab = "react" | "forward" | "vote" | "broadcast" | "reply";
 
-type BroadcastRow = { id: string; message: string; targets: string };
-type ReplyRow = { id: string; message: string };
+type BroadcastRow = { id: string; message: string; targets: string; accountId?: string };
+type ReplyRow = { id: string; message: string; accountId?: string };
+type SendMode = "per-account" | "all-ids";
 
 type LogEntry = {
   accountId?: string;
@@ -107,6 +108,8 @@ function ActionsPageInner() {
     { id: crypto.randomUUID(), message: "" },
   ]);
   const [viaDiscussion, setViaDiscussion] = useState(true);
+  const [broadcastMode, setBroadcastMode] = useState<SendMode>("per-account");
+  const [replyMode, setReplyMode] = useState<SendMode>("per-account");
 
   const [logs, setLogs] = useState<LogEntry[]>([]);
   const [running, setRunning] = useState(false);
@@ -300,13 +303,20 @@ function ActionsPageInner() {
     const src = parseMessageLink(source);
     if (!src) return toast.error("Enter a valid message link");
     if (allAccountIds.length === 0) return toast.error("No accounts available");
-    const messages = replyRows.map((r) => r.message.trim()).filter(Boolean);
-    if (!messages.length) return toast.error("Add at least one message");
-    // Expand: each account sends each message (round-robin messages across accounts).
-    const cleaned = allAccountIds.flatMap((accountId, i) => {
-      const message = messages[i % messages.length];
-      return [{ accountId, message }];
-    });
+    let cleaned: { accountId: string; message: string }[] = [];
+    if (replyMode === "per-account") {
+      cleaned = replyRows
+        .map((r) => ({ accountId: r.accountId ?? "", message: r.message.trim() }))
+        .filter((r) => r.accountId && r.message);
+      if (!cleaned.length) return toast.error("Pick an account and message for each row");
+    } else {
+      const messages = replyRows.map((r) => r.message.trim()).filter(Boolean);
+      if (!messages.length) return toast.error("Add at least one message");
+      // Same message(s) across all IDs — round-robin messages across accounts.
+      cleaned = allAccountIds.flatMap((accountId, i) => [
+        { accountId, message: messages[i % messages.length] },
+      ]);
+    }
     await streamRun({
       accountIds: [],
       minDelay,
@@ -322,9 +332,10 @@ function ActionsPageInner() {
     }
     const baseRows = rows
       .map((r) => ({
+        accountId: r.accountId ?? "",
         message: r.message.trim(),
         targets: r.targets
-          .split(/\r?\n|,/) 
+          .split(/\r?\n|,/)
           .map((s) => s.trim())
           .filter(Boolean),
       }))
@@ -333,10 +344,16 @@ function ActionsPageInner() {
       toast.error("Add at least one row with message and targets");
       return;
     }
-    // Expand: each account runs each row in parallel.
-    const cleaned = allAccountIds.flatMap((accountId) =>
-      baseRows.map((r) => ({ accountId, message: r.message, targets: r.targets })),
-    );
+    let cleaned: { accountId: string; message: string; targets: string[] }[] = [];
+    if (broadcastMode === "per-account") {
+      cleaned = baseRows.filter((r) => r.accountId);
+      if (!cleaned.length) return toast.error("Pick an account for each row");
+    } else {
+      // Same message across all IDs — each account runs each row in parallel.
+      cleaned = allAccountIds.flatMap((accountId) =>
+        baseRows.map((r) => ({ accountId, message: r.message, targets: r.targets })),
+      );
+    }
     const { data: sess } = await supabase.auth.getSession();
     const token = sess.session?.access_token;
     if (!token) return toast.error("Not signed in");
