@@ -58,7 +58,7 @@ function ProofPreview({
       format === "auto" ? (isPrivateLike ? "chat_list" : "channel_view") : format;
     return effective === "chat_list"
       ? buildChatListSvg(info, SAMPLE_OTHERS)
-      : buildChannelViewSvg(info, SAMPLE_MESSAGES);
+      : buildChannelViewSvg(info, SAMPLE_MESSAGES, { joinedAt: new Date(), deviceTime: new Date() });
   }, [format, channelLink]);
 
   const label =
