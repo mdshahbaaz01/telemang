@@ -638,23 +638,6 @@ function ActionsPageInner() {
                       </button>
                     </div>
                     <div>
-                      <Label>Account</Label>
-                      <select
-                        className="mt-1 w-full rounded-md border border-input bg-background px-2 py-2 text-sm"
-                        value={row.accountId}
-                        onChange={(e) =>
-                          setReplyRows((rs) => rs.map((r) => (r.id === row.id ? { ...r, accountId: e.target.value } : r)))
-                        }
-                      >
-                        <option value="">— pick account —</option>
-                        {accountList.map((a) => (
-                          <option key={a.id} value={a.id}>
-                            {a.first_name || a.username || a.phone}
-                          </option>
-                        ))}
-                      </select>
-                    </div>
-                    <div>
                       <Label>Message</Label>
                       <Textarea
                         rows={2}
@@ -671,19 +654,9 @@ function ActionsPageInner() {
                   <Button
                     type="button"
                     variant="outline"
-                    onClick={() => setReplyRows((rs) => [...rs, { id: crypto.randomUUID(), accountId: "", message: "" }])}
+                    onClick={() => setReplyRows((rs) => [...rs, { id: crypto.randomUUID(), message: "" }])}
                   >
                     + Add row
-                  </Button>
-                  <Button
-                    type="button"
-                    variant="outline"
-                    onClick={() => {
-                      if (selected.size === 0) return toast.error("Select accounts on the left first");
-                      setReplyRows([...selected].map((id) => ({ id: crypto.randomUUID(), accountId: id, message: "" })));
-                    }}
-                  >
-                    Fill rows from selected accounts
                   </Button>
                 </div>
                 <DelayFields minDelay={minDelay} maxDelay={maxDelay} setMin={setMinDelay} setMax={setMaxDelay} />
@@ -700,9 +673,9 @@ function ActionsPageInner() {
                   <Play className="mr-1 h-4 w-4" /> Send {replyRows.length} {viaDiscussion ? "comment" : "reply"}{replyRows.length === 1 ? "" : "s"}
                 </Button>
               ) : (
-                <Button onClick={run} disabled={running || selected.size === 0}>
+                <Button onClick={run} disabled={running || allAccountIds.length === 0}>
                   <Play className="mr-1 h-4 w-4" />
-                  Run on {selected.size} account{selected.size === 1 ? "" : "s"}
+                  Run on {allAccountIds.length} account{allAccountIds.length === 1 ? "" : "s"}
                 </Button>
               )}
               <Button variant="destructive" onClick={stop} disabled={!running}>
