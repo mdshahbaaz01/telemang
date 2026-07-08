@@ -361,6 +361,8 @@ function EditGroupDialog({
   const [minDelay, setMinDelay] = useState("1");
   const [maxDelay, setMaxDelay] = useState("2");
   const [targets, setTargets] = useState<string[]>([]);
+  const [editingTarget, setEditingTarget] = useState<string | null>(null);
+  const [editingValue, setEditingValue] = useState("");
   const [newLinks, setNewLinks] = useState("");
   const [accountIds, setAccountIds] = useState<Set<string>>(new Set());
   const [busy, setBusy] = useState(false);
@@ -378,6 +380,34 @@ function EditGroupDialog({
 
   const removeTarget = (t: string) =>
     setTargets((prev) => prev.filter((x) => x !== t));
+
+  const startEditTarget = (t: string) => {
+    setEditingTarget(t);
+    setEditingValue(t);
+  };
+  const cancelEditTarget = () => {
+    setEditingTarget(null);
+    setEditingValue("");
+  };
+  const commitEditTarget = () => {
+    if (editingTarget == null) return;
+    const cleaned = editingValue
+      .trim()
+      .replace(/^https?:\/\//i, "")
+      .replace(/^t\.me\//i, "")
+      .replace(/^@/, "")
+      .replace(/\/+$/, "");
+    if (!cleaned) {
+      cancelEditTarget();
+      return;
+    }
+    setTargets((prev) => {
+      const next = prev.map((x) => (x === editingTarget ? cleaned : x));
+      // de-dupe while preserving order
+      return Array.from(new Set(next));
+    });
+    cancelEditTarget();
+  };
 
   const addNewLinks = () => {
     const cleaned = newLinks
@@ -477,22 +507,70 @@ function EditGroupDialog({
                     No links.
                   </p>
                 )}
-                {targets.map((t) => (
-                  <div
-                    key={t}
-                    className="flex items-center justify-between rounded px-2 py-1.5 text-sm hover:bg-accent"
-                  >
-                    <span className="truncate">t.me/{t}</span>
-                    <button
-                      type="button"
-                      onClick={() => removeTarget(t)}
-                      className="text-muted-foreground hover:text-destructive"
-                      aria-label="Remove"
+                {targets.map((t) => {
+                  const isEditing = editingTarget === t;
+                  return (
+                    <div
+                      key={t}
+                      className="flex items-center gap-2 rounded px-2 py-1.5 text-sm hover:bg-accent"
                     >
-                      <Trash2 className="h-3.5 w-3.5" />
-                    </button>
-                  </div>
-                ))}
+                      {isEditing ? (
+                        <>
+                          <span className="text-muted-foreground">t.me/</span>
+                          <Input
+                            autoFocus
+                            value={editingValue}
+                            onChange={(e) => setEditingValue(e.target.value)}
+                            onKeyDown={(e) => {
+                              if (e.key === "Enter") {
+                                e.preventDefault();
+                                commitEditTarget();
+                              } else if (e.key === "Escape") {
+                                e.preventDefault();
+                                cancelEditTarget();
+                              }
+                            }}
+                            className="h-7 flex-1 text-sm"
+                          />
+                          <button
+                            type="button"
+                            onClick={commitEditTarget}
+                            className="rounded border border-border px-2 py-0.5 text-xs hover:bg-accent"
+                          >
+                            Save
+                          </button>
+                          <button
+                            type="button"
+                            onClick={cancelEditTarget}
+                            className="rounded border border-border px-2 py-0.5 text-xs text-muted-foreground hover:bg-accent"
+                          >
+                            Cancel
+                          </button>
+                        </>
+                      ) : (
+                        <>
+                          <span className="flex-1 truncate">t.me/{t}</span>
+                          <button
+                            type="button"
+                            onClick={() => startEditTarget(t)}
+                            className="text-muted-foreground hover:text-primary"
+                            aria-label="Edit"
+                          >
+                            <Pencil className="h-3.5 w-3.5" />
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => removeTarget(t)}
+                            className="text-muted-foreground hover:text-destructive"
+                            aria-label="Remove"
+                          >
+                            <Trash2 className="h-3.5 w-3.5" />
+                          </button>
+                        </>
+                      )}
+                    </div>
+                  );
+                })}
               </div>
               <Textarea
                 className="mt-2"
