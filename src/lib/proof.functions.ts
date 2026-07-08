@@ -151,6 +151,7 @@ export const runProofTask = createServerFn({ method: "POST" })
         let title = cleaned;
         let username: string | null = null;
         let subscribers = 0;
+        let verified = false;
         try {
           if (inviteHash) {
             const invite: any = await client.invoke(
@@ -161,12 +162,14 @@ export const runProofTask = createServerFn({ method: "POST" })
               title = chat.title ?? title;
               username = chat.username ?? null;
               subscribers = Number(chat.participantsCount ?? 0);
+              verified = Boolean(chat.verified);
               entity = chat;
             }
           } else {
             entity = await client.getEntity(cleaned);
             title = (entity?.title as string) ?? cleaned;
             username = (entity?.username as string) ?? null;
+            verified = Boolean((entity as any)?.verified);
             try {
               const full: any = await client.invoke(
                 new Api.channels.GetFullChannel({ channel: entity }),
@@ -179,6 +182,26 @@ export const runProofTask = createServerFn({ method: "POST" })
         } catch (e) {
           // fallthrough with defaults
         }
+
+        // Try to download channel profile photo (small variant)
+        let avatarBase64: string | null = null;
+        try {
+          if (entity) {
+            const buf: any = await client.downloadProfilePhoto(entity, { isBig: false });
+            if (buf && buf.length) {
+              avatarBase64 = Buffer.from(buf).toString("base64");
+            }
+          }
+        } catch {}
+
+        // Joining account display name (for caption)
+        let accountName = "";
+        try {
+          const me: any = await client.getMe();
+          accountName = [me?.firstName, me?.lastName].filter(Boolean).join(" ") ||
+            (me?.username ? `@${me.username}` : "") ||
+            String(me?.phone ?? "");
+        } catch {}
 
         // Determine format
         const fmt =
@@ -214,28 +237,82 @@ export const runProofTask = createServerFn({ method: "POST" })
           } catch {}
           svg = buildChatListSvg({ title, username, subscribers }, others);
         } else {
-          // Fetch recent messages to render as bubbles
-          const msgs: Array<{ text: string; time: string; views?: number }> = [];
+          // Fetch recent messages with media types + forwards + views
+          const msgs: Array<{
+            text: string;
+            time: string;
+            views?: number;
+            forwardedFrom?: string | null;
+            mediaKind?: "photo" | "video" | "document" | "poll" | "sticker" | "audio" | null;
+            mediaLabel?: string | null;
+          }> = [];
           try {
             if (entity) {
-              const recent: any[] = await client.getMessages(entity, { limit: 6 });
+              const recent: any[] = await client.getMessages(entity, { limit: 8 });
               for (const m of recent.slice().reverse()) {
-                const text = (m?.message as string) || (m?.action ? "" : "");
-                if (!text) continue;
+                const text = (m?.message as string) || "";
+                if (m?.action) continue; // skip service messages
                 const dt = m?.date ? new Date(m.date * 1000) : new Date();
                 const h = dt.getHours();
                 const mm = dt.getMinutes().toString().padStart(2, "0");
                 const hh = h === 0 ? 12 : h > 12 ? h - 12 : h;
                 const ap = h >= 12 ? "PM" : "AM";
+
+                // media detection
+                let mediaKind: any = null;
+                let mediaLabel: string | null = null;
+                const media = m?.media;
+                if (media) {
+                  const cn = media.className || "";
+                  if (cn.includes("Photo")) mediaKind = "photo";
+                  else if (cn.includes("Poll")) mediaKind = "poll";
+                  else if (cn.includes("Document")) {
+                    const attrs = media?.document?.attributes || [];
+                    const isVideo = attrs.some((a: any) => a.className?.includes("Video"));
+                    const isAudio = attrs.some((a: any) => a.className?.includes("Audio"));
+                    const isSticker = attrs.some((a: any) => a.className?.includes("Sticker"));
+                    const fnameAttr = attrs.find((a: any) => a.className?.includes("Filename"));
+                    if (isSticker) mediaKind = "sticker";
+                    else if (isVideo) mediaKind = "video";
+                    else if (isAudio) mediaKind = "audio";
+                    else {
+                      mediaKind = "document";
+                      mediaLabel = fnameAttr?.fileName || null;
+                    }
+                  }
+                }
+
+                let forwardedFrom: string | null = null;
+                const fwd = m?.fwdFrom;
+                if (fwd) {
+                  forwardedFrom = fwd.fromName || null;
+                  // if channel id present, try resolving via cached chats
+                }
+
+                if (!text && !mediaKind) continue;
                 msgs.push({
                   text,
                   time: `${hh}:${mm} ${ap}`,
                   views: typeof m?.views === "number" ? m.views : undefined,
+                  forwardedFrom,
+                  mediaKind,
+                  mediaLabel,
                 });
               }
             }
           } catch {}
-          svg = buildChannelViewSvg({ title, username, subscribers }, msgs);
+          svg = buildChannelViewSvg(
+            {
+              title,
+              username,
+              subscribers,
+              verified,
+              avatarBase64,
+              avatarMime: "image/jpeg",
+            },
+            msgs,
+            { joinedAt: new Date(), deviceTime: new Date() },
+          );
         }
 
         const png = await renderSvgToPng(svg);
@@ -243,7 +320,8 @@ export const runProofTask = createServerFn({ method: "POST" })
         // Send screenshot via MTProto to target
         const cleanedTarget = cleanTarget(task.target);
         const dest = await client.getEntity(cleanedTarget);
-        const caption = task.caption || `You joined this channel · ${title}`;
+        const captionBase = task.caption || `You joined this channel · ${title}`;
+        const caption = accountName ? `${captionBase}\n(by ${accountName})` : captionBase;
         await client.sendFile(dest, {
           file: new CustomFile("proof.png", png.length, "proof.png", png),
           caption,

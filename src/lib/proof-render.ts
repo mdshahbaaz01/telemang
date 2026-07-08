@@ -24,13 +24,19 @@ function avatarColor(seed: string): string {
   return colors[h % colors.length];
 }
 
-function nowTime(): string {
-  const d = new Date();
+function fmtTime(d: Date = new Date()): string {
   const h = d.getHours();
   const m = d.getMinutes().toString().padStart(2, "0");
   const hh = h === 0 ? 12 : h > 12 ? h - 12 : h;
   const ap = h >= 12 ? "PM" : "AM";
   return `${hh}:${m} ${ap}`;
+}
+const nowTime = () => fmtTime();
+
+function fmtViews(n: number): string {
+  if (n >= 1_000_000) return (n / 1_000_000).toFixed(1).replace(/\.0$/, "") + "M";
+  if (n >= 1_000) return (n / 1_000).toFixed(1).replace(/\.0$/, "") + "K";
+  return String(n);
 }
 
 function formatSubs(n: number): string {
@@ -43,6 +49,10 @@ export type ChannelInfo = {
   title: string;
   username?: string | null;
   subscribers: number;
+  verified?: boolean;
+  /** Base64-encoded PNG/JPEG of the channel avatar, no data-URI prefix. */
+  avatarBase64?: string | null;
+  avatarMime?: string;
 };
 
 export type OtherDialog = {
@@ -56,6 +66,9 @@ export type ChannelMessage = {
   text: string;
   time: string;
   views?: number;
+  forwardedFrom?: string | null;
+  mediaKind?: "photo" | "video" | "document" | "poll" | "sticker" | "audio" | null;
+  mediaLabel?: string | null;
 };
 
 function wrapText(text: string, maxChars: number, maxLines: number): string[] {
@@ -78,67 +91,171 @@ function wrapText(text: string, maxChars: number, maxLines: number): string[] {
   return lines;
 }
 
-export function buildChannelViewSvg(info: ChannelInfo, messages: ChannelMessage[] = []): string {
+function mediaIconLabel(kind: NonNullable<ChannelMessage["mediaKind"]>, label?: string | null): string {
+  const base: Record<string, string> = {
+    photo: "🖼  Photo",
+    video: "🎬  Video",
+    document: "📎  Document",
+    poll: "📊  Poll",
+    sticker: "🎨  Sticker",
+    audio: "🎧  Voice message",
+  };
+  return label ? `${base[kind].split("  ")[0]}  ${label}` : base[kind];
+}
+
+export function buildChannelViewSvg(
+  info: ChannelInfo,
+  messages: ChannelMessage[] = [],
+  opts: { joinedAt?: Date; deviceTime?: Date } = {},
+): string {
   const W = 720;
-  const H = 1280;
+  const H = 1480;
   const title = esc(info.title);
   const subs = esc(formatSubs(info.subscribers));
   const avColor = avatarColor(info.title);
   const av = esc(initials(info.title));
-  const time = esc(nowTime());
+  const deviceTime = esc(fmtTime(opts.deviceTime));
+  const joinedTime = esc(fmtTime(opts.joinedAt));
 
-  // Message bubbles rendered from bottom-up, above the "You joined" pill
-  const bubbleAreaBottom = H - 300; // above joined pill (which sits at H - 260)
-  const bubbleAreaTop = 330;
-  const bubbleMaxW = W - 80;
+  // Layout regions
+  const STATUS_H = 56;
+  const HEADER_TOP = STATUS_H;
+  const HEADER_H = 120;
+  const HEADER_BOTTOM = HEADER_TOP + HEADER_H;
+  const FOOTER_H = 110;
+  const HOME_H = 40;
+  const CHAT_TOP = HEADER_BOTTOM + 20;
+  const CHAT_BOTTOM = H - FOOTER_H - HOME_H - 10;
+
+  // Header (avatar left, title + subs stacked)
+  const avR = 42;
+  const avCx = 132;
+  const avCy = HEADER_TOP + HEADER_H / 2;
+  const headerAvatar = info.avatarBase64
+    ? `<defs><clipPath id="avClip"><circle cx="${avCx}" cy="${avCy}" r="${avR}"/></clipPath></defs>
+       <image href="data:${info.avatarMime || "image/jpeg"};base64,${info.avatarBase64}" x="${avCx - avR}" y="${avCy - avR}" width="${avR * 2}" height="${avR * 2}" preserveAspectRatio="xMidYMid slice" clip-path="url(#avClip)"/>`
+    : `<circle cx="${avCx}" cy="${avCy}" r="${avR}" fill="${avColor}"/>
+       <text x="${avCx}" y="${avCy + 12}" text-anchor="middle" font-family="Helvetica, Arial, sans-serif" font-size="32" font-weight="600" fill="#ffffff">${av}</text>`;
+
+  const titleX = avCx + avR + 20;
+  const verifiedBadge = info.verified
+    ? `<g transform="translate(${titleX + Math.min(title.length * 15, 340)}, ${avCy - 18})">
+         <circle cx="14" cy="14" r="14" fill="#5eb0ef"/>
+         <text x="14" y="20" text-anchor="middle" font-family="Helvetica, Arial, sans-serif" font-size="18" font-weight="700" fill="#ffffff">✓</text>
+       </g>`
+    : "";
+
+  // Messages stacked top-down inside chat area
+  const bubbleLeft = 24;
+  const bubbleMaxW = W - bubbleLeft * 2;
   const lineH = 30;
-  const padX = 22;
-  const padY = 18;
-  const gap = 12;
-  const bubbles: string[] = [];
-  let y = bubbleAreaBottom;
+  const padX = 20;
+  const padY = 16;
+  const gap = 14;
+  const bubbleParts: string[] = [];
+  let y = CHAT_TOP;
+  const joinReserve = 90; // room for join pill
+
   const msgs = messages.slice(-6);
-  for (let i = msgs.length - 1; i >= 0; i--) {
+  for (let i = 0; i < msgs.length; i++) {
     const m = msgs[i];
-    const lines = wrapText(m.text || "…", 40, 4);
-    const bh = padY * 2 + lines.length * lineH + 26; // extra for footer time
-    const bw = Math.min(bubbleMaxW, Math.max(220, ...lines.map((l) => l.length * 12 + padX * 2)));
-    const top = y - bh;
-    if (top < bubbleAreaTop) break;
-    const textEls = lines
-      .map((l, li) => `<text x="${padX}" y="${padY + (li + 1) * lineH - 6}" font-family="Helvetica, Arial, sans-serif" font-size="22" fill="#ffffff">${esc(l)}</text>`)
-      .join("");
-    const footer = `<text x="${bw - padX}" y="${bh - 12}" text-anchor="end" font-family="Helvetica, Arial, sans-serif" font-size="16" fill="#7d95a8">${m.views ? `👁 ${m.views >= 1000 ? (m.views / 1000).toFixed(1).replace(/\.0$/, "") + "K" : m.views}  ` : ""}${esc(m.time)}</text>`;
-    bubbles.push(`<g transform="translate(40, ${top})"><rect width="${bw}" height="${bh}" rx="14" ry="14" fill="#182533"/>${textEls}${footer}</g>`);
-    y = top - gap;
+    const hasMedia = !!m.mediaKind;
+    const mediaLine = hasMedia ? mediaIconLabel(m.mediaKind!, m.mediaLabel) : null;
+    const fwdLine = m.forwardedFrom ? `Forwarded from ${m.forwardedFrom}` : null;
+    const textLines = m.text ? wrapText(m.text, 42, hasMedia ? 3 : 5) : [];
+
+    // Estimate width from longest line
+    const allLines = [
+      ...(fwdLine ? [fwdLine] : []),
+      ...(mediaLine ? [mediaLine] : []),
+      ...textLines,
+    ];
+    const longest = allLines.reduce((mx, l) => Math.max(mx, l.length), 0);
+    const bw = Math.min(bubbleMaxW, Math.max(260, longest * 13 + padX * 2));
+
+    let bh = padY * 2 + 30; // footer time
+    let cursorY = padY + 4;
+    const inner: string[] = [];
+
+    if (fwdLine) {
+      inner.push(`<text x="${padX}" y="${cursorY + 20}" font-family="Helvetica, Arial, sans-serif" font-size="20" font-weight="600" fill="#5eb0ef">${esc(fwdLine)}</text>`);
+      cursorY += 32;
+      bh += 32;
+    }
+    if (mediaLine) {
+      // Rounded tile
+      inner.push(`<rect x="${padX}" y="${cursorY}" width="${bw - padX * 2}" height="60" rx="10" fill="#0f1c28"/>`);
+      inner.push(`<text x="${padX + 16}" y="${cursorY + 38}" font-family="Helvetica, Arial, sans-serif" font-size="22" fill="#a6c5db">${esc(mediaLine)}</text>`);
+      cursorY += 72;
+      bh += 72;
+    }
+    for (const line of textLines) {
+      inner.push(`<text x="${padX}" y="${cursorY + 22}" font-family="Helvetica, Arial, sans-serif" font-size="22" fill="#ffffff">${esc(line)}</text>`);
+      cursorY += lineH;
+      bh += lineH;
+    }
+
+    const footerParts: string[] = [];
+    if (m.views) footerParts.push(`👁 ${fmtViews(m.views)}`);
+    footerParts.push(m.time);
+    const footer = `<text x="${bw - padX}" y="${bh - 14}" text-anchor="end" font-family="Helvetica, Arial, sans-serif" font-size="16" fill="#7d95a8">${esc(footerParts.join("  ·  "))}</text>`;
+
+    if (y + bh + joinReserve > CHAT_BOTTOM) break;
+
+    bubbleParts.push(`<g transform="translate(${bubbleLeft}, ${y})">
+      <rect width="${bw}" height="${bh}" rx="16" ry="16" fill="#182533"/>
+      ${inner.join("\n      ")}
+      ${footer}
+    </g>`);
+    y += bh + gap;
   }
+
+  // Join service pill just below last message (or at bottom of chat if no msgs)
+  const joinY = Math.max(y + 10, CHAT_BOTTOM - 60);
+  const joinPill = `<g transform="translate(${W / 2}, ${joinY})">
+    <rect x="-200" y="-24" width="400" height="48" rx="24" fill="rgba(0,0,0,0.55)"/>
+    <text x="0" y="8" text-anchor="middle" font-family="Helvetica, Arial, sans-serif" font-size="20" font-weight="600" fill="#ffffff">You joined this channel · ${joinedTime}</text>
+  </g>`;
 
   return `<?xml version="1.0" encoding="UTF-8"?>
 <svg xmlns="http://www.w3.org/2000/svg" width="${W}" height="${H}" viewBox="0 0 ${W} ${H}">
-  <defs>
-    <linearGradient id="bg" x1="0" y1="0" x2="0" y2="1">
-      <stop offset="0" stop-color="#0f2438"/>
-      <stop offset="1" stop-color="#0a1826"/>
-    </linearGradient>
-  </defs>
-  <rect width="${W}" height="${H}" fill="url(#bg)"/>
-  <text x="36" y="42" font-family="Helvetica, Arial, sans-serif" font-size="24" font-weight="600" fill="#ffffff">${time}</text>
-  <text x="${W - 36}" y="42" text-anchor="end" font-family="Helvetica, Arial, sans-serif" font-size="20" fill="#ffffff">5G ▲ 84%</text>
-  <rect x="0" y="70" width="${W}" height="140" fill="#17212b"/>
-  <text x="24" y="130" font-family="Helvetica, Arial, sans-serif" font-size="28" fill="#5eb0ef">‹ Back</text>
-  <circle cx="${W/2}" cy="150" r="42" fill="${avColor}"/>
-  <text x="${W/2}" y="164" text-anchor="middle" font-family="Helvetica, Arial, sans-serif" font-size="34" font-weight="600" fill="#ffffff">${av}</text>
-  <rect x="0" y="210" width="${W}" height="${H - 210 - 200}" fill="#0e1621"/>
-  <text x="${W/2}" y="252" text-anchor="middle" font-family="Helvetica, Arial, sans-serif" font-size="30" font-weight="700" fill="#ffffff">${title}</text>
-  <text x="${W/2}" y="286" text-anchor="middle" font-family="Helvetica, Arial, sans-serif" font-size="20" fill="#7d8e9c">${subs}</text>
-  ${bubbles.join("\n")}
-  <g transform="translate(${W/2}, ${H - 260})">
-    <rect x="-180" y="-30" width="360" height="60" rx="30" ry="30" fill="rgba(0,0,0,0.5)"/>
-    <text x="0" y="8" text-anchor="middle" font-family="Helvetica, Arial, sans-serif" font-size="22" font-weight="600" fill="#ffffff">You joined this channel</text>
+  <!-- chat background -->
+  <rect width="${W}" height="${H}" fill="#0e1621"/>
+
+  <!-- status bar -->
+  <rect width="${W}" height="${STATUS_H}" fill="#0e1621"/>
+  <text x="36" y="38" font-family="Helvetica, Arial, sans-serif" font-size="22" font-weight="700" fill="#ffffff">${deviceTime}</text>
+  <g transform="translate(${W - 170}, 22)" fill="#ffffff">
+    <!-- signal dots -->
+    <circle cx="0" cy="10" r="3"/><circle cx="10" cy="10" r="3"/><circle cx="20" cy="10" r="3"/><circle cx="30" cy="10" r="3" opacity="0.4"/>
+    <text x="46" y="16" font-family="Helvetica, Arial, sans-serif" font-size="18" font-weight="600">5G</text>
+    <!-- battery -->
+    <rect x="86" y="2" width="46" height="20" rx="4" fill="none" stroke="#ffffff" stroke-width="1.5"/>
+    <rect x="88" y="4" width="36" height="16" rx="2" fill="#ffffff"/>
+    <rect x="132" y="8" width="3" height="8" fill="#ffffff"/>
   </g>
-  <rect x="0" y="${H - 200}" width="${W}" height="120" fill="#17212b"/>
-  <text x="${W/2}" y="${H - 128}" text-anchor="middle" font-family="Helvetica, Arial, sans-serif" font-size="26" font-weight="700" fill="#5eb0ef" letter-spacing="2">🔔  UNMUTE</text>
-  <rect x="${W/2 - 70}" y="${H - 22}" width="140" height="6" rx="3" fill="#ffffff" opacity="0.6"/>
+
+  <!-- header -->
+  <rect x="0" y="${HEADER_TOP}" width="${W}" height="${HEADER_H}" fill="#17212b"/>
+  <text x="24" y="${HEADER_TOP + HEADER_H / 2 + 8}" font-family="Helvetica, Arial, sans-serif" font-size="34" fill="#5eb0ef">‹</text>
+  ${headerAvatar}
+  <text x="${titleX}" y="${avCy - 4}" font-family="Helvetica, Arial, sans-serif" font-size="26" font-weight="700" fill="#ffffff">${title}</text>
+  ${verifiedBadge}
+  <text x="${titleX}" y="${avCy + 28}" font-family="Helvetica, Arial, sans-serif" font-size="19" fill="#7d8e9c">${subs}</text>
+  <text x="${W - 28}" y="${HEADER_TOP + HEADER_H / 2 + 10}" text-anchor="end" font-family="Helvetica, Arial, sans-serif" font-size="30" fill="#7d8e9c">⋯</text>
+
+  <!-- messages -->
+  ${bubbleParts.join("\n  ")}
+
+  <!-- join service pill -->
+  ${joinPill}
+
+  <!-- footer -->
+  <rect x="0" y="${H - FOOTER_H - HOME_H}" width="${W}" height="${FOOTER_H}" fill="#17212b"/>
+  <text x="${W / 2}" y="${H - HOME_H - FOOTER_H / 2 + 10}" text-anchor="middle" font-family="Helvetica, Arial, sans-serif" font-size="24" font-weight="700" fill="#5eb0ef" letter-spacing="2">🔔  UNMUTE</text>
+
+  <!-- home indicator -->
+  <rect x="${W / 2 - 70}" y="${H - 18}" width="140" height="6" rx="3" fill="#ffffff" opacity="0.55"/>
 </svg>`;
 }
 
@@ -205,6 +322,7 @@ export const SAMPLE_OTHERS: OtherDialog[] = [
 
 export const SAMPLE_MESSAGES: ChannelMessage[] = [
   { text: "Welcome to the channel! Turn on notifications so you never miss an update.", time: "9:12 AM", views: 4200 },
-  { text: "New drop coming this weekend — details tomorrow 🔥", time: "10:04 AM", views: 3800 },
+  { text: "", time: "9:48 AM", views: 3900, mediaKind: "photo", mediaLabel: "cover.jpg" },
+  { text: "New drop coming this weekend — details tomorrow 🔥", time: "10:04 AM", views: 3800, forwardedFrom: "Official News" },
   { text: "Thanks for 10K subscribers 🎉", time: "11:20 AM", views: 2100 },
 ];
