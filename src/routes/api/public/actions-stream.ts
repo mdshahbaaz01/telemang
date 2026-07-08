@@ -88,6 +88,7 @@ export const Route = createFileRoute("/api/public/actions-stream")({
   server: {
     handlers: {
       POST: async ({ request }) => {
+        try {
         const SUPABASE_URL = process.env.SUPABASE_URL!;
         const SUPABASE_PUBLISHABLE_KEY = process.env.SUPABASE_PUBLISHABLE_KEY!;
         const authHeader = request.headers.get("authorization") ?? "";
@@ -107,12 +108,17 @@ export const Route = createFileRoute("/api/public/actions-stream")({
             },
           },
         );
-        const { data: claims, error: claimsErr } =
-          await supabase.auth.getClaims(token);
-        if (claimsErr || !claims?.claims?.sub) {
-          return new Response("Unauthorized", { status: 401 });
+        let userId: string;
+        try {
+          const { data: claims, error: claimsErr } =
+            await supabase.auth.getClaims(token);
+          if (claimsErr || !claims?.claims?.sub) {
+            return new Response(`Unauthorized: ${claimsErr?.message ?? "invalid token"}`, { status: 401 });
+          }
+          userId = claims.claims.sub as string;
+        } catch (e) {
+          return new Response(`Auth error: ${(e as Error).message}`, { status: 401 });
         }
-        const userId = claims.claims.sub as string;
 
         const { data: roles } = await supabase
           .from("user_roles")
@@ -142,7 +148,7 @@ export const Route = createFileRoute("/api/public/actions-stream")({
           .select("id")
           .single();
         if (runErr || !runRow) {
-          return new Response(runErr?.message ?? "run insert failed", {
+          return new Response(`run insert failed: ${runErr?.message ?? "unknown"}`, {
             status: 500,
           });
         }
@@ -630,6 +636,11 @@ export const Route = createFileRoute("/api/public/actions-stream")({
             "x-accel-buffering": "no",
           },
         });
+        } catch (e) {
+          const msg = (e as Error)?.message ?? String(e);
+          console.error("actions-stream fatal:", msg, (e as Error)?.stack);
+          return new Response(`actions-stream error: ${msg}`, { status: 500 });
+        }
       },
     },
   },
