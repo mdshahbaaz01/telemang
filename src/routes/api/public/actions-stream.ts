@@ -43,6 +43,7 @@ const broadcastRowSchema = z.object({
   message: z.string().max(4096).default(""),
   targets: z.array(z.string().min(1).max(200)).min(1).max(500),
   attachment: attachmentSchema.optional(),
+  format: z.enum(["plain", "mono"]).default("plain"),
 }).refine((r) => r.message.length > 0 || !!r.attachment, {
   message: "Row needs a message or an attachment",
 });
@@ -56,6 +57,7 @@ const replyRowSchema = z.object({
   accountId: z.string().uuid(),
   message: z.string().max(4096).default(""),
   attachment: attachmentSchema.optional(),
+  format: z.enum(["plain", "mono"]).default("plain"),
 }).refine((r) => r.message.length > 0 || !!r.attachment, {
   message: "Row needs a message or an attachment",
 });
@@ -74,11 +76,25 @@ const botFlowSchema = z.object({
   steps: z.array(z.string().min(1).max(4096)).min(1).max(50),
 });
 
+const editSchema = z.object({
+  kind: z.literal("edit"),
+  source: msgRefSchema,
+  message: z.string().min(1).max(4096),
+  format: z.enum(["plain", "mono"]).default("plain"),
+});
+
+const deleteMessagesSchema = z.object({
+  kind: z.literal("deleteMessages"),
+  chat: z.string().min(1).max(200),
+  messageIds: z.array(z.number().int().positive()).min(1).max(100),
+  revoke: z.boolean().default(true),
+});
+
 const bodySchema = z.object({
   accountIds: z.array(z.string().uuid()).min(0).max(200).default([]),
   minDelay: z.number().int().min(0).max(60).default(1),
   maxDelay: z.number().int().min(0).max(60).default(2),
-  op: z.discriminatedUnion("kind", [reactSchema, forwardSchema, voteSchema, broadcastSchema, replySchema, botFlowSchema]),
+  op: z.discriminatedUnion("kind", [reactSchema, forwardSchema, voteSchema, broadcastSchema, replySchema, botFlowSchema, editSchema, deleteMessagesSchema]),
 });
 
 function sseEncode(event: string, data: unknown): Uint8Array {
@@ -96,6 +112,15 @@ function jitter(min: number, max: number) {
 function errorText(error: unknown) {
   if (error instanceof Error) return error.message || error.name;
   return String(error);
+}
+
+function htmlEscape(input: string) {
+  return input.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+}
+
+function formatMessage(message: string, format?: "plain" | "mono") {
+  if (format !== "mono") return { message };
+  return { message: `<code>${htmlEscape(message)}</code>`, parseMode: "html" as const };
 }
 
 function floodWaitSeconds(message: string) {
@@ -346,7 +371,7 @@ export const Route = createFileRoute("/api/public/actions-stream")({
               let ok = 0;
               let fail = 0;
               try {
-                const src = op.source;
+                const src = op.kind === "deleteMessages" ? { chat: op.chat, msgId: op.messageIds[0] } : op.source;
                 let sourcePeer: any;
                 try {
                   sourcePeer = await resolveSource(client, src);
@@ -495,6 +520,38 @@ export const Route = createFileRoute("/api/public/actions-stream")({
                       setTimeout(r, jitter(body.minDelay, body.maxDelay)),
                     );
                   }
+                } else if (op.kind === "edit") {
+                  try {
+                    await new Promise((r) => setTimeout(r, jitter(body.minDelay, body.maxDelay)));
+                    await client.editMessage(sourcePeer, {
+                      message: src.msgId,
+                      text: formatMessage(op.message, op.format).message,
+                      parseMode: op.format === "mono" ? "html" : undefined,
+                    });
+                    ok++;
+                    const m = `Edited ${src.chat}/${src.msgId}`;
+                    send("log", { accountId, level: "success", target: `${src.chat}/${src.msgId}`, message: m });
+                    await logDb(accountId, `${src.chat}/${src.msgId}`, "success", m);
+                  } catch (e) {
+                    fail++;
+                    const m = errorText(e);
+                    send("log", { accountId, level: "error", target: `${src.chat}/${src.msgId}`, message: m });
+                    await logDb(accountId, `${src.chat}/${src.msgId}`, "error", m);
+                  }
+                } else if (op.kind === "deleteMessages") {
+                  try {
+                    await new Promise((r) => setTimeout(r, jitter(body.minDelay, body.maxDelay)));
+                    await client.deleteMessages(sourcePeer, op.messageIds, { revoke: op.revoke });
+                    ok += op.messageIds.length;
+                    const m = `Deleted ${op.messageIds.length} message(s)`;
+                    send("log", { accountId, level: "success", target: op.chat, message: m });
+                    await logDb(accountId, op.chat, "success", m);
+                  } catch (e) {
+                    fail += op.messageIds.length;
+                    const m = errorText(e);
+                    send("log", { accountId, level: "error", target: op.chat, message: m });
+                    await logDb(accountId, op.chat, "error", m);
+                  }
                 }
               } finally {
                 await client.disconnect().catch(() => {});
@@ -503,7 +560,7 @@ export const Route = createFileRoute("/api/public/actions-stream")({
               return { ok, fail };
             };
 
-            const runBroadcastRowsForAccount = async (accountId: string, rows: Array<{ accountId: string; message: string; targets: string[]; attachment?: { path: string; filename: string; mimeType?: string } }>) => {
+            const runBroadcastRowsForAccount = async (accountId: string, rows: Array<{ accountId: string; message: string; targets: string[]; attachment?: { path: string; filename: string; mimeType?: string }; format?: "plain" | "mono" }>) => {
               send("log", { accountId, level: "info", message: "Connecting…" });
               let client;
               try {
@@ -540,9 +597,10 @@ export const Route = createFileRoute("/api/public/actions-stream")({
                         await client.sendFile(dest, {
                           file: buildCustomFile(attData),
                           caption: row.message || undefined,
+                          parseMode: row.format === "mono" ? "html" : undefined,
                         });
                       } else {
-                        await client.sendMessage(dest, { message: row.message });
+                        await client.sendMessage(dest, formatMessage(row.message, row.format));
                       }
                       ok++;
                       const m = `Sent to ${t}`;
@@ -573,7 +631,7 @@ export const Route = createFileRoute("/api/public/actions-stream")({
             };
 
             const runReplyRow = async (
-              row: { accountId: string; message: string; attachment?: { path: string; filename: string; mimeType?: string } },
+              row: { accountId: string; message: string; attachment?: { path: string; filename: string; mimeType?: string }; format?: "plain" | "mono" },
               src: { chat: string; msgId: number },
               viaDiscussion: boolean,
             ) => {
@@ -628,12 +686,13 @@ export const Route = createFileRoute("/api/public/actions-stream")({
                   await client.sendFile(replyPeer, {
                     file: buildCustomFile(att),
                     caption: row.message || undefined,
+                    parseMode: row.format === "mono" ? "html" : undefined,
                     replyTo: replyToId,
                     ...(topMsgId ? { topMsgId } : {}),
                   });
                 } else {
                   await client.sendMessage(replyPeer, {
-                    message: row.message,
+                    ...formatMessage(row.message, row.format),
                     replyTo: replyToId,
                     ...(topMsgId ? { topMsgId } : {}),
                   });

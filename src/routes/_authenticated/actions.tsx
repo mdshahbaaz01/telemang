@@ -10,7 +10,6 @@ import {
   createScheduledBroadcast,
   listScheduledBroadcasts,
   cancelScheduledBroadcast,
-  retryScheduledBroadcast,
 } from "@/lib/schedule.functions";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -27,7 +26,7 @@ export const Route = createFileRoute("/_authenticated/actions")({
   validateSearch: (s: Record<string, unknown>) =>
     z
       .object({
-        tab: z.enum(["react", "forward", "vote", "broadcast", "comment", "reply"]).optional(),
+        tab: z.enum(["react", "forward", "vote", "broadcast", "comment", "reply", "edit", "deleteMessages"]).optional(),
       })
       .parse(s),
   component: () => (
@@ -37,11 +36,12 @@ export const Route = createFileRoute("/_authenticated/actions")({
   ),
 });
 
-type Tab = "react" | "forward" | "vote" | "broadcast" | "comment" | "reply";
+type Tab = "react" | "forward" | "vote" | "broadcast" | "comment" | "reply" | "edit" | "deleteMessages";
 
 type BroadcastRow = { id: string; message: string; targets: string; accountId?: string; file?: File | null };
 type ReplyRow = { id: string; message: string; accountId?: string; file?: File | null };
 type SendMode = "per-account" | "all-ids";
+type TextFormat = "plain" | "mono";
 
 type LogEntry = {
   accountId?: string;
@@ -183,6 +183,10 @@ function ActionsPageInner() {
   const [broadcastSelectedIds, setBroadcastSelectedIds] = useState<string[]>([]);
   const [replySelectedIds, setReplySelectedIds] = useState<string[]>([]);
   const [actionSelectedIds, setActionSelectedIds] = useState<string[]>([]);
+  const [textFormat, setTextFormat] = useState<TextFormat>("plain");
+  const [voiceMode, setVoiceMode] = useState(false);
+  const [editText, setEditText] = useState("");
+  const [deleteIds, setDeleteIds] = useState("");
 
   const [logs, setLogs] = useState<LogEntry[]>([]);
   const [running, setRunning] = useState(false);
@@ -194,21 +198,20 @@ function ActionsPageInner() {
   const listSchedFn = useServerFn(listScheduledBroadcasts);
   const createSchedFn = useServerFn(createScheduledBroadcast);
   const cancelSchedFn = useServerFn(cancelScheduledBroadcast);
-  const retrySchedFn = useServerFn(retryScheduledBroadcast);
   const schedulesQ = useQuery({
     queryKey: ["scheduled-broadcasts"],
     queryFn: () => listSchedFn(),
     refetchInterval: 15_000,
   });
 
-  const uploadAttachment = async (file: File) => {
+  const uploadAttachment = async (file: File, isVoice = false) => {
     const ext = file.name.includes(".") ? file.name.slice(file.name.lastIndexOf(".")) : "";
     const path = `${Date.now()}-${crypto.randomUUID()}${ext}`;
     const { error } = await supabase.storage
       .from("action-attachments")
       .upload(path, file, { contentType: file.type || undefined, upsert: false });
     if (error) throw new Error(error.message);
-    return { path, filename: file.name, mimeType: file.type || undefined };
+    return { path, filename: file.name, mimeType: file.type || undefined, isVoice };
   };
 
   const accountList = accountsQ.data ?? [];
@@ -298,6 +301,16 @@ function ActionsPageInner() {
             .filter((n) => Number.isInteger(n) && n >= 0);
       if (mode === "apply" && !opts.length) return toast.error("Pick at least one poll option");
       op = { kind: "vote", source: src, options: opts, mode };
+    } else if (tab === "edit") {
+      if (!editText.trim()) return toast.error("Enter replacement text");
+      op = { kind: "edit", source: src, message: editText.trim(), format: textFormat };
+    } else if (tab === "deleteMessages") {
+      const ids = deleteIds
+        .split(/[\s,]+/)
+        .map((s) => Number(s.trim()))
+        .filter((n) => Number.isInteger(n) && n > 0);
+      const messageIds = ids.length ? ids : [src.msgId];
+      op = { kind: "deleteMessages", chat: src.chat, messageIds, revoke: true };
     } else {
       // handled below in runBroadcast
       return;
@@ -407,7 +420,7 @@ function ActionsPageInner() {
     const src = parseMessageLink(source);
     if (!src) return toast.error("Enter a valid message link");
     if (allAccountIds.length === 0) return toast.error("No accounts available");
-    let cleaned: { accountId: string; message: string; attachment?: { path: string; filename: string; mimeType?: string } }[] = [];
+    let cleaned: { accountId: string; message: string; attachment?: { path: string; filename: string; mimeType?: string; isVoice?: boolean }; format?: TextFormat }[] = [];
     try {
       if (replyMode === "per-account") {
         const rows = replyRows.filter((r) => (r.accountId ?? "") && (r.message.trim() || r.file));
@@ -415,14 +428,16 @@ function ActionsPageInner() {
         cleaned = await Promise.all(rows.map(async (r) => ({
           accountId: r.accountId!,
           message: r.message.trim(),
-          attachment: r.file ? await uploadAttachment(r.file) : undefined,
+          attachment: r.file ? await uploadAttachment(r.file, voiceMode) : undefined,
+          format: textFormat,
         })));
       } else {
         const rows = replyRows.filter((r) => r.message.trim() || r.file);
         if (!rows.length) return toast.error("Add at least one message or file");
         const uploads = await Promise.all(rows.map(async (r) => ({
           message: r.message.trim(),
-          attachment: r.file ? await uploadAttachment(r.file) : undefined,
+          attachment: r.file ? await uploadAttachment(r.file, voiceMode) : undefined,
+          format: textFormat,
         })));
         const targetIds = replySelectedIds.length ? replySelectedIds : allAccountIds;
         if (!targetIds.length) return toast.error("Select at least one account");
@@ -441,7 +456,7 @@ function ActionsPageInner() {
   };
 
   const buildBroadcastCleaned = async (): Promise<
-    { accountId: string; message: string; targets: string[]; attachment?: { path: string; filename: string; mimeType?: string } }[] | null
+    { accountId: string; message: string; targets: string[]; attachment?: { path: string; filename: string; mimeType?: string; isVoice?: boolean }; format?: TextFormat }[] | null
   > => {
     const baseRows = rows
       .map((r) => ({
@@ -460,13 +475,14 @@ function ActionsPageInner() {
     }
     try {
       const uploaded = await Promise.all(
-        baseRows.map(async (r) => (r.file ? await uploadAttachment(r.file) : undefined)),
+        baseRows.map(async (r) => (r.file ? await uploadAttachment(r.file, voiceMode) : undefined)),
       );
       const withAtt = baseRows.map((r, i) => ({
         accountId: r.accountId,
         message: r.message,
         targets: r.targets,
         attachment: uploaded[i],
+        format: textFormat,
       }));
       if (broadcastMode === "per-account") {
         const c = withAtt.filter((r) => r.accountId);
@@ -482,7 +498,7 @@ function ActionsPageInner() {
         return null;
       }
       return targetIds.flatMap((accountId) =>
-        withAtt.map((r) => ({ accountId, message: r.message, targets: r.targets, attachment: r.attachment })),
+        withAtt.map((r) => ({ accountId, message: r.message, targets: r.targets, attachment: r.attachment, format: r.format })),
       );
     } catch (e) {
       toast.error((e as Error).message);
@@ -593,7 +609,7 @@ function ActionsPageInner() {
     const src = parseMessageLink(source);
     if (!src) return toast.error("Enter a valid message link");
     if (allAccountIds.length === 0) return toast.error("No accounts available");
-    let cleaned: { accountId: string; message: string; attachment?: { path: string; filename: string; mimeType?: string } }[] = [];
+    let cleaned: { accountId: string; message: string; attachment?: { path: string; filename: string; mimeType?: string; isVoice?: boolean }; format?: TextFormat }[] = [];
     try {
       if (replyMode === "per-account") {
         const rs = replyRows.filter((r) => (r.accountId ?? "") && (r.message.trim() || r.file));
@@ -601,14 +617,16 @@ function ActionsPageInner() {
         cleaned = await Promise.all(rs.map(async (r) => ({
           accountId: r.accountId!,
           message: r.message.trim(),
-          attachment: r.file ? await uploadAttachment(r.file) : undefined,
+          attachment: r.file ? await uploadAttachment(r.file, voiceMode) : undefined,
+          format: textFormat,
         })));
       } else {
         const rs = replyRows.filter((r) => r.message.trim() || r.file);
         if (!rs.length) return toast.error("Add at least one message or file");
         const uploads = await Promise.all(rs.map(async (r) => ({
           message: r.message.trim(),
-          attachment: r.file ? await uploadAttachment(r.file) : undefined,
+          attachment: r.file ? await uploadAttachment(r.file, voiceMode) : undefined,
+          format: textFormat,
         })));
         const targetIds = replySelectedIds.length ? replySelectedIds : allAccountIds;
         if (!targetIds.length) return toast.error("Select at least one account");
@@ -666,6 +684,37 @@ function ActionsPageInner() {
     }
   };
 
+  const scheduleEditOrDelete = async () => {
+    const when = parseScheduledAt();
+    if (!when) return;
+    const src = parseMessageLink(source);
+    if (!src) return toast.error("Enter a valid message link");
+    const runAccountIds = actionSelectedIds.length ? actionSelectedIds : allAccountIds;
+    if (!runAccountIds.length) return toast.error("No accounts available");
+    let op: any;
+    if (tab === "edit") {
+      if (!editText.trim()) return toast.error("Enter replacement text");
+      op = { kind: "edit", source: src, accountIds: runAccountIds, message: editText.trim(), format: textFormat };
+    } else {
+      const ids = deleteIds
+        .split(/[\s,]+/)
+        .map((s) => Number(s.trim()))
+        .filter((n) => Number.isInteger(n) && n > 0);
+      op = { kind: "deleteMessages", chat: src.chat, accountIds: runAccountIds, messageIds: ids.length ? ids : [src.msgId], revoke: true };
+    }
+    setScheduling(true);
+    try {
+      await createSchedFn({ data: { scheduledAt: when.toISOString(), op, minDelay, maxDelay } });
+      toast.success(`Scheduled for ${when.toLocaleString()} (continues automatically)`);
+      setScheduledAt("");
+      await qc.invalidateQueries({ queryKey: ["scheduled-broadcasts"] });
+    } catch (e) {
+      toast.error((e as Error).message);
+    } finally {
+      setScheduling(false);
+    }
+  };
+
 
 
   return (
@@ -702,7 +751,7 @@ function ActionsPageInner() {
         {/* Main panel */}
         <section className="space-y-4">
           <div className="flex gap-2 border-b border-border">
-            {(["react", "forward", "vote", "broadcast", "comment", "reply"] as Tab[]).map((t) => (
+            {(["react", "forward", "vote", "broadcast", "comment", "reply", "edit", "deleteMessages"] as Tab[]).map((t) => (
               <button
                 key={t}
                 onClick={() => setTab(t)}
@@ -712,7 +761,7 @@ function ActionsPageInner() {
                     : "text-muted-foreground"
                 }`}
               >
-                {t === "react" ? "Reactions" : t === "forward" ? "Forwarder" : t === "vote" ? "Poll voter" : t === "broadcast" ? "Broadcast" : t === "comment" ? "Comment" : "Reply"}
+                {t === "react" ? "Reactions" : t === "forward" ? "Forwarder" : t === "vote" ? "Poll voter" : t === "broadcast" ? "Broadcast" : t === "comment" ? "Comment" : t === "reply" ? "Reply" : t === "edit" ? "Scheduled edits" : "Bulk delete"}
               </button>
             ))}
           </div>
@@ -729,6 +778,32 @@ function ActionsPageInner() {
                 Supports public (@name) and private (c/&lt;id&gt;) chats.
               </p>
             </div>}
+
+            {(tab === "broadcast" || tab === "reply" || tab === "comment" || tab === "edit") && (
+              <div className="flex flex-wrap items-center gap-3 rounded-md border border-border p-3 text-sm">
+                <Label>Text format</Label>
+                <button
+                  type="button"
+                  className={`rounded border px-2 py-1 text-xs ${textFormat === "plain" ? "border-primary bg-primary/10" : "border-border text-muted-foreground"}`}
+                  onClick={() => setTextFormat("plain")}
+                >
+                  Plain
+                </button>
+                <button
+                  type="button"
+                  className={`rounded border px-2 py-1 font-mono text-xs ${textFormat === "mono" ? "border-primary bg-primary/10" : "border-border text-muted-foreground"}`}
+                  onClick={() => setTextFormat("mono")}
+                >
+                  Monospace
+                </button>
+                {(tab === "broadcast" || tab === "reply" || tab === "comment") && (
+                  <label className="ml-auto flex items-center gap-2 text-xs text-muted-foreground">
+                    <input type="checkbox" checked={voiceMode} onChange={(e) => setVoiceMode(e.target.checked)} />
+                    Send attachments as voice notes
+                  </label>
+                )}
+              </div>
+            )}
 
             {tab === "react" && (
               <>
@@ -801,6 +876,48 @@ function ActionsPageInner() {
                   </div>
                 </div>
               </>
+            )}
+
+            {tab === "edit" && (
+              <div className="space-y-3">
+                <div>
+                  <Label>Replacement text</Label>
+                  <Textarea
+                    rows={4}
+                    value={editText}
+                    onChange={(e) => setEditText(e.target.value)}
+                    placeholder="New text for the selected message…"
+                  />
+                </div>
+                <DelayFields minDelay={minDelay} maxDelay={maxDelay} setMin={setMinDelay} setMax={setMaxDelay} />
+                <AccountMultiPicker
+                  accountList={accountList}
+                  selectedIds={actionSelectedIds}
+                  setSelectedIds={setActionSelectedIds}
+                  allAccountIds={allAccountIds}
+                />
+              </div>
+            )}
+
+            {tab === "deleteMessages" && (
+              <div className="space-y-3">
+                <div>
+                  <Label>Message IDs to delete</Label>
+                  <Textarea
+                    rows={3}
+                    value={deleteIds}
+                    onChange={(e) => setDeleteIds(e.target.value)}
+                    placeholder="Leave empty to delete the linked message, or enter IDs: 1201, 1202, 1203"
+                  />
+                </div>
+                <DelayFields minDelay={minDelay} maxDelay={maxDelay} setMin={setMinDelay} setMax={setMaxDelay} />
+                <AccountMultiPicker
+                  accountList={accountList}
+                  selectedIds={actionSelectedIds}
+                  setSelectedIds={setActionSelectedIds}
+                  allAccountIds={allAccountIds}
+                />
+              </div>
             )}
 
             {tab === "vote" && (
@@ -1293,7 +1410,7 @@ function ActionsPageInner() {
                   }
                 >
                   <Play className="mr-1 h-4 w-4" />
-                  {tab === "react" ? "React" : tab === "vote" ? "Vote" : "Run"} on {allAccountIds.length} account{allAccountIds.length === 1 ? "" : "s"}
+                  {tab === "react" ? "React" : tab === "vote" ? "Vote" : tab === "edit" ? "Edit" : tab === "deleteMessages" ? "Delete" : "Run"} on {allAccountIds.length} account{allAccountIds.length === 1 ? "" : "s"}
                 </Button>
               )}
               {(tab === "react" || tab === "vote") && (
@@ -1306,7 +1423,7 @@ function ActionsPageInner() {
                   <RotateCw className="mr-1 h-4 w-4" /> Take back
                 </Button>
               )}
-              {(tab === "broadcast" || tab === "reply" || tab === "comment" || tab === "forward") && (
+              {(tab === "broadcast" || tab === "reply" || tab === "comment" || tab === "forward" || tab === "edit" || tab === "deleteMessages") && (
                 <>
                   <div className="flex items-center gap-1 rounded-md border border-border bg-background px-2 py-1">
                     <Clock className="h-4 w-4 text-muted-foreground" />
@@ -1327,7 +1444,9 @@ function ActionsPageInner() {
                         ? scheduleBroadcast
                         : tab === "forward"
                           ? scheduleForward
-                          : scheduleReply
+                          : tab === "edit" || tab === "deleteMessages"
+                            ? scheduleEditOrDelete
+                            : scheduleReply
                     }
                     disabled={scheduling || running || !scheduledAt}
                   >
@@ -1347,7 +1466,7 @@ function ActionsPageInner() {
             </div>
           </div>
 
-          {(tab === "broadcast" || tab === "reply" || tab === "comment" || tab === "forward") && (
+          {(tab === "broadcast" || tab === "reply" || tab === "comment" || tab === "forward" || tab === "edit" || tab === "deleteMessages") && (
             <div className="rounded-lg border border-border bg-card p-4">
               <div className="mb-2 flex items-center gap-2">
                 <CalendarClock className="h-4 w-4 text-muted-foreground" />
@@ -1393,6 +1512,11 @@ function ActionsPageInner() {
                         </span>
                         <span className={`text-xs uppercase tracking-wide ${statusColor}`}>{s.status}</span>
                         <span className="text-xs text-muted-foreground">· {s.summary}</span>
+                        {s.totalItems ? (
+                          <span className="text-xs text-muted-foreground">
+                            · {s.processedItems}/{s.totalItems}
+                          </span>
+                        ) : null}
                         {s.error && (
                           <span className="text-xs text-destructive truncate max-w-[40ch]" title={s.error}>
                             {s.error}
@@ -1413,23 +1537,6 @@ function ActionsPageInner() {
                             }}
                           >
                             Cancel
-                          </button>
-                        )}
-                        {(s.status === "failed" || s.status === "cancelled" || s.status === "done") && (
-                          <button
-                            type="button"
-                            className="ml-auto text-xs text-primary underline"
-                            onClick={async () => {
-                              try {
-                                const res = await retrySchedFn({ data: { id: s.id } });
-                                toast.success(`Rescheduled for ${new Date(res.scheduledAt).toLocaleTimeString()}`);
-                                await qc.invalidateQueries({ queryKey: ["scheduled-broadcasts"] });
-                              } catch (e) {
-                                toast.error((e as Error).message);
-                              }
-                            }}
-                          >
-                            Retry
                           </button>
                         )}
                       </div>

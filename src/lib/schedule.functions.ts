@@ -18,12 +18,14 @@ const broadcastRowSchema = z.object({
   message: z.string().max(4096).default(""),
   targets: z.array(z.string().min(1).max(200)).min(1).max(500),
   attachment: attachmentSchema.optional(),
+  format: z.enum(["plain", "mono"]).default("plain"),
 });
 
 const replyRowSchema = z.object({
   accountId: z.string().uuid(),
   message: z.string().max(4096).default(""),
   attachment: attachmentSchema.optional(),
+  format: z.enum(["plain", "mono"]).default("plain"),
 }).refine((r) => r.message.length > 0 || !!r.attachment, {
   message: "Row needs a message or attachment",
 });
@@ -44,6 +46,20 @@ const opSchema = z.discriminatedUnion("kind", [
     source: msgRefSchema,
     accountIds: z.array(z.string().uuid()).min(1).max(200),
     targets: z.array(z.string().min(1).max(200)).min(1).max(500),
+  }),
+  z.object({
+    kind: z.literal("edit"),
+    source: msgRefSchema,
+    accountIds: z.array(z.string().uuid()).min(1).max(200),
+    message: z.string().min(1).max(4096),
+    format: z.enum(["plain", "mono"]).default("plain"),
+  }),
+  z.object({
+    kind: z.literal("deleteMessages"),
+    accountIds: z.array(z.string().uuid()).min(1).max(200),
+    chat: z.string().min(1).max(200),
+    messageIds: z.array(z.number().int().positive()).min(1).max(100),
+    revoke: z.boolean().default(true),
   }),
 ]);
 
@@ -89,14 +105,14 @@ export const listScheduledBroadcasts = createServerFn({ method: "GET" })
   .handler(async ({ context }) => {
     const { data, error } = await context.supabase
       .from("scheduled_broadcasts")
-      .select("id, scheduled_at, label, status, dispatched_at, completed_at, error, payload, created_at")
+      .select("id, scheduled_at, label, status, dispatched_at, completed_at, error, payload, created_at, total_items, processed_items")
       .order("scheduled_at", { ascending: true })
       .limit(200);
     if (error) throw new Error(error.message);
     return (data ?? []).map((r) => {
       const payload = (r.payload as any) ?? {};
-      const kind: "broadcast" | "reply" | "forward" =
-        payload.kind === "reply" || payload.kind === "forward" ? payload.kind : "broadcast";
+      const kind: "broadcast" | "reply" | "forward" | "edit" | "deleteMessages" =
+        ["reply", "forward", "edit", "deleteMessages"].includes(payload.kind) ? payload.kind : "broadcast";
       let summary = "";
       if (kind === "broadcast") {
         const rows = Array.isArray(payload.rows) ? payload.rows : [];
@@ -105,10 +121,17 @@ export const listScheduledBroadcasts = createServerFn({ method: "GET" })
       } else if (kind === "reply") {
         const rows = Array.isArray(payload.rows) ? payload.rows : [];
         summary = `${rows.length} ${payload.viaDiscussion ? "comment" : "reply"}(s) · ${payload?.source?.chat ?? "?"}/${payload?.source?.msgId ?? "?"}`;
-      } else {
+      } else if (kind === "forward") {
         const accIds = Array.isArray(payload.accountIds) ? payload.accountIds.length : 0;
         const tgts = Array.isArray(payload.targets) ? payload.targets.length : 0;
         summary = `${accIds} account(s) → ${tgts} target(s)`;
+      } else if (kind === "edit") {
+        const accIds = Array.isArray(payload.accountIds) ? payload.accountIds.length : 0;
+        summary = `${accIds} account(s) · edit ${payload?.source?.chat ?? "?"}/${payload?.source?.msgId ?? "?"}`;
+      } else {
+        const accIds = Array.isArray(payload.accountIds) ? payload.accountIds.length : 0;
+        const ids = Array.isArray(payload.messageIds) ? payload.messageIds.length : 0;
+        summary = `${accIds} account(s) · delete ${ids} message(s)`;
       }
       return {
         id: r.id as string,
@@ -121,6 +144,8 @@ export const listScheduledBroadcasts = createServerFn({ method: "GET" })
         completedAt: (r.completed_at as string | null) ?? null,
         error: (r.error as string | null) ?? null,
         rowCount: Array.isArray(payload.rows) ? payload.rows.length : 0,
+        totalItems: Number((r as any).total_items ?? 0),
+        processedItems: Number((r as any).processed_items ?? 0),
         createdAt: r.created_at as string,
       };
     });

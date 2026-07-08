@@ -1,6 +1,208 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { createClient } from "@supabase/supabase-js";
+import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 import type { Database } from "@/integrations/supabase/types";
+
+type AdminClient = SupabaseClient<Database>;
+type ScheduleRow = {
+  id: string;
+  user_id: string;
+  scheduled_at: string;
+  payload: any;
+};
+type QueueItem = Database["public"]["Tables"]["scheduled_broadcast_items"]["Row"];
+
+function randomDelayMs(minDelay: number, maxDelay: number) {
+  const lo = Math.max(0, Math.min(minDelay, maxDelay));
+  const hi = Math.max(lo, Math.max(minDelay, maxDelay));
+  return (lo + Math.random() * (hi - lo)) * 1000;
+}
+
+function htmlEscape(input: string) {
+  return input.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+}
+
+function formatMessage(message: string, format?: "plain" | "mono") {
+  if (format !== "mono") return { text: message, parseMode: undefined as undefined | "html" };
+  return { text: `<code>${htmlEscape(message)}</code>`, parseMode: "html" as const };
+}
+
+async function resolveScheduledPeer(client: any, Api: any, chat: string, msgId = 1) {
+  if (chat.startsWith("c/")) {
+    const raw = chat.slice(2);
+    const { default: bigInt } = await import("big-integer");
+    try {
+      return await client.getEntity(new Api.PeerChannel({ channelId: bigInt(raw) }));
+    } catch {
+      return await client.getEntity(`https://t.me/c/${raw}/${msgId}`);
+    }
+  }
+  return client.getEntity(chat.replace(/^@/, ""));
+}
+
+function buildQueueItems(row: ScheduleRow) {
+  const payload = row.payload ?? {};
+  const kind: "broadcast" | "reply" | "forward" | "edit" | "deleteMessages" =
+    ["reply", "forward", "edit", "deleteMessages"].includes(payload.kind) ? payload.kind : "broadcast";
+  const minDelay = Number(payload.minDelay ?? 1);
+  const maxDelay = Number(payload.maxDelay ?? 2);
+  const base = new Date(row.scheduled_at).getTime();
+  const cursorByAccount = new Map<string, number>();
+  const nextTime = (accountId: string) => {
+    const current = cursorByAccount.get(accountId) ?? base;
+    cursorByAccount.set(accountId, current + randomDelayMs(minDelay, maxDelay));
+    return new Date(current).toISOString();
+  };
+
+  const items: Database["public"]["Tables"]["scheduled_broadcast_items"]["Insert"][] = [];
+  if (kind === "broadcast") {
+    for (const r of Array.isArray(payload.rows) ? payload.rows : []) {
+      for (const target of Array.isArray(r.targets) ? r.targets : []) {
+        items.push({
+          schedule_id: row.id,
+          user_id: row.user_id,
+          kind,
+          account_id: r.accountId,
+          target,
+          scheduled_for: nextTime(r.accountId),
+          payload: { message: r.message ?? "", attachment: r.attachment ?? null, format: r.format ?? "plain" },
+        });
+      }
+    }
+  } else if (kind === "reply") {
+    for (const r of Array.isArray(payload.rows) ? payload.rows : []) {
+      items.push({
+        schedule_id: row.id,
+        user_id: row.user_id,
+        kind,
+        account_id: r.accountId,
+        target: `${payload?.source?.chat ?? "?"}/${payload?.source?.msgId ?? "?"}`,
+        scheduled_for: nextTime(r.accountId),
+        payload: {
+          source: payload.source,
+          viaDiscussion: !!payload.viaDiscussion,
+          message: r.message ?? "",
+          attachment: r.attachment ?? null,
+          format: r.format ?? "plain",
+        },
+      });
+    }
+  } else if (kind === "forward") {
+    for (const accountId of Array.isArray(payload.accountIds) ? payload.accountIds : []) {
+      for (const target of Array.isArray(payload.targets) ? payload.targets : []) {
+        items.push({
+          schedule_id: row.id,
+          user_id: row.user_id,
+          kind,
+          account_id: accountId,
+          target,
+          scheduled_for: nextTime(accountId),
+          payload: { source: payload.source },
+        });
+      }
+    }
+  } else if (kind === "edit") {
+    for (const accountId of Array.isArray(payload.accountIds) ? payload.accountIds : []) {
+      items.push({
+        schedule_id: row.id,
+        user_id: row.user_id,
+        kind,
+        account_id: accountId,
+        target: `${payload?.source?.chat ?? "?"}/${payload?.source?.msgId ?? "?"}`,
+        scheduled_for: nextTime(accountId),
+        payload: { source: payload.source, message: payload.message ?? "", format: payload.format ?? "plain" },
+      });
+    }
+  } else {
+    for (const accountId of Array.isArray(payload.accountIds) ? payload.accountIds : []) {
+      items.push({
+        schedule_id: row.id,
+        user_id: row.user_id,
+        kind,
+        account_id: accountId,
+        target: payload.chat,
+        scheduled_for: nextTime(accountId),
+        payload: { chat: payload.chat, messageIds: payload.messageIds ?? [], revoke: payload.revoke !== false },
+      });
+    }
+  }
+  return items;
+}
+
+async function finalizeSchedule(admin: AdminClient, scheduleId: string) {
+  const { data: items, error } = await admin
+    .from("scheduled_broadcast_items")
+    .select("status, error")
+    .eq("schedule_id", scheduleId);
+  if (error || !items) return;
+  const processed = items.filter((i) => i.status === "done" || i.status === "failed").length;
+  const active = items.some((i) => i.status === "pending" || i.status === "processing");
+  if (active) {
+    await admin.from("scheduled_broadcasts").update({ processed_items: processed }).eq("id", scheduleId);
+    return;
+  }
+  const failed = items.filter((i) => i.status === "failed");
+  await admin
+    .from("scheduled_broadcasts")
+    .update({
+      status: failed.length === items.length ? "failed" : "done",
+      processed_items: processed,
+      completed_at: new Date().toISOString(),
+      error: failed.length ? failed.slice(0, 5).map((i) => i.error).filter(Boolean).join(" | ") : null,
+    })
+    .eq("id", scheduleId);
+}
+
+async function executeQueueItem(admin: AdminClient, item: QueueItem) {
+  const { executeBroadcast, executeReply, executeForward } = await import("@/lib/broadcast-executor.server");
+  const payload = (item.payload ?? {}) as any;
+  if (item.kind === "reply") {
+    return executeReply(admin, {
+      source: payload.source,
+      viaDiscussion: !!payload.viaDiscussion,
+      minDelay: 0,
+      maxDelay: 0,
+      rows: [{ accountId: item.account_id, message: payload.message ?? "", attachment: payload.attachment ?? undefined, format: payload.format ?? "plain" }],
+    });
+  }
+  if (item.kind === "forward") {
+    return executeForward(admin, {
+      source: payload.source,
+      minDelay: 0,
+      maxDelay: 0,
+      accountIds: [item.account_id],
+      targets: item.target ? [item.target] : [],
+    });
+  }
+  if (item.kind === "edit" || item.kind === "deleteMessages") {
+    const { openClientForAccount } = await import("@/lib/cleanup.server");
+    const { Api } = await import("telegram");
+    const client = await openClientForAccount(admin, item.account_id);
+    try {
+      if (item.kind === "edit") {
+        const source = payload.source;
+        const peer = await resolveScheduledPeer(client, Api, source.chat, source.msgId);
+        const formatted = formatMessage(payload.message ?? "", payload.format ?? "plain");
+        await client.editMessage(peer, {
+          message: source.msgId,
+          text: formatted.text,
+          parseMode: formatted.parseMode,
+        });
+        return { ok: 1, fail: 0, logs: [{ accountId: item.account_id, target: item.target, level: "success", message: `Edited ${item.target}` }] };
+      }
+      const peer = await resolveScheduledPeer(client, Api, payload.chat, payload.messageIds?.[0] ?? 1);
+      const ids = Array.isArray(payload.messageIds) ? payload.messageIds : [];
+      await client.deleteMessages(peer, ids, { revoke: payload.revoke !== false });
+      return { ok: ids.length, fail: 0, logs: [{ accountId: item.account_id, target: item.target, level: "success", message: `Deleted ${ids.length} message(s)` }] };
+    } finally {
+      await client.disconnect().catch(() => {});
+    }
+  }
+  return executeBroadcast(admin, {
+    minDelay: 0,
+    maxDelay: 0,
+    rows: [{ accountId: item.account_id, message: payload.message ?? "", targets: item.target ? [item.target] : [], attachment: payload.attachment ?? undefined, format: payload.format ?? "plain" }],
+  });
+}
 
 /**
  * Called every minute by pg_cron. Picks up any pending scheduled broadcasts
@@ -17,20 +219,29 @@ export const Route = createFileRoute("/api/public/hooks/run-scheduled-broadcasts
           auth: { storage: undefined, persistSession: false, autoRefreshToken: false },
         });
 
-        // ── Stale-run watchdog ────────────────────────────────────────────
-        // Any row stuck in "running" for > 5 minutes means the previous
-        // worker request timed out mid-dispatch (Cloudflare Workers cap
-        // request length). Mark it failed so it can be retried and doesn't
-        // block the queue forever.
+        // ── Stale item watchdog ───────────────────────────────────────────
+        // A timed-out request can leave a small batch locked. Re-open it for
+        // the next cron tick instead of failing the entire scheduled action.
         const staleCutoff = new Date(Date.now() - 5 * 60_000).toISOString();
+        await admin
+          .from("scheduled_broadcast_items")
+          .update({
+            status: "pending",
+            locked_at: null,
+            error: "Previous worker timed out; automatically continued on the next tick.",
+          })
+          .eq("status", "processing")
+          .lt("locked_at", staleCutoff);
+
         await admin
           .from("scheduled_broadcasts")
           .update({
-            status: "failed",
-            completed_at: new Date().toISOString(),
-            error: "Worker timed out before finishing (auto-recovered). Use Retry to run again.",
+            status: "pending",
+            dispatched_at: null,
+            error: "Previous worker timed out; automatically queued again.",
           })
           .eq("status", "running")
+          .eq("total_items", 0)
           .lt("dispatched_at", staleCutoff);
 
         const now = Date.now();
@@ -45,11 +256,9 @@ export const Route = createFileRoute("/api/public/hooks/run-scheduled-broadcasts
         if (error) {
           return Response.json({ error: error.message }, { status: 500 });
         }
-        if (!due?.length) return Response.json({ picked: 0 });
 
-        // Claim rows atomically so a second worker tick doesn't double-dispatch.
-        const claimed: typeof due = [];
-        for (const row of due) {
+        const claimed: ScheduleRow[] = [];
+        for (const row of due ?? []) {
           const { data: upd, error: uerr } = await admin
             .from("scheduled_broadcasts")
             .update({ status: "running", dispatched_at: new Date().toISOString() })
@@ -57,73 +266,91 @@ export const Route = createFileRoute("/api/public/hooks/run-scheduled-broadcasts
             .eq("status", "pending")
             .select("id")
             .maybeSingle();
-          if (!uerr && upd) claimed.push(row);
+          if (!uerr && upd) claimed.push(row as ScheduleRow);
         }
 
-        const { executeBroadcast, executeReply, executeForward } = await import("@/lib/broadcast-executor.server");
+        for (const row of claimed) {
+          const items = buildQueueItems(row);
+          if (!items.length) {
+            await admin
+              .from("scheduled_broadcasts")
+              .update({
+                status: "failed",
+                completed_at: new Date().toISOString(),
+                error: "No delivery items found in the scheduled payload.",
+              })
+              .eq("id", row.id);
+            continue;
+          }
+          const { error: insertErr } = await admin.from("scheduled_broadcast_items").insert(items);
+          if (insertErr) {
+            await admin
+              .from("scheduled_broadcasts")
+              .update({ status: "failed", completed_at: new Date().toISOString(), error: insertErr.message })
+              .eq("id", row.id);
+            continue;
+          }
+          await admin
+            .from("scheduled_broadcasts")
+            .update({ total_items: items.length, processed_items: 0 })
+            .eq("id", row.id);
+        }
 
-        // Fire all claimed schedules concurrently. Each waits until its own
-        // scheduled_at millisecond, then dispatches.
+        const processingHorizon = new Date(Date.now() + 22_000).toISOString();
+        const { data: pendingItems, error: itemErr } = await admin
+          .from("scheduled_broadcast_items")
+          .select("*")
+          .eq("status", "pending")
+          .lte("scheduled_for", processingHorizon)
+          .order("scheduled_for", { ascending: true })
+          .limit(6);
+        if (itemErr) return Response.json({ error: itemErr.message }, { status: 500 });
+
+        const touchedSchedules = new Set<string>(claimed.map((r) => r.id));
         await Promise.all(
-          claimed.map(async (row) => {
-            const target = new Date(row.scheduled_at as string).getTime();
-            const delay = Math.max(0, target - Date.now());
-            if (delay > 0) await new Promise((r) => setTimeout(r, delay));
-
-            const payload = row.payload as any;
-            const kind: "broadcast" | "reply" | "forward" =
-              payload?.kind === "reply" || payload?.kind === "forward" ? payload.kind : "broadcast";
-            const minDelay = payload?.minDelay ?? 1;
-            const maxDelay = payload?.maxDelay ?? 2;
+          (pendingItems ?? []).map(async (item) => {
+            const { data: locked } = await admin
+              .from("scheduled_broadcast_items")
+              .update({ status: "processing", locked_at: new Date().toISOString(), attempt_count: item.attempt_count + 1 })
+              .eq("id", item.id)
+              .eq("status", "pending")
+              .select("*")
+              .maybeSingle();
+            if (!locked) return;
+            touchedSchedules.add(locked.schedule_id);
+            const wait = Math.max(0, new Date(locked.scheduled_for).getTime() - Date.now());
+            if (wait > 0) await new Promise((r) => setTimeout(r, wait));
             try {
-              let res;
-              if (kind === "reply") {
-                res = await executeReply(admin, {
-                  source: payload.source,
-                  viaDiscussion: !!payload.viaDiscussion,
-                  rows: payload.rows,
-                  minDelay,
-                  maxDelay,
-                });
-              } else if (kind === "forward") {
-                res = await executeForward(admin, {
-                  source: payload.source,
-                  accountIds: payload.accountIds,
-                  targets: payload.targets,
-                  minDelay,
-                  maxDelay,
-                });
-              } else {
-                res = await executeBroadcast(admin, {
-                  rows: payload.rows,
-                  minDelay,
-                  maxDelay,
-                });
-              }
+              const res = await executeQueueItem(admin, locked as QueueItem);
+              const failed = res.fail > 0 || res.ok === 0;
               await admin
-                .from("scheduled_broadcasts")
+                .from("scheduled_broadcast_items")
                 .update({
-                  status: res.fail === 0 ? "done" : res.ok === 0 ? "failed" : "done",
-                  completed_at: new Date().toISOString(),
-                  error: res.fail
-                    ? res.logs.filter((l) => l.level === "error").slice(0, 5).map((l) => l.message).join(" | ")
-                    : null,
+                  status: failed ? "failed" : "done",
+                  processed_at: new Date().toISOString(),
+                  locked_at: null,
+                  error: failed ? res.logs.filter((l) => l.level === "error").slice(0, 3).map((l) => l.message).join(" | ") || "Delivery failed" : null,
                 })
-                .eq("id", row.id);
+                .eq("id", locked.id);
             } catch (e) {
               await admin
-                .from("scheduled_broadcasts")
+                .from("scheduled_broadcast_items")
                 .update({
                   status: "failed",
-                  completed_at: new Date().toISOString(),
+                  processed_at: new Date().toISOString(),
+                  locked_at: null,
                   error: (e as Error).message,
                 })
-                .eq("id", row.id);
+                .eq("id", locked.id);
             }
           }),
         );
 
-        return Response.json({ picked: claimed.length });
+        for (const scheduleId of touchedSchedules) {
+          await finalizeSchedule(admin, scheduleId);
+        }
+
+        return Response.json({ picked: claimed.length, processed: pendingItems?.length ?? 0 });
       },
     },
   },

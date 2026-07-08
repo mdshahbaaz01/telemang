@@ -5,7 +5,8 @@ export type BroadcastRowInput = {
   accountId: string;
   message: string;
   targets: string[];
-  attachment?: { path: string; filename: string; mimeType?: string };
+  attachment?: { path: string; filename: string; mimeType?: string; isVoice?: boolean };
+  format?: "plain" | "mono";
 };
 
 export type BroadcastExecInput = {
@@ -25,7 +26,8 @@ export type SourceRef = { chat: string; msgId: number };
 export type ReplyRowInput = {
   accountId: string;
   message: string;
-  attachment?: { path: string; filename: string; mimeType?: string };
+  attachment?: { path: string; filename: string; mimeType?: string; isVoice?: boolean };
+  format?: "plain" | "mono";
 };
 
 export type ReplyExecInput = {
@@ -53,6 +55,15 @@ function jitter(min: number, max: number) {
 function errorText(error: unknown) {
   if (error instanceof Error) return error.message || error.name;
   return String(error);
+}
+
+function htmlEscape(input: string) {
+  return input.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+}
+
+function formatMessage(message: string, format?: "plain" | "mono") {
+  if (format !== "mono") return { message };
+  return { message: `<code>${htmlEscape(message)}</code>`, parseMode: "html" as const };
 }
 
 async function resolveTargetEntity(client: any, Api: any, t: string) {
@@ -119,8 +130,8 @@ export async function executeBroadcast(
   const logs: BroadcastExecResult["logs"] = [];
   const push = (l: (typeof logs)[number]) => logs.push(l);
 
-  const attachmentCache = new Map<string, { buf: Buffer; filename: string; mimeType?: string }>();
-  const loadAttachment = async (att: { path: string; filename: string; mimeType?: string }) => {
+  const attachmentCache = new Map<string, { buf: Buffer; filename: string; mimeType?: string; isVoice?: boolean }>();
+  const loadAttachment = async (att: { path: string; filename: string; mimeType?: string; isVoice?: boolean }) => {
     const cached = attachmentCache.get(att.path);
     if (cached) return cached;
     const { data, error } = await supabase.storage
@@ -130,7 +141,7 @@ export async function executeBroadcast(
     const res = await fetch(data.signedUrl);
     if (!res.ok) throw new Error(`Attachment download failed: ${res.status}`);
     const buf = Buffer.from(await res.arrayBuffer());
-    const val = { buf, filename: att.filename, mimeType: att.mimeType };
+    const val = { buf, filename: att.filename, mimeType: att.mimeType, isVoice: att.isVoice };
     attachmentCache.set(att.path, val);
     return val;
   };
@@ -162,7 +173,7 @@ export async function executeBroadcast(
       }
       try {
         for (const row of rows) {
-          let attData: { buf: Buffer; filename: string; mimeType?: string } | null = null;
+          let attData: { buf: Buffer; filename: string; mimeType?: string; isVoice?: boolean } | null = null;
           if (row.attachment) {
             try {
               attData = await loadAttachment(row.attachment);
@@ -180,9 +191,11 @@ export async function executeBroadcast(
                 await client.sendFile(dest, {
                   file: new CustomFile(attData.filename, attData.buf.length, attData.filename, attData.buf),
                   caption: row.message || undefined,
+                  parseMode: row.format === "mono" ? "html" : undefined,
+                  voiceNote: !!attData.isVoice,
                 });
               } else {
-                await client.sendMessage(dest, { message: row.message });
+                await client.sendMessage(dest, formatMessage(row.message, row.format));
               }
               ok++;
               push({ accountId, target: t, level: "success", message: `Sent to ${t}` });
@@ -218,8 +231,8 @@ export async function executeReply(
   const logs: BroadcastExecResult["logs"] = [];
   const push = (l: (typeof logs)[number]) => logs.push(l);
 
-  const attachmentCache = new Map<string, { buf: Buffer; filename: string; mimeType?: string }>();
-  const loadAttachment = async (att: { path: string; filename: string; mimeType?: string }) => {
+  const attachmentCache = new Map<string, { buf: Buffer; filename: string; mimeType?: string; isVoice?: boolean }>();
+  const loadAttachment = async (att: { path: string; filename: string; mimeType?: string; isVoice?: boolean }) => {
     const cached = attachmentCache.get(att.path);
     if (cached) return cached;
     const { data, error } = await supabase.storage
@@ -229,7 +242,7 @@ export async function executeReply(
     const res = await fetch(data.signedUrl);
     if (!res.ok) throw new Error(`Attachment download failed: ${res.status}`);
     const buf = Buffer.from(await res.arrayBuffer());
-    const val = { buf, filename: att.filename, mimeType: att.mimeType };
+    const val = { buf, filename: att.filename, mimeType: att.mimeType, isVoice: att.isVoice };
     attachmentCache.set(att.path, val);
     return val;
   };
@@ -274,18 +287,20 @@ export async function executeReply(
         }
         for (const row of rows) {
           try {
-            let attData: { buf: Buffer; filename: string; mimeType?: string } | null = null;
+            let attData: { buf: Buffer; filename: string; mimeType?: string; isVoice?: boolean } | null = null;
             if (row.attachment) attData = await loadAttachment(row.attachment);
             if (attData) {
               await client.sendFile(replyPeer, {
                 file: new CustomFile(attData.filename, attData.buf.length, attData.filename, attData.buf),
                 caption: row.message || undefined,
+                parseMode: row.format === "mono" ? "html" : undefined,
+                voiceNote: !!attData.isVoice,
                 replyTo: replyToId,
                 ...(topMsgId ? { topMsgId } : {}),
               });
             } else {
               await client.sendMessage(replyPeer, {
-                message: row.message,
+                ...formatMessage(row.message, row.format),
                 replyTo: replyToId,
                 ...(topMsgId ? { topMsgId } : {}),
               });

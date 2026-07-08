@@ -209,6 +209,68 @@ export type Database = {
         }
         Relationships: []
       }
+      scheduled_broadcast_items: {
+        Row: {
+          account_id: string
+          attempt_count: number
+          created_at: string
+          error: string | null
+          id: string
+          kind: string
+          locked_at: string | null
+          payload: Json
+          processed_at: string | null
+          schedule_id: string
+          scheduled_for: string
+          status: string
+          target: string | null
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          account_id: string
+          attempt_count?: number
+          created_at?: string
+          error?: string | null
+          id?: string
+          kind: string
+          locked_at?: string | null
+          payload?: Json
+          processed_at?: string | null
+          schedule_id: string
+          scheduled_for: string
+          status?: string
+          target?: string | null
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          account_id?: string
+          attempt_count?: number
+          created_at?: string
+          error?: string | null
+          id?: string
+          kind?: string
+          locked_at?: string | null
+          payload?: Json
+          processed_at?: string | null
+          schedule_id?: string
+          scheduled_for?: string
+          status?: string
+          target?: string | null
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "scheduled_broadcast_items_schedule_id_fkey"
+            columns: ["schedule_id"]
+            isOneToOne: false
+            referencedRelation: "scheduled_broadcasts"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       scheduled_broadcasts: {
         Row: {
           completed_at: string | null
@@ -218,9 +280,11 @@ export type Database = {
           id: string
           label: string | null
           payload: Json
+          processed_items: number
           run_id: string | null
           scheduled_at: string
           status: string
+          total_items: number
           updated_at: string
           user_id: string
         }
@@ -232,9 +296,11 @@ export type Database = {
           id?: string
           label?: string | null
           payload: Json
+          processed_items?: number
           run_id?: string | null
           scheduled_at: string
           status?: string
+          total_items?: number
           updated_at?: string
           user_id: string
         }
@@ -246,9 +312,11 @@ export type Database = {
           id?: string
           label?: string | null
           payload?: Json
+          processed_items?: number
           run_id?: string | null
           scheduled_at?: string
           status?: string
+          total_items?: number
           updated_at?: string
           user_id?: string
         }
