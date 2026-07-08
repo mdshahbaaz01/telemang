@@ -1,0 +1,1 @@
+DROP TABLE IF EXISTS public.proof_runs CASCADE; DROP TABLE IF EXISTS public.proof_tasks CASCADE;
