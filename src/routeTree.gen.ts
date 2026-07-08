@@ -15,7 +15,9 @@ import { Route as IndexRouteImport } from './routes/index'
 import { Route as AuthenticatedOwnerRouteImport } from './routes/_authenticated/owner'
 import { Route as AuthenticatedDashboardRouteImport } from './routes/_authenticated/dashboard'
 import { Route as AuthenticatedCleanupRouteImport } from './routes/_authenticated/cleanup'
+import { Route as AuthenticatedActionsRouteImport } from './routes/_authenticated/actions'
 import { Route as ApiPublicCleanupStreamRouteImport } from './routes/api/public/cleanup-stream'
+import { Route as ApiPublicActionsStreamRouteImport } from './routes/api/public/actions-stream'
 import { Route as AuthenticatedTasksNewRouteImport } from './routes/_authenticated/tasks.new'
 import { Route as AuthenticatedTasksIdRouteImport } from './routes/_authenticated/tasks.$id'
 import { Route as AuthenticatedGroupsRouteImport } from './routes/_authenticated/groups.'
@@ -49,9 +51,19 @@ const AuthenticatedCleanupRoute = AuthenticatedCleanupRouteImport.update({
   path: '/cleanup',
   getParentRoute: () => AuthenticatedRouteRoute,
 } as any)
+const AuthenticatedActionsRoute = AuthenticatedActionsRouteImport.update({
+  id: '/actions',
+  path: '/actions',
+  getParentRoute: () => AuthenticatedRouteRoute,
+} as any)
 const ApiPublicCleanupStreamRoute = ApiPublicCleanupStreamRouteImport.update({
   id: '/api/public/cleanup-stream',
   path: '/api/public/cleanup-stream',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiPublicActionsStreamRoute = ApiPublicActionsStreamRouteImport.update({
+  id: '/api/public/actions-stream',
+  path: '/api/public/actions-stream',
   getParentRoute: () => rootRouteImport,
 } as any)
 const AuthenticatedTasksNewRoute = AuthenticatedTasksNewRouteImport.update({
@@ -73,23 +85,27 @@ const AuthenticatedGroupsRoute = AuthenticatedGroupsRouteImport.update({
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/auth': typeof AuthRoute
+  '/actions': typeof AuthenticatedActionsRoute
   '/cleanup': typeof AuthenticatedCleanupRoute
   '/dashboard': typeof AuthenticatedDashboardRoute
   '/owner': typeof AuthenticatedOwnerRoute
   '/groups/': typeof AuthenticatedGroupsRoute
   '/tasks/$id': typeof AuthenticatedTasksIdRoute
   '/tasks/new': typeof AuthenticatedTasksNewRoute
+  '/api/public/actions-stream': typeof ApiPublicActionsStreamRoute
   '/api/public/cleanup-stream': typeof ApiPublicCleanupStreamRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/auth': typeof AuthRoute
+  '/actions': typeof AuthenticatedActionsRoute
   '/cleanup': typeof AuthenticatedCleanupRoute
   '/dashboard': typeof AuthenticatedDashboardRoute
   '/owner': typeof AuthenticatedOwnerRoute
   '/groups': typeof AuthenticatedGroupsRoute
   '/tasks/$id': typeof AuthenticatedTasksIdRoute
   '/tasks/new': typeof AuthenticatedTasksNewRoute
+  '/api/public/actions-stream': typeof ApiPublicActionsStreamRoute
   '/api/public/cleanup-stream': typeof ApiPublicCleanupStreamRoute
 }
 export interface FileRoutesById {
@@ -97,12 +113,14 @@ export interface FileRoutesById {
   '/': typeof IndexRoute
   '/_authenticated': typeof AuthenticatedRouteRouteWithChildren
   '/auth': typeof AuthRoute
+  '/_authenticated/actions': typeof AuthenticatedActionsRoute
   '/_authenticated/cleanup': typeof AuthenticatedCleanupRoute
   '/_authenticated/dashboard': typeof AuthenticatedDashboardRoute
   '/_authenticated/owner': typeof AuthenticatedOwnerRoute
   '/_authenticated/groups/': typeof AuthenticatedGroupsRoute
   '/_authenticated/tasks/$id': typeof AuthenticatedTasksIdRoute
   '/_authenticated/tasks/new': typeof AuthenticatedTasksNewRoute
+  '/api/public/actions-stream': typeof ApiPublicActionsStreamRoute
   '/api/public/cleanup-stream': typeof ApiPublicCleanupStreamRoute
 }
 export interface FileRouteTypes {
@@ -110,35 +128,41 @@ export interface FileRouteTypes {
   fullPaths:
     | '/'
     | '/auth'
+    | '/actions'
     | '/cleanup'
     | '/dashboard'
     | '/owner'
     | '/groups/'
     | '/tasks/$id'
     | '/tasks/new'
+    | '/api/public/actions-stream'
     | '/api/public/cleanup-stream'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
     | '/auth'
+    | '/actions'
     | '/cleanup'
     | '/dashboard'
     | '/owner'
     | '/groups'
     | '/tasks/$id'
     | '/tasks/new'
+    | '/api/public/actions-stream'
     | '/api/public/cleanup-stream'
   id:
     | '__root__'
     | '/'
     | '/_authenticated'
     | '/auth'
+    | '/_authenticated/actions'
     | '/_authenticated/cleanup'
     | '/_authenticated/dashboard'
     | '/_authenticated/owner'
     | '/_authenticated/groups/'
     | '/_authenticated/tasks/$id'
     | '/_authenticated/tasks/new'
+    | '/api/public/actions-stream'
     | '/api/public/cleanup-stream'
   fileRoutesById: FileRoutesById
 }
@@ -146,6 +170,7 @@ export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   AuthenticatedRouteRoute: typeof AuthenticatedRouteRouteWithChildren
   AuthRoute: typeof AuthRoute
+  ApiPublicActionsStreamRoute: typeof ApiPublicActionsStreamRoute
   ApiPublicCleanupStreamRoute: typeof ApiPublicCleanupStreamRoute
 }
 
@@ -193,11 +218,25 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedCleanupRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
+    '/_authenticated/actions': {
+      id: '/_authenticated/actions'
+      path: '/actions'
+      fullPath: '/actions'
+      preLoaderRoute: typeof AuthenticatedActionsRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
     '/api/public/cleanup-stream': {
       id: '/api/public/cleanup-stream'
       path: '/api/public/cleanup-stream'
       fullPath: '/api/public/cleanup-stream'
       preLoaderRoute: typeof ApiPublicCleanupStreamRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/public/actions-stream': {
+      id: '/api/public/actions-stream'
+      path: '/api/public/actions-stream'
+      fullPath: '/api/public/actions-stream'
+      preLoaderRoute: typeof ApiPublicActionsStreamRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/_authenticated/tasks/new': {
@@ -225,6 +264,7 @@ declare module '@tanstack/react-router' {
 }
 
 interface AuthenticatedRouteRouteChildren {
+  AuthenticatedActionsRoute: typeof AuthenticatedActionsRoute
   AuthenticatedCleanupRoute: typeof AuthenticatedCleanupRoute
   AuthenticatedDashboardRoute: typeof AuthenticatedDashboardRoute
   AuthenticatedOwnerRoute: typeof AuthenticatedOwnerRoute
@@ -234,6 +274,7 @@ interface AuthenticatedRouteRouteChildren {
 }
 
 const AuthenticatedRouteRouteChildren: AuthenticatedRouteRouteChildren = {
+  AuthenticatedActionsRoute: AuthenticatedActionsRoute,
   AuthenticatedCleanupRoute: AuthenticatedCleanupRoute,
   AuthenticatedDashboardRoute: AuthenticatedDashboardRoute,
   AuthenticatedOwnerRoute: AuthenticatedOwnerRoute,
@@ -249,6 +290,7 @@ const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   AuthenticatedRouteRoute: AuthenticatedRouteRouteWithChildren,
   AuthRoute: AuthRoute,
+  ApiPublicActionsStreamRoute: ApiPublicActionsStreamRoute,
   ApiPublicCleanupStreamRoute: ApiPublicCleanupStreamRoute,
 }
 export const routeTree = rootRouteImport

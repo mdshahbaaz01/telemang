@@ -14,6 +14,77 @@ export type Database = {
   }
   public: {
     Tables: {
+      action_logs: {
+        Row: {
+          account_id: string | null
+          created_at: string
+          id: number
+          level: string
+          message: string
+          run_id: string
+          target: string | null
+        }
+        Insert: {
+          account_id?: string | null
+          created_at?: string
+          id?: number
+          level: string
+          message: string
+          run_id: string
+          target?: string | null
+        }
+        Update: {
+          account_id?: string | null
+          created_at?: string
+          id?: number
+          level?: string
+          message?: string
+          run_id?: string
+          target?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "action_logs_run_id_fkey"
+            columns: ["run_id"]
+            isOneToOne: false
+            referencedRelation: "action_runs"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      action_runs: {
+        Row: {
+          created_at: string
+          id: string
+          kind: string
+          params: Json
+          status: string
+          totals: Json
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          kind: string
+          params?: Json
+          status?: string
+          totals?: Json
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          kind?: string
+          params?: Json
+          status?: string
+          totals?: Json
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       join_task_items: {
         Row: {
           error: string | null
