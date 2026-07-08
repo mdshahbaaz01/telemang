@@ -351,6 +351,7 @@ export type Database = {
           created_at: string
           format: string
           id: string
+          parallel: number
           target: string
           user_id: string
         }
@@ -360,6 +361,7 @@ export type Database = {
           created_at?: string
           format?: string
           id?: string
+          parallel?: number
           target: string
           user_id: string
         }
@@ -369,6 +371,7 @@ export type Database = {
           created_at?: string
           format?: string
           id?: string
+          parallel?: number
           target?: string
           user_id?: string
         }
