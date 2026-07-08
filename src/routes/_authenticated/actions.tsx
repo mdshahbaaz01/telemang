@@ -144,12 +144,17 @@ function ActionsPageInner() {
   const [options, setOptions] = useState("0");
   const [pollInfo, setPollInfo] = useState<{
     question: string;
-    answers: string[];
+    answers: { text: string; voters: number; chosen: boolean }[];
     multipleChoice: boolean;
     closed: boolean;
+    totalVoters: number;
+    alreadyVoted: boolean;
+    checkedAccountId: string;
   } | null>(null);
   const [pollSelected, setPollSelected] = useState<number[]>([]);
   const [pollLoading, setPollLoading] = useState(false);
+  const [pollCheckAccountId, setPollCheckAccountId] = useState<string>("");
+  const [showResults, setShowResults] = useState(false);
   const loadPollFn = useServerFn(loadPoll);
   const [minDelay, setMinDelay] = useState(2);
   const [maxDelay, setMaxDelay] = useState(6);
@@ -163,6 +168,7 @@ function ActionsPageInner() {
   const [broadcastMode, setBroadcastMode] = useState<SendMode>("per-account");
   const [replyMode, setReplyMode] = useState<SendMode>("per-account");
   const [broadcastSelectedIds, setBroadcastSelectedIds] = useState<string[]>([]);
+  const [replySelectedIds, setReplySelectedIds] = useState<string[]>([]);
 
   const [logs, setLogs] = useState<LogEntry[]>([]);
   const [running, setRunning] = useState(false);
@@ -385,8 +391,10 @@ function ActionsPageInner() {
           message: r.message.trim(),
           attachment: r.file ? await uploadAttachment(r.file) : undefined,
         })));
-        // Round-robin rows across accounts.
-        cleaned = allAccountIds.map((accountId, i) => ({ accountId, ...uploads[i % uploads.length] }));
+        const targetIds = replySelectedIds.length ? replySelectedIds : allAccountIds;
+        if (!targetIds.length) return toast.error("Select at least one account");
+        // Round-robin rows across selected accounts.
+        cleaned = targetIds.map((accountId, i) => ({ accountId, ...uploads[i % uploads.length] }));
       }
     } catch (e) {
       return toast.error((e as Error).message);
@@ -650,9 +658,16 @@ function ActionsPageInner() {
                       if (!src) return toast.error("Enter a valid message link first");
                       setPollLoading(true);
                       try {
-                        const info = await loadPollFn({ data: { chat: src.chat, msgId: src.msgId } });
+                        const info = await loadPollFn({
+                          data: {
+                            chat: src.chat,
+                            msgId: src.msgId,
+                            ...(pollCheckAccountId ? { accountId: pollCheckAccountId } : {}),
+                          },
+                        });
                         setPollInfo(info);
-                        setPollSelected([]);
+                        setPollSelected(info.answers.map((a, i) => (a.chosen ? i : -1)).filter((i) => i >= 0));
+                        setShowResults(false);
                         if (info.closed) toast.warning("Poll is closed");
                       } catch (e) {
                         toast.error((e as Error).message);
@@ -664,12 +679,68 @@ function ActionsPageInner() {
                     {pollLoading ? "Loading…" : "Load poll"}
                   </Button>
                   {pollInfo && (
+                    <>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        disabled={pollLoading}
+                        onClick={async () => {
+                          const src = parseMessageLink(source);
+                          if (!src) return;
+                          setPollLoading(true);
+                          try {
+                            const info = await loadPollFn({
+                              data: {
+                                chat: src.chat,
+                                msgId: src.msgId,
+                                ...(pollCheckAccountId ? { accountId: pollCheckAccountId } : {}),
+                              },
+                            });
+                            setPollInfo(info);
+                            setShowResults(true);
+                          } catch (e) {
+                            toast.error((e as Error).message);
+                          } finally {
+                            setPollLoading(false);
+                          }
+                        }}
+                      >
+                        {showResults ? "Refresh results" : "View results"}
+                      </Button>
+                    </>
+                  )}
+                  {pollInfo && (
                     <span className="text-xs text-muted-foreground">
                       {pollInfo.multipleChoice ? "Multi-choice" : "Single-choice"}
                       {pollInfo.closed ? " · closed" : ""}
+                      {pollInfo.totalVoters ? ` · ${pollInfo.totalVoters} vote${pollInfo.totalVoters === 1 ? "" : "s"}` : ""}
                     </span>
                   )}
                 </div>
+                <div>
+                  <Label>Check vote status from account (optional)</Label>
+                  <select
+                    className="w-full rounded-md border border-border bg-background px-2 py-2 text-sm"
+                    value={pollCheckAccountId}
+                    onChange={(e) => setPollCheckAccountId(e.target.value)}
+                  >
+                    <option value="">— First active account —</option>
+                    {accountList.map((a) => (
+                      <option key={a.id} value={a.id}>
+                        {a.first_name || a.username || a.phone}
+                      </option>
+                    ))}
+                  </select>
+                  <p className="mt-1 text-xs text-muted-foreground">
+                    "Already voted" status and per-option "chosen" reflects this account.
+                  </p>
+                </div>
+                {pollInfo?.alreadyVoted && !retake && (
+                  <div className="rounded-md border border-amber-500/50 bg-amber-500/10 p-2 text-xs text-amber-700 dark:text-amber-300">
+                    This account already voted for {pollInfo.answers.filter((a) => a.chosen).map((a) => `"${a.text}"`).join(", ")}. Voting is disabled — enable "Retake" below to retract and vote again.
+                  </div>
+                )}
                 {pollInfo ? (
                   <div className="rounded-md border border-border p-3 space-y-2">
                     {pollInfo.question && (
@@ -678,8 +749,11 @@ function ActionsPageInner() {
                     <div className="space-y-1">
                       {pollInfo.answers.map((a, i) => {
                         const checked = pollSelected.includes(i);
+                        const pct = pollInfo.totalVoters > 0
+                          ? Math.round((a.voters / pollInfo.totalVoters) * 100)
+                          : 0;
                         return (
-                          <label key={i} className="flex items-start gap-2 text-sm rounded px-2 py-1 hover:bg-muted/40">
+                          <label key={i} className={`flex items-start gap-2 text-sm rounded px-2 py-1 hover:bg-muted/40 ${a.chosen ? "bg-primary/5" : ""}`}>
                             <input
                               type={pollInfo.multipleChoice ? "checkbox" : "radio"}
                               name="poll-option"
@@ -695,7 +769,18 @@ function ActionsPageInner() {
                               }}
                             />
                             <span className="text-xs text-muted-foreground w-6">#{i}</span>
-                            <span className="flex-1">{a}</span>
+                            <span className="flex-1">
+                              {a.text}
+                              {a.chosen && <span className="ml-1 text-xs text-primary">✓ your vote</span>}
+                            </span>
+                            {(showResults || pollInfo.alreadyVoted) && (
+                              <span className="ml-2 flex items-center gap-2 text-xs text-muted-foreground shrink-0">
+                                <span className="w-16 h-1.5 rounded bg-muted overflow-hidden">
+                                  <span className="block h-full bg-primary" style={{ width: `${pct}%` }} />
+                                </span>
+                                <span className="w-14 text-right tabular-nums">{a.voters} · {pct}%</span>
+                              </span>
+                            )}
                           </label>
                         );
                       })}
@@ -899,8 +984,53 @@ function ActionsPageInner() {
                 <p className="text-xs text-muted-foreground">
                   {replyMode === "per-account"
                     ? "Each row: the chosen account sends this reply/comment. Rows run in parallel — different accounts can post different replies on the same post."
-                    : "Same reply text goes out from every account (round-robin if you add multiple rows)."}
+                    : "Same reply text goes out from every selected account (round-robin if you add multiple rows)."}
                 </p>
+                {replyMode === "all-ids" && (
+                  <div className="rounded-md border border-border p-3 space-y-2">
+                    <div className="flex items-center gap-2">
+                      <Label className="mr-auto">Send from accounts</Label>
+                      <button
+                        type="button"
+                        className="text-xs underline text-muted-foreground"
+                        onClick={() => setReplySelectedIds(allAccountIds)}
+                      >
+                        Select all
+                      </button>
+                      <button
+                        type="button"
+                        className="text-xs underline text-muted-foreground"
+                        onClick={() => setReplySelectedIds([])}
+                      >
+                        Clear
+                      </button>
+                    </div>
+                    <div className="max-h-48 overflow-auto grid grid-cols-1 sm:grid-cols-2 gap-1">
+                      {accountList.map((a) => {
+                        const checked = replySelectedIds.includes(a.id);
+                        return (
+                          <label key={a.id} className="flex items-center gap-2 text-sm rounded px-2 py-1 hover:bg-muted/40">
+                            <input
+                              type="checkbox"
+                              checked={checked}
+                              onChange={(e) =>
+                                setReplySelectedIds((ids) =>
+                                  e.target.checked ? [...ids, a.id] : ids.filter((x) => x !== a.id),
+                                )
+                              }
+                            />
+                            <span className="truncate">{a.first_name || a.username || a.phone}</span>
+                          </label>
+                        );
+                      })}
+                    </div>
+                    <p className="text-xs text-muted-foreground">
+                      {replySelectedIds.length
+                        ? `${replySelectedIds.length} account(s) selected`
+                        : `None selected — will use all ${allAccountIds.length} account(s)`}
+                    </p>
+                  </div>
+                )}
                 {replyRows.map((row, idx) => (
                   <div key={row.id} className="rounded-md border border-border p-3 space-y-2">
                     <div className="flex items-center gap-2">
@@ -975,7 +1105,15 @@ function ActionsPageInner() {
                   <Play className="mr-1 h-4 w-4" /> Send {replyRows.length} {viaDiscussion ? "comment" : "reply"}{replyRows.length === 1 ? "" : "s"}
                 </Button>
               ) : (
-                <Button onClick={run} disabled={running || allAccountIds.length === 0}>
+                <Button
+                  onClick={run}
+                  disabled={
+                    running ||
+                    allAccountIds.length === 0 ||
+                    (tab === "vote" && !!pollInfo?.alreadyVoted && !retake) ||
+                    (tab === "vote" && !!pollInfo?.closed)
+                  }
+                >
                   <Play className="mr-1 h-4 w-4" />
                   Run on {allAccountIds.length} account{allAccountIds.length === 1 ? "" : "s"}
                 </Button>
