@@ -9,7 +9,15 @@ import {
   verifyAccountLogin,
   deleteAccount,
 } from "@/lib/accounts.functions";
-import { listTasks } from "@/lib/tasks.functions";
+import {
+  listTaskGroups,
+  getGroupEdit,
+  updateGroup,
+  deleteGroup,
+  resetGroupItems,
+} from "@/lib/tasks.functions";
+import { Textarea } from "@/components/ui/textarea";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -21,7 +29,7 @@ import {
   DialogTrigger,
 } from "@/components/ui/dialog";
 import { toast } from "sonner";
-import { LogOut, Plus, RefreshCw, Trash2 } from "lucide-react";
+import { LogOut, Pencil, Plus, RefreshCw, RotateCcw, Trash2 } from "lucide-react";
 import { AdminGate } from "@/components/AdminGate";
 
 export const Route = createFileRoute("/_authenticated/dashboard")({
@@ -38,7 +46,9 @@ function Dashboard() {
   const nav = useNavigate();
   const qc = useQueryClient();
   const listAcc = useServerFn(listAccounts);
-  const listTsk = useServerFn(listTasks);
+  const listGroupsFn = useServerFn(listTaskGroups);
+  const delGroupFn = useServerFn(deleteGroup);
+  const resetGroupFn = useServerFn(resetGroupItems);
   const delAcc = useServerFn(deleteAccount);
   const [email, setEmail] = useState<string>("");
 
@@ -47,7 +57,11 @@ function Dashboard() {
   }, []);
 
   const accountsQ = useQuery({ queryKey: ["accounts"], queryFn: () => listAcc() });
-  const tasksQ = useQuery({ queryKey: ["tasks"], queryFn: () => listTsk() });
+  const groupsQ = useQuery({
+    queryKey: ["task-groups"],
+    queryFn: () => listGroupsFn(),
+    refetchInterval: 5000,
+  });
 
   const signOut = async () => {
     await supabase.auth.signOut();
@@ -58,6 +72,37 @@ function Dashboard() {
     mutationFn: (id: string) => delAcc({ data: { id } }),
     onSuccess: () => qc.invalidateQueries({ queryKey: ["accounts"] }),
   });
+
+  const invalidateGroups = () =>
+    qc.invalidateQueries({ queryKey: ["task-groups"] });
+
+  const onDeleteGroup = async (groupId: string, name: string) => {
+    if (!confirm(`Delete task "${name}"? This removes it for every account.`))
+      return;
+    try {
+      await delGroupFn({ data: { groupId } });
+      toast.success("Task deleted");
+      invalidateGroups();
+    } catch (err) {
+      toast.error((err as Error).message);
+    }
+  };
+
+  const onReset = async (
+    groupId: string,
+    scope: "failed" | "all",
+    name: string,
+  ) => {
+    try {
+      const r = await resetGroupFn({ data: { groupId, scope } });
+      toast.success(
+        `${name}: ${r.reset} ${scope === "failed" ? "failed" : ""} item${r.reset === 1 ? "" : "s"} queued`,
+      );
+      invalidateGroups();
+    } catch (err) {
+      toast.error((err as Error).message);
+    }
+  };
 
   const soon = () => toast.info("Coming soon");
 
@@ -182,26 +227,72 @@ function Dashboard() {
         </section>
 
         <section>
-          <h2 className="mb-4 text-2xl font-semibold tracking-tight">Join Tasks</h2>
-          {tasksQ.isLoading ? (
+          <div className="mb-4 flex items-center justify-between">
+            <h2 className="text-2xl font-semibold tracking-tight">Recent tasks</h2>
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={invalidateGroups}
+              aria-label="Refresh"
+            >
+              <RefreshCw className="mr-1 h-3.5 w-3.5" /> Refresh
+            </Button>
+          </div>
+          {groupsQ.isLoading ? (
             <p className="text-sm text-muted-foreground">Loading…</p>
-          ) : tasksQ.data?.length ? (
-            <ul className="divide-y divide-border rounded-lg border border-border bg-card">
-              {tasksQ.data.map((t) => (
-                <li key={t.id} className="flex items-center justify-between p-4">
-                  <div>
-                    <div className="font-medium">{t.name}</div>
-                    <div className="text-xs text-muted-foreground">
-                      {t.status} · {new Date(t.created_at).toLocaleString()}
-                    </div>
+          ) : groupsQ.data?.length ? (
+            <ul className="space-y-3">
+              {groupsQ.data.map((g) => (
+                <li
+                  key={g.groupId}
+                  className="rounded-lg border border-border bg-card p-4"
+                >
+                  <div className="flex flex-wrap items-center gap-3">
+                    <Link
+                      to="/groups/$id"
+                      params={{ id: g.groupId }}
+                      className="min-w-0 flex-1"
+                    >
+                      <div className="truncate text-base font-semibold hover:underline">
+                        {g.name}
+                      </div>
+                      <div className="text-xs text-muted-foreground">
+                        {new Date(g.createdAt).toLocaleString()} · delay {g.minDelay}-{g.maxDelay}s
+                        {" · "}{g.accounts} account{g.accounts === 1 ? "" : "s"}
+                        {g.total > 0 ? ` · ${g.done}/${g.total} done` : ""}
+                        {g.failed > 0 ? ` · ${g.failed} failed` : ""}
+                      </div>
+                    </Link>
+                    <StatusPill status={g.status} />
+                    <EditGroupDialog
+                      groupId={g.groupId}
+                      onSaved={invalidateGroups}
+                    />
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => onReset(g.groupId, "failed", g.name)}
+                      disabled={g.failed === 0}
+                    >
+                      <RotateCcw className="mr-1 h-3.5 w-3.5" /> Retry failed
+                    </Button>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => onReset(g.groupId, "all", g.name)}
+                      disabled={g.total === 0}
+                    >
+                      <RefreshCw className="mr-1 h-3.5 w-3.5" /> Re-run all
+                    </Button>
+                    <Button
+                      variant="outline"
+                      size="icon"
+                      onClick={() => onDeleteGroup(g.groupId, g.name)}
+                      aria-label="Delete task"
+                    >
+                      <Trash2 className="h-4 w-4" />
+                    </Button>
                   </div>
-                  <Link
-                    to="/tasks/$id"
-                    params={{ id: t.id }}
-                    className="text-sm text-primary underline"
-                  >
-                    Open
-                  </Link>
                 </li>
               ))}
             </ul>
@@ -211,6 +302,262 @@ function Dashboard() {
         </section>
       </div>
     </main>
+  );
+}
+
+function StatusPill({
+  status,
+}: {
+  status: "running" | "done" | "failed" | "idle" | "partial";
+}) {
+  const tone =
+    status === "running"
+      ? "bg-primary/10 text-primary border-primary/30"
+      : status === "done"
+        ? "bg-green-500/10 text-green-600 border-green-500/30"
+        : status === "failed"
+          ? "bg-destructive/10 text-destructive border-destructive/30"
+          : status === "partial"
+            ? "bg-yellow-500/10 text-yellow-600 border-yellow-500/30"
+            : "bg-muted text-muted-foreground border-border";
+  return (
+    <span
+      className={`rounded-full border px-2.5 py-0.5 text-xs font-medium ${tone}`}
+    >
+      {status}
+    </span>
+  );
+}
+
+function EditGroupDialog({
+  groupId,
+  onSaved,
+}: {
+  groupId: string;
+  onSaved: () => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const loadEdit = useServerFn(getGroupEdit);
+  const listAcc = useServerFn(listAccounts);
+  const save = useServerFn(updateGroup);
+
+  const editQ = useQuery({
+    queryKey: ["group-edit", groupId],
+    queryFn: () => loadEdit({ data: { groupId } }),
+    enabled: open,
+  });
+  const accountsQ = useQuery({
+    queryKey: ["accounts"],
+    queryFn: () => listAcc(),
+    enabled: open,
+  });
+
+  const [name, setName] = useState("");
+  const [minDelay, setMinDelay] = useState("1");
+  const [maxDelay, setMaxDelay] = useState("2");
+  const [targets, setTargets] = useState<string[]>([]);
+  const [newLinks, setNewLinks] = useState("");
+  const [accountIds, setAccountIds] = useState<Set<string>>(new Set());
+  const [busy, setBusy] = useState(false);
+
+  useEffect(() => {
+    if (open && editQ.data) {
+      setName(editQ.data.name);
+      setMinDelay(String(editQ.data.minDelay));
+      setMaxDelay(String(editQ.data.maxDelay));
+      setTargets(editQ.data.targets);
+      setAccountIds(new Set(editQ.data.accountIds));
+      setNewLinks("");
+    }
+  }, [open, editQ.data]);
+
+  const removeTarget = (t: string) =>
+    setTargets((prev) => prev.filter((x) => x !== t));
+
+  const addNewLinks = () => {
+    const cleaned = newLinks
+      .split(/\r?\n|,|\s/)
+      .map((s) => s.trim())
+      .filter(Boolean)
+      .map((s) =>
+        s
+          .replace(/^https?:\/\/(?:t\.me|telegram\.me)\//i, "")
+          .replace(/[?#].*$/, "")
+          .replace(/^@/, ""),
+      );
+    if (!cleaned.length) return;
+    setTargets((prev) => Array.from(new Set([...prev, ...cleaned])));
+    setNewLinks("");
+  };
+
+  const toggleAccount = (id: string) => {
+    setAccountIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  };
+
+  const submit = async () => {
+    if (!name.trim()) return toast.error("Name is required");
+    if (accountIds.size === 0) return toast.error("Pick at least one account");
+    setBusy(true);
+    try {
+      await save({
+        data: {
+          groupId,
+          name: name.trim(),
+          minDelay: Number(minDelay),
+          maxDelay: Number(maxDelay),
+          targets,
+          accountIds: [...accountIds],
+        },
+      });
+      toast.success("Task updated");
+      setOpen(false);
+      onSaved();
+    } catch (err) {
+      toast.error((err as Error).message);
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const originalIds = new Set(editQ.data?.accountIds ?? []);
+
+  return (
+    <Dialog open={open} onOpenChange={setOpen}>
+      <DialogTrigger asChild>
+        <Button variant="outline" size="sm">
+          <Pencil className="mr-1 h-3.5 w-3.5" /> Edit
+        </Button>
+      </DialogTrigger>
+      <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-2xl">
+        <DialogHeader>
+          <DialogTitle>Edit task</DialogTitle>
+        </DialogHeader>
+        {editQ.isLoading || !editQ.data ? (
+          <p className="text-sm text-muted-foreground">Loading…</p>
+        ) : (
+          <div className="space-y-5">
+            <div>
+              <Label>Name</Label>
+              <Input value={name} onChange={(e) => setName(e.target.value)} />
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <Label>Min delay (sec)</Label>
+                <Input
+                  type="number"
+                  value={minDelay}
+                  onChange={(e) => setMinDelay(e.target.value)}
+                />
+              </div>
+              <div>
+                <Label>Max delay (sec)</Label>
+                <Input
+                  type="number"
+                  value={maxDelay}
+                  onChange={(e) => setMaxDelay(e.target.value)}
+                />
+              </div>
+            </div>
+
+            <div>
+              <Label>Links ({targets.length})</Label>
+              <div className="mt-1 max-h-56 space-y-1 overflow-auto rounded-md border border-border p-2">
+                {targets.length === 0 && (
+                  <p className="px-1 py-2 text-xs text-muted-foreground">
+                    No links.
+                  </p>
+                )}
+                {targets.map((t) => (
+                  <div
+                    key={t}
+                    className="flex items-center justify-between rounded px-2 py-1.5 text-sm hover:bg-accent"
+                  >
+                    <span className="truncate">t.me/{t}</span>
+                    <button
+                      type="button"
+                      onClick={() => removeTarget(t)}
+                      className="text-muted-foreground hover:text-destructive"
+                      aria-label="Remove"
+                    >
+                      <Trash2 className="h-3.5 w-3.5" />
+                    </button>
+                  </div>
+                ))}
+              </div>
+              <Textarea
+                className="mt-2"
+                rows={3}
+                value={newLinks}
+                onChange={(e) => setNewLinks(e.target.value)}
+                onBlur={addNewLinks}
+                placeholder="Add new links, one per line"
+              />
+            </div>
+
+            <div>
+              <div className="mb-2 flex items-center justify-between">
+                <Label>Accounts ({accountsQ.data?.length ?? 0})</Label>
+                <div className="flex gap-2 text-xs">
+                  <button
+                    type="button"
+                    className="rounded border border-border px-2 py-0.5 hover:bg-accent"
+                    onClick={() =>
+                      setAccountIds(
+                        new Set((accountsQ.data ?? []).map((a) => a.id)),
+                      )
+                    }
+                  >
+                    Select all
+                  </button>
+                  <button
+                    type="button"
+                    className="rounded border border-border px-2 py-0.5 hover:bg-accent"
+                    onClick={() => setAccountIds(new Set())}
+                  >
+                    Deselect all
+                  </button>
+                </div>
+              </div>
+              <div className="max-h-64 space-y-1 overflow-auto rounded-md border border-border p-2">
+                {(accountsQ.data ?? []).map((a) => (
+                  <label
+                    key={a.id}
+                    className="flex cursor-pointer items-center gap-3 rounded px-2 py-1.5 text-sm hover:bg-accent"
+                  >
+                    <Checkbox
+                      checked={accountIds.has(a.id)}
+                      onCheckedChange={() => toggleAccount(a.id)}
+                    />
+                    <span className="flex-1 truncate font-medium">
+                      {a.first_name || a.username || a.phone}
+                    </span>
+                    {originalIds.has(a.id) && (
+                      <span className="text-xs text-muted-foreground">
+                        in task
+                      </span>
+                    )}
+                  </label>
+                ))}
+              </div>
+            </div>
+
+            <Button
+              className="w-full"
+              size="lg"
+              onClick={submit}
+              disabled={busy}
+            >
+              {busy ? "Saving…" : "Save changes"}
+            </Button>
+          </div>
+        )}
+      </DialogContent>
+    </Dialog>
   );
 }
 
