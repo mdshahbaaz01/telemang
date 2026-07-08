@@ -125,19 +125,6 @@ export const setTaskStatus = createServerFn({ method: "POST" })
     return { ok: true };
   });
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-async function log(
-  supabase: any,
-  taskId: string,
-  userId: string,
-  level: "info" | "warn" | "error" | "success",
-  message: string,
-) {
-  await supabase
-    .from("task_logs")
-    .insert({ task_id: taskId, user_id: userId, level, message });
-}
-
 export const processNextJoin = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .inputValidator((d: unknown) =>
@@ -149,6 +136,15 @@ export const processNextJoin = createServerFn({ method: "POST" })
     const { Api } = await import("telegram");
     const { StringSession } = await import("telegram/sessions");
     const supabase = context.supabase;
+    const log = async (
+      taskId: string,
+      level: "info" | "warn" | "error" | "success",
+      message: string,
+    ) => {
+      await supabase
+        .from("task_logs")
+        .insert({ task_id: taskId, user_id: context.userId, level, message });
+    };
 
     const { data: task, error: terr } = await supabase
       .from("join_tasks")
@@ -190,7 +186,7 @@ export const processNextJoin = createServerFn({ method: "POST" })
         .from("join_tasks")
         .update({ status: "done" })
         .eq("id", task.id);
-      await log(supabase, task.id, context.userId, "success", "All targets processed.");
+      await log(task.id, "success", "All targets processed.");
       return { done: true };
     }
 
@@ -205,9 +201,7 @@ export const processNextJoin = createServerFn({ method: "POST" })
 
     try {
       await log(
-        supabase,
         task.id,
-        context.userId,
         "info",
         `Joining @${item.target}…`,
       );
@@ -249,9 +243,7 @@ export const processNextJoin = createServerFn({ method: "POST" })
           processed_at: new Date().toISOString(),
         };
         await log(
-          supabase,
           task.id,
-          context.userId,
           "success",
           result.message,
         );
@@ -265,9 +257,7 @@ export const processNextJoin = createServerFn({ method: "POST" })
             processed_at: new Date().toISOString(),
           };
           await log(
-            supabase,
             task.id,
-            context.userId,
             "success",
             `Already joined @${item.target}`,
           );
@@ -278,9 +268,7 @@ export const processNextJoin = createServerFn({ method: "POST" })
             processed_at: new Date().toISOString(),
           };
           await log(
-            supabase,
             task.id,
-            context.userId,
             "success",
             `Join request sent for ${item.target}`,
           );
@@ -302,9 +290,7 @@ export const processNextJoin = createServerFn({ method: "POST" })
             processed_at: new Date().toISOString(),
           };
           await log(
-            supabase,
             task.id,
-            context.userId,
             "warn",
             `FloodWait ${seconds}s — Telegram rate limited this account until ${pausedUntil}`,
           );
@@ -320,9 +306,7 @@ export const processNextJoin = createServerFn({ method: "POST" })
           processed_at: new Date().toISOString(),
         };
         await log(
-          supabase,
           task.id,
-          context.userId,
           "error",
           `Failed @${item.target}: ${msg}`,
         );
