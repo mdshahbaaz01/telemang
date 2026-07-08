@@ -25,7 +25,7 @@ import {
 } from "@/components/ui/dialog";
 import { Checkbox } from "@/components/ui/checkbox";
 
-export const Route = createFileRoute("/_authenticated/groups/")({
+export const Route = createFileRoute("/_authenticated/groups/$id")({
   component: () => (
     <AdminGate>
       <GroupRunner />

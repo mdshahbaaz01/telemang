@@ -20,7 +20,7 @@ import { Route as ApiPublicCleanupStreamRouteImport } from './routes/api/public/
 import { Route as ApiPublicActionsStreamRouteImport } from './routes/api/public/actions-stream'
 import { Route as AuthenticatedTasksNewRouteImport } from './routes/_authenticated/tasks.new'
 import { Route as AuthenticatedTasksIdRouteImport } from './routes/_authenticated/tasks.$id'
-import { Route as AuthenticatedGroupsRouteImport } from './routes/_authenticated/groups.'
+import { Route as AuthenticatedGroupsIdRouteImport } from './routes/_authenticated/groups.$id'
 
 const AuthRoute = AuthRouteImport.update({
   id: '/auth',
@@ -76,9 +76,9 @@ const AuthenticatedTasksIdRoute = AuthenticatedTasksIdRouteImport.update({
   path: '/tasks/$id',
   getParentRoute: () => AuthenticatedRouteRoute,
 } as any)
-const AuthenticatedGroupsRoute = AuthenticatedGroupsRouteImport.update({
-  id: '/groups/',
-  path: '/groups/',
+const AuthenticatedGroupsIdRoute = AuthenticatedGroupsIdRouteImport.update({
+  id: '/groups/$id',
+  path: '/groups/$id',
   getParentRoute: () => AuthenticatedRouteRoute,
 } as any)
 
@@ -89,7 +89,7 @@ export interface FileRoutesByFullPath {
   '/cleanup': typeof AuthenticatedCleanupRoute
   '/dashboard': typeof AuthenticatedDashboardRoute
   '/owner': typeof AuthenticatedOwnerRoute
-  '/groups/': typeof AuthenticatedGroupsRoute
+  '/groups/$id': typeof AuthenticatedGroupsIdRoute
   '/tasks/$id': typeof AuthenticatedTasksIdRoute
   '/tasks/new': typeof AuthenticatedTasksNewRoute
   '/api/public/actions-stream': typeof ApiPublicActionsStreamRoute
@@ -102,7 +102,7 @@ export interface FileRoutesByTo {
   '/cleanup': typeof AuthenticatedCleanupRoute
   '/dashboard': typeof AuthenticatedDashboardRoute
   '/owner': typeof AuthenticatedOwnerRoute
-  '/groups': typeof AuthenticatedGroupsRoute
+  '/groups/$id': typeof AuthenticatedGroupsIdRoute
   '/tasks/$id': typeof AuthenticatedTasksIdRoute
   '/tasks/new': typeof AuthenticatedTasksNewRoute
   '/api/public/actions-stream': typeof ApiPublicActionsStreamRoute
@@ -117,7 +117,7 @@ export interface FileRoutesById {
   '/_authenticated/cleanup': typeof AuthenticatedCleanupRoute
   '/_authenticated/dashboard': typeof AuthenticatedDashboardRoute
   '/_authenticated/owner': typeof AuthenticatedOwnerRoute
-  '/_authenticated/groups/': typeof AuthenticatedGroupsRoute
+  '/_authenticated/groups/$id': typeof AuthenticatedGroupsIdRoute
   '/_authenticated/tasks/$id': typeof AuthenticatedTasksIdRoute
   '/_authenticated/tasks/new': typeof AuthenticatedTasksNewRoute
   '/api/public/actions-stream': typeof ApiPublicActionsStreamRoute
@@ -132,7 +132,7 @@ export interface FileRouteTypes {
     | '/cleanup'
     | '/dashboard'
     | '/owner'
-    | '/groups/'
+    | '/groups/$id'
     | '/tasks/$id'
     | '/tasks/new'
     | '/api/public/actions-stream'
@@ -145,7 +145,7 @@ export interface FileRouteTypes {
     | '/cleanup'
     | '/dashboard'
     | '/owner'
-    | '/groups'
+    | '/groups/$id'
     | '/tasks/$id'
     | '/tasks/new'
     | '/api/public/actions-stream'
@@ -159,7 +159,7 @@ export interface FileRouteTypes {
     | '/_authenticated/cleanup'
     | '/_authenticated/dashboard'
     | '/_authenticated/owner'
-    | '/_authenticated/groups/'
+    | '/_authenticated/groups/$id'
     | '/_authenticated/tasks/$id'
     | '/_authenticated/tasks/new'
     | '/api/public/actions-stream'
@@ -253,11 +253,11 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedTasksIdRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
-    '/_authenticated/groups/': {
-      id: '/_authenticated/groups/'
-      path: '/groups'
-      fullPath: '/groups/'
-      preLoaderRoute: typeof AuthenticatedGroupsRouteImport
+    '/_authenticated/groups/$id': {
+      id: '/_authenticated/groups/$id'
+      path: '/groups/$id'
+      fullPath: '/groups/$id'
+      preLoaderRoute: typeof AuthenticatedGroupsIdRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
   }
@@ -268,7 +268,7 @@ interface AuthenticatedRouteRouteChildren {
   AuthenticatedCleanupRoute: typeof AuthenticatedCleanupRoute
   AuthenticatedDashboardRoute: typeof AuthenticatedDashboardRoute
   AuthenticatedOwnerRoute: typeof AuthenticatedOwnerRoute
-  AuthenticatedGroupsRoute: typeof AuthenticatedGroupsRoute
+  AuthenticatedGroupsIdRoute: typeof AuthenticatedGroupsIdRoute
   AuthenticatedTasksIdRoute: typeof AuthenticatedTasksIdRoute
   AuthenticatedTasksNewRoute: typeof AuthenticatedTasksNewRoute
 }
@@ -278,7 +278,7 @@ const AuthenticatedRouteRouteChildren: AuthenticatedRouteRouteChildren = {
   AuthenticatedCleanupRoute: AuthenticatedCleanupRoute,
   AuthenticatedDashboardRoute: AuthenticatedDashboardRoute,
   AuthenticatedOwnerRoute: AuthenticatedOwnerRoute,
-  AuthenticatedGroupsRoute: AuthenticatedGroupsRoute,
+  AuthenticatedGroupsIdRoute: AuthenticatedGroupsIdRoute,
   AuthenticatedTasksIdRoute: AuthenticatedTasksIdRoute,
   AuthenticatedTasksNewRoute: AuthenticatedTasksNewRoute,
 }
