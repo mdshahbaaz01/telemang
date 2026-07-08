@@ -7,6 +7,7 @@ const createSchema = z.object({
   target: z.string().min(1).max(200),
   caption: z.string().max(1000).optional().nullable(),
   format: z.enum(["auto", "chat_list", "channel_view"]).default("auto"),
+  parallel: z.number().int().min(1).max(20).default(1),
   accountIds: z.array(z.string().uuid()).min(1).max(500),
 });
 
@@ -30,6 +31,7 @@ export const createProofTask = createServerFn({ method: "POST" })
         target: data.target.trim(),
         caption: data.caption ?? null,
         format: data.format,
+        parallel: data.parallel,
       })
       .select("id")
       .single();
@@ -50,7 +52,7 @@ export const listProofTasks = createServerFn({ method: "GET" })
   .handler(async ({ context }) => {
     const { data, error } = await context.supabase
       .from("proof_tasks")
-      .select("id, channel_link, target, caption, format, created_at")
+      .select("id, channel_link, target, caption, format, parallel, created_at")
       .order("created_at", { ascending: false })
       .limit(50);
     if (error) throw new Error(error.message);
@@ -78,7 +80,7 @@ export const runProofTask = createServerFn({ method: "POST" })
   .handler(async ({ data, context }) => {
     const { data: task, error: terr } = await context.supabase
       .from("proof_tasks")
-      .select("id, channel_link, target, caption, format")
+      .select("id, channel_link, target, caption, format, parallel")
       .eq("id", data.taskId)
       .single();
     if (terr || !task) throw new Error("Task not found");
@@ -109,13 +111,14 @@ export const runProofTask = createServerFn({ method: "POST" })
         : null;
 
     let processed = 0;
-    for (const run of runs) {
-      const stamp = async (patch: Record<string, unknown>) => {
-        await context.supabase
-          .from("proof_runs")
-          .update({ ...patch, updated_at: new Date().toISOString() })
-          .eq("id", run.id);
-      };
+    const stamp = async (runId: string, patch: Record<string, unknown>) => {
+      await context.supabase
+        .from("proof_runs")
+        .update({ ...patch, updated_at: new Date().toISOString() })
+        .eq("id", runId);
+    };
+
+    const processOne = async (run: { id: string; account_id: string }) => {
       let client: Awaited<ReturnType<typeof openClientForAccount>> | null = null;
       try {
         client = await openClientForAccount(context.supabase, run.account_id, {
@@ -225,7 +228,7 @@ export const runProofTask = createServerFn({ method: "POST" })
           caption,
         });
 
-        await stamp({
+        await stamp(run.id, {
           status: "sent",
           channel_title: title,
           channel_username: username,
@@ -235,12 +238,23 @@ export const runProofTask = createServerFn({ method: "POST" })
         });
         processed++;
       } catch (e) {
-        await stamp({ status: "failed", error: (e as Error).message || String(e) });
+        await stamp(run.id, { status: "failed", error: (e as Error).message || String(e) });
       } finally {
         try {
           await client?.disconnect();
         } catch {}
       }
-    }
+    };
+
+    // Worker pool with concurrency = task.parallel
+    const concurrency = Math.max(1, Math.min(20, Number(task.parallel) || 1));
+    let cursor = 0;
+    const workers = Array.from({ length: Math.min(concurrency, runs.length) }, async () => {
+      while (cursor < runs.length) {
+        const idx = cursor++;
+        await processOne(runs[idx]);
+      }
+    });
+    await Promise.all(workers);
     return { ran: processed };
   });
