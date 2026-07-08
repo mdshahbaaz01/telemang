@@ -188,9 +188,10 @@ export async function executeBroadcast(
             try {
               const dest = await resolveTarget(client, t);
               if (attData) {
+                const formatted = formatMessage(row.message, row.format);
                 await client.sendFile(dest, {
                   file: new CustomFile(attData.filename, attData.buf.length, attData.filename, attData.buf),
-                  caption: row.message || undefined,
+                  caption: formatted.message || undefined,
                   parseMode: row.format === "mono" ? "html" : undefined,
                   voiceNote: !!attData.isVoice,
                 });
@@ -290,9 +291,10 @@ export async function executeReply(
             let attData: { buf: Buffer; filename: string; mimeType?: string; isVoice?: boolean } | null = null;
             if (row.attachment) attData = await loadAttachment(row.attachment);
             if (attData) {
+              const formatted = formatMessage(row.message, row.format);
               await client.sendFile(replyPeer, {
                 file: new CustomFile(attData.filename, attData.buf.length, attData.filename, attData.buf),
-                caption: row.message || undefined,
+                caption: formatted.message || undefined,
                 parseMode: row.format === "mono" ? "html" : undefined,
                 voiceNote: !!attData.isVoice,
                 replyTo: replyToId,

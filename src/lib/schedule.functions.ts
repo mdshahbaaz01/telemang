@@ -6,6 +6,7 @@ const attachmentSchema = z.object({
   path: z.string().min(1).max(500),
   filename: z.string().min(1).max(200),
   mimeType: z.string().min(1).max(200).optional(),
+  isVoice: z.boolean().optional(),
 });
 
 const msgRefSchema = z.object({

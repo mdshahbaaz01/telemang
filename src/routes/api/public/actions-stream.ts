@@ -36,6 +36,7 @@ const attachmentSchema = z.object({
   path: z.string().min(1).max(500), // storage path in "action-attachments" bucket
   filename: z.string().min(1).max(200),
   mimeType: z.string().min(1).max(200).optional(),
+  isVoice: z.boolean().optional(),
 });
 
 const broadcastRowSchema = z.object({
@@ -601,10 +602,12 @@ export const Route = createFileRoute("/api/public/actions-stream")({
                     try {
                       const dest = await resolveTarget(client, t);
                       if (attData) {
+                        const formatted = formatMessage(row.message, row.format);
                         await client.sendFile(dest, {
                           file: buildCustomFile(attData),
-                          caption: row.message || undefined,
+                          caption: formatted.message || undefined,
                           parseMode: row.format === "mono" ? "html" : undefined,
+                          voiceNote: !!row.attachment?.isVoice,
                         });
                       } else {
                         await client.sendMessage(dest, formatMessage(row.message, row.format));
@@ -690,10 +693,12 @@ export const Route = createFileRoute("/api/public/actions-stream")({
                 }
                 if (row.attachment) {
                   const att = await loadAttachment(row.attachment);
+                  const formatted = formatMessage(row.message, row.format);
                   await client.sendFile(replyPeer, {
                     file: buildCustomFile(att),
-                    caption: row.message || undefined,
+                    caption: formatted.message || undefined,
                     parseMode: row.format === "mono" ? "html" : undefined,
+                    voiceNote: !!row.attachment?.isVoice,
                     replyTo: replyToId,
                     ...(topMsgId ? { topMsgId } : {}),
                   });
