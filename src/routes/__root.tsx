@@ -77,14 +77,20 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
     meta: [
       { charSet: "utf-8" },
       { name: "viewport", content: "width=device-width, initial-scale=1" },
-      { title: "Lovable App" },
-      { name: "description", content: "Lovable Generated Project" },
-      { name: "author", content: "Lovable" },
-      { property: "og:title", content: "Lovable App" },
-      { property: "og:description", content: "Lovable Generated Project" },
+      { title: "Calculator — Fast, Keyboard-Friendly Web Calculator" },
+      {
+        name: "description",
+        content:
+          "A clean, fast online calculator with keyboard support. Add, subtract, multiply, divide, percent, and more — right in your browser.",
+      },
+      { property: "og:title", content: "Calculator — Fast, Keyboard-Friendly Web Calculator" },
+      {
+        property: "og:description",
+        content:
+          "A clean, fast online calculator with keyboard support. Add, subtract, multiply, divide, percent, and more.",
+      },
       { property: "og:type", content: "website" },
       { name: "twitter:card", content: "summary_large_image" },
-      { name: "twitter:site", content: "@Lovable" },
     ],
     links: [
       {
