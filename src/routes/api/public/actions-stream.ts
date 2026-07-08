@@ -41,11 +41,23 @@ const broadcastSchema = z.object({
   rows: z.array(broadcastRowSchema).min(1).max(200),
 });
 
+const replyRowSchema = z.object({
+  accountId: z.string().uuid(),
+  message: z.string().min(1).max(4096),
+});
+
+const replySchema = z.object({
+  kind: z.literal("reply"),
+  source: msgRefSchema,
+  viaDiscussion: z.boolean().optional(), // true = comment under a channel post
+  rows: z.array(replyRowSchema).min(1).max(200),
+});
+
 const bodySchema = z.object({
   accountIds: z.array(z.string().uuid()).min(0).max(200).default([]),
   minDelay: z.number().int().min(0).max(60).default(2),
   maxDelay: z.number().int().min(0).max(60).default(6),
-  op: z.discriminatedUnion("kind", [reactSchema, forwardSchema, voteSchema, broadcastSchema]),
+  op: z.discriminatedUnion("kind", [reactSchema, forwardSchema, voteSchema, broadcastSchema, replySchema]),
 });
 
 function sseEncode(event: string, data: unknown): Uint8Array {
@@ -207,7 +219,7 @@ export const Route = createFileRoute("/api/public/actions-stream")({
             };
 
             const runOne = async (accountId: string) => {
-              if (body.op.kind === "broadcast") return { ok: 0, fail: 0 };
+              if (body.op.kind === "broadcast" || body.op.kind === "reply") return { ok: 0, fail: 0 };
               const op = body.op;
               send("log", { accountId, level: "info", message: "Connecting…" });
               let client;
@@ -424,13 +436,108 @@ export const Route = createFileRoute("/api/public/actions-stream")({
               return { ok, fail };
             };
 
+            const runReplyRow = async (
+              row: { accountId: string; message: string },
+              src: { chat: string; msgId: number },
+              viaDiscussion: boolean,
+            ) => {
+              const accountId = row.accountId;
+              send("log", { accountId, level: "info", message: "Connecting…" });
+              let client;
+              try {
+                client = await openClientForAccount(supabase, accountId);
+              } catch (e) {
+                const msg = `Connect failed: ${(e as Error).message}`;
+                send("log", { accountId, level: "error", message: msg });
+                await logDb(accountId, null, "error", msg);
+                return { ok: 0, fail: 1 };
+              }
+              let ok = 0;
+              let fail = 0;
+              try {
+                await new Promise((r) =>
+                  setTimeout(r, jitter(body.minDelay, body.maxDelay)),
+                );
+                const sourcePeer = await resolveSource(client, src);
+                let replyPeer: any = sourcePeer;
+                let replyToId = src.msgId;
+                let topMsgId: number | undefined;
+                if (viaDiscussion) {
+                  const disc: any = await client.invoke(
+                    new Api.messages.GetDiscussionMessage({
+                      peer: sourcePeer,
+                      msgId: src.msgId,
+                    }),
+                  );
+                  const rootMsg = disc?.messages?.[0];
+                  if (!rootMsg) throw new Error("No discussion group linked to this channel");
+                  // Resolve discussion group peer from the returned chats
+                  const chats = (disc?.chats ?? []) as any[];
+                  const discChat = chats[0];
+                  if (!discChat) throw new Error("Discussion chat missing");
+                  replyPeer = await client.getEntity(discChat);
+                  replyToId = rootMsg.id;
+                  topMsgId = rootMsg.id;
+                  // View the post like a real reader before commenting
+                  try {
+                    await client.invoke(
+                      new Api.messages.GetMessagesViews({
+                        peer: sourcePeer,
+                        id: [src.msgId],
+                        increment: true,
+                      }),
+                    );
+                  } catch {}
+                }
+                await client.sendMessage(replyPeer, {
+                  message: row.message,
+                  replyTo: new Api.InputReplyToMessage({
+                    replyToMsgId: replyToId,
+                    ...(topMsgId ? { topMsgId } : {}),
+                  }) as any,
+                });
+                ok++;
+                const label = viaDiscussion ? "Commented" : "Replied";
+                const m = `${label} on ${src.chat}/${src.msgId}`;
+                send("log", { accountId, level: "success", target: `${src.chat}/${src.msgId}`, message: m });
+                await logDb(accountId, `${src.chat}/${src.msgId}`, "success", m);
+              } catch (e) {
+                fail++;
+                const em = (e as Error).message || String(e);
+                const floodMatch = em.match(/FLOOD_WAIT_?(\d+)/i);
+                if (floodMatch) {
+                  const secs = Number(floodMatch[1]);
+                  const pausedUntil = new Date(Date.now() + secs * 1000).toISOString();
+                  await supabase
+                    .from("telegram_accounts")
+                    .update({ paused_until: pausedUntil, last_error: em })
+                    .eq("id", accountId);
+                  send("log", { accountId, level: "warn", message: `FloodWait ${secs}s — account paused` });
+                  await logDb(accountId, null, "warn", `FloodWait ${secs}s`);
+                } else {
+                  send("log", { accountId, level: "error", message: em });
+                  await logDb(accountId, null, "error", em);
+                }
+              } finally {
+                await client.disconnect().catch(() => {});
+                send("done", { accountId, ok, fail });
+              }
+              return { ok, fail };
+            };
+
             let totalOk = 0;
             let totalFail = 0;
             try {
               const results =
                 body.op.kind === "broadcast"
                   ? await Promise.all(body.op.rows.map((r) => runBroadcastRow(r)))
-                  : await Promise.all(body.accountIds.map((id) => runOne(id)));
+                  : body.op.kind === "reply"
+                    ? await Promise.all(
+                        body.op.rows.map((r) =>
+                          runReplyRow(r, (body.op as any).source, !!(body.op as any).viaDiscussion),
+                        ),
+                      )
+                    : await Promise.all(body.accountIds.map((id) => runOne(id)));
               for (const r of results) {
                 totalOk += r.ok;
                 totalFail += r.fail;
