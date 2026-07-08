@@ -125,8 +125,8 @@ function ActionsPageInner() {
       toast.error("Enter a valid message link (https://t.me/<chat>/<id>)");
       return;
     }
-    if (selected.size === 0) {
-      toast.error("Pick at least one account");
+    if (allAccountIds.length === 0) {
+      toast.error("No accounts available");
       return;
     }
 
@@ -177,7 +177,7 @@ function ActionsPageInner() {
           authorization: `Bearer ${token}`,
         },
         body: JSON.stringify({
-          accountIds: [...selected],
+          accountIds: allAccountIds,
           minDelay,
           maxDelay,
           op,
