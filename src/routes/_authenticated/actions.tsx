@@ -572,23 +572,6 @@ function ActionsPageInner() {
                       </button>
                     </div>
                     <div>
-                      <Label>Account</Label>
-                      <select
-                        className="mt-1 w-full rounded-md border border-input bg-background px-2 py-2 text-sm"
-                        value={row.accountId}
-                        onChange={(e) =>
-                          setRows((rs) => rs.map((r) => (r.id === row.id ? { ...r, accountId: e.target.value } : r)))
-                        }
-                      >
-                        <option value="">— pick account —</option>
-                        {accountList.map((a) => (
-                          <option key={a.id} value={a.id}>
-                            {a.first_name || a.username || a.phone}
-                          </option>
-                        ))}
-                      </select>
-                    </div>
-                    <div>
                       <Label>Message</Label>
                       <Textarea
                         rows={3}
@@ -617,27 +600,10 @@ function ActionsPageInner() {
                     type="button"
                     variant="outline"
                     onClick={() =>
-                      setRows((rs) => [...rs, { id: crypto.randomUUID(), accountId: "", message: "", targets: "" }])
+                      setRows((rs) => [...rs, { id: crypto.randomUUID(), message: "", targets: "" }])
                     }
                   >
                     + Add row
-                  </Button>
-                  <Button
-                    type="button"
-                    variant="outline"
-                    onClick={() => {
-                      if (selected.size === 0) return toast.error("Select accounts on the left first");
-                      setRows(
-                        [...selected].map((id) => ({
-                          id: crypto.randomUUID(),
-                          accountId: id,
-                          message: "",
-                          targets: "",
-                        })),
-                      );
-                    }}
-                  >
-                    Fill rows from selected accounts
                   </Button>
                 </div>
                 <DelayFields
