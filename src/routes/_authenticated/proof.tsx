@@ -1,7 +1,7 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useServerFn } from "@tanstack/react-start";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { listAccounts } from "@/lib/accounts.functions";
 import {
   createProofTask,
@@ -24,6 +24,11 @@ import {
 import { toast } from "sonner";
 import { AdminGate } from "@/components/AdminGate";
 import { Camera, Play, RefreshCw } from "lucide-react";
+import {
+  buildChannelViewSvg,
+  buildChatListSvg,
+  SAMPLE_OTHERS,
+} from "@/lib/proof-render";
 
 export const Route = createFileRoute("/_authenticated/proof")({
   component: () => (
@@ -49,6 +54,7 @@ function ProofPage() {
   const [target, setTarget] = useState("");
   const [caption, setCaption] = useState("");
   const [format, setFormat] = useState<"auto" | "chat_list" | "channel_view">("auto");
+  const [parallel, setParallel] = useState<number>(1);
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [busy, setBusy] = useState(false);
   const [openTask, setOpenTask] = useState<string | null>(null);
@@ -70,6 +76,7 @@ function ProofPage() {
           target: target.trim(),
           caption: caption.trim() || null,
           format,
+          parallel: Math.max(1, Math.min(20, Math.trunc(parallel) || 1)),
           accountIds: selectedIds,
         },
       });
