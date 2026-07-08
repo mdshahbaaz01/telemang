@@ -6,7 +6,7 @@ import { supabase } from "@/integrations/supabase/client";
 import {
   getGroup,
   getTask,
-  processNextJoin,
+  processBatchJoin,
   setTaskStatus,
   groupLogs,
 } from "@/lib/tasks.functions";
@@ -248,7 +248,7 @@ function TaskColumn({
 }) {
   const qc = useQueryClient();
   const getT = useServerFn(getTask);
-  const runNext = useServerFn(processNextJoin);
+  const runBatch = useServerFn(processBatchJoin);
   const setStatus = useServerFn(setTaskStatus);
 
   const taskQ = useQuery({
@@ -268,7 +268,7 @@ function TaskColumn({
     await setStatus({ data: { id: taskId, status: "running" } }).catch(() => {});
     try {
       while (!cancelRef.current) {
-        const r = await runNext({ data: { taskId } });
+        const r = await runBatch({ data: { taskId, batchSize: 5 } });
         qc.invalidateQueries({ queryKey: ["task", taskId] });
         if (r.done) {
           toast.success(`${accountLabel}: done`);
