@@ -11,12 +11,6 @@ type ScheduleRow = {
 };
 type QueueItem = Database["public"]["Tables"]["scheduled_broadcast_items"]["Row"];
 
-function randomDelayMs(minDelay: number, maxDelay: number) {
-  const lo = Math.max(0, Math.min(minDelay, maxDelay));
-  const hi = Math.max(lo, Math.max(minDelay, maxDelay));
-  return (lo + Math.random() * (hi - lo)) * 1000;
-}
-
 function htmlEscape(input: string) {
   return input.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 }
@@ -43,15 +37,10 @@ function buildQueueItems(row: ScheduleRow) {
   const payload = row.payload ?? {};
   const kind: "broadcast" | "reply" | "forward" | "edit" | "deleteMessages" =
     ["reply", "forward", "edit", "deleteMessages"].includes(payload.kind) ? payload.kind : "broadcast";
-  const minDelay = Number(payload.minDelay ?? 1);
-  const maxDelay = Number(payload.maxDelay ?? 2);
-  const base = new Date(row.scheduled_at).getTime();
-  const cursorByAccount = new Map<string, number>();
-  const nextTime = (accountId: string) => {
-    const current = cursorByAccount.get(accountId) ?? base;
-    cursorByAccount.set(accountId, current + randomDelayMs(minDelay, maxDelay));
-    return new Date(current).toISOString();
-  };
+  // Every scheduled item fires at the exact scheduled second — no per-account
+  // delay. All accounts broadcast simultaneously at the target time.
+  const firesAt = new Date(row.scheduled_at).toISOString();
+  const nextTime = (_accountId: string) => firesAt;
 
   const items: Database["public"]["Tables"]["scheduled_broadcast_items"]["Insert"][] = [];
   if (kind === "broadcast") {
