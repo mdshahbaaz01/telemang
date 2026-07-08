@@ -146,7 +146,6 @@ function ActionsPageInner() {
   const [source, setSource] = useState("");
   const [emoji, setEmoji] = useState("👍");
   const [customEmojiId, setCustomEmojiId] = useState("");
-  const [retake, setRetake] = useState(false);
   const [targets, setTargets] = useState("");
   const [options, setOptions] = useState("0");
   const [pollInfo, setPollInfo] = useState<{
@@ -237,7 +236,7 @@ function ActionsPageInner() {
     }
   };
 
-  const run = async () => {
+  const run = async (mode: "apply" | "clear" = "apply") => {
     const src = parseMessageLink(source);
     if (!src) {
       toast.error("Enter a valid message link (https://t.me/<chat>/<id>)");
@@ -254,14 +253,14 @@ function ActionsPageInner() {
 
     let op: unknown;
     if (tab === "react") {
-      if (!emoji.trim() && !customEmojiId.trim()) return toast.error("Pick an emoji or custom emoji id");
+      if (mode === "apply" && !emoji.trim() && !customEmojiId.trim()) return toast.error("Pick an emoji or custom emoji id");
       if (customEmojiId.trim() && !/^\d+$/.test(customEmojiId.trim())) return toast.error("Custom emoji document id must contain only digits");
       op = {
         kind: "react",
         source: src,
         emoji: emoji.trim() || "👍",
         ...(customEmojiId.trim() ? { customEmojiId: customEmojiId.trim() } : {}),
-        ...(retake ? { retake: true } : {}),
+        mode,
       };
     } else if (tab === "forward") {
       const list = targets
@@ -277,8 +276,8 @@ function ActionsPageInner() {
             .split(/[,\s]+/)
             .map((s) => Number(s.trim()))
             .filter((n) => Number.isInteger(n) && n >= 0);
-      if (!opts.length) return toast.error("Pick at least one poll option");
-      op = { kind: "vote", source: src, options: opts, ...(retake ? { retake: true } : {}) };
+      if (mode === "apply" && !opts.length) return toast.error("Pick at least one poll option");
+      op = { kind: "vote", source: src, options: opts, mode };
     } else {
       // handled below in runBroadcast
       return;
