@@ -585,6 +585,12 @@ function ActionsPageInner() {
                   setMin={setMinDelay}
                   setMax={setMaxDelay}
                 />
+                <AccountMultiPicker
+                  accountList={accountList}
+                  selectedIds={actionSelectedIds}
+                  setSelectedIds={setActionSelectedIds}
+                  allAccountIds={allAccountIds}
+                />
               </>
             )}
 
@@ -780,6 +786,12 @@ function ActionsPageInner() {
                   maxDelay={maxDelay}
                   setMin={setMinDelay}
                   setMax={setMaxDelay}
+                />
+                <AccountMultiPicker
+                  accountList={accountList}
+                  selectedIds={actionSelectedIds}
+                  setSelectedIds={setActionSelectedIds}
+                  allAccountIds={allAccountIds}
                 />
               </>
             )}
