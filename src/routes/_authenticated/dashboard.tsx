@@ -22,13 +22,17 @@ import {
 } from "@/components/ui/dialog";
 import { toast } from "sonner";
 import { LogOut, Plus, RefreshCw, Trash2 } from "lucide-react";
+import { AdminGate } from "@/components/AdminGate";
 
 export const Route = createFileRoute("/_authenticated/dashboard")({
-  component: Dashboard,
+  component: () => (
+    <AdminGate>
+      <Dashboard />
+    </AdminGate>
+  ),
 });
 
 const NAV = [
-  "Owner Panel",
   "Cleanup",
   "Broadcast",
   "Bot Flow",
@@ -70,6 +74,11 @@ function Dashboard() {
         <div className="mx-auto flex max-w-7xl flex-wrap items-center gap-3 px-4 py-3 md:px-8">
           <h1 className="mr-auto text-xl font-semibold tracking-tight">TeleManager Pro</h1>
           <nav className="flex flex-wrap items-center gap-1">
+            <Link to="/owner">
+              <Button variant="ghost" size="sm">
+                Owner Panel
+              </Button>
+            </Link>
             {NAV.map((n) => (
               <Button key={n} variant="ghost" size="sm" onClick={soon}>
                 {n}
