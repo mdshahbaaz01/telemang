@@ -3,6 +3,14 @@ import { cn } from "@/lib/utils";
 
 type Op = "+" | "-" | "×" | "÷";
 
+export type HistoryEntry = {
+  id: string;
+  expression: string;
+  result: string;
+};
+
+const STORAGE_KEY = "calc-history-v1";
+
 function compute(a: number, b: number, op: Op): number {
   switch (op) {
     case "+":
@@ -28,6 +36,25 @@ export function Calculator() {
   const [op, setOp] = useState<Op | null>(null);
   const [waiting, setWaiting] = useState(false);
   const [expression, setExpression] = useState("");
+  const [history, setHistory] = useState<HistoryEntry[]>([]);
+
+  // Load history from localStorage after mount (avoids SSR hydration mismatch).
+  useEffect(() => {
+    try {
+      const raw = window.localStorage.getItem(STORAGE_KEY);
+      if (raw) setHistory(JSON.parse(raw));
+    } catch {
+      // ignore
+    }
+  }, []);
+
+  useEffect(() => {
+    try {
+      window.localStorage.setItem(STORAGE_KEY, JSON.stringify(history));
+    } catch {
+      // ignore
+    }
+  }, [history]);
 
   const inputDigit = useCallback(
     (d: string) => {
@@ -100,8 +127,16 @@ export function Calculator() {
     if (previous === null || op === null) return;
     const current = parseFloat(display);
     const result = compute(previous, current, op);
-    setExpression(`${format(previous)} ${op} ${format(current)} =`);
-    setDisplay(format(result));
+    const expr = `${format(previous)} ${op} ${format(current)}`;
+    const resStr = format(result);
+    setExpression(`${expr} =`);
+    setDisplay(resStr);
+    if (resStr !== "Error") {
+      setHistory((h) => [
+        { id: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`, expression: expr, result: resStr },
+        ...h,
+      ].slice(0, 50));
+    }
     setPrevious(null);
     setOp(null);
     setWaiting(true);
@@ -143,8 +178,19 @@ export function Calculator() {
   const opBtn = cn(btn, "bg-primary text-primary-foreground hover:bg-primary/90");
   const eqBtn = cn(btn, "bg-foreground text-background hover:opacity-90");
 
+  const useHistoryResult = (r: string) => {
+    setDisplay(r);
+    setPrevious(null);
+    setOp(null);
+    setWaiting(true);
+    setExpression("");
+  };
+
+  const clearHistory = () => setHistory([]);
+
   return (
-    <div className="w-full max-w-sm rounded-3xl bg-card p-5 shadow-2xl border border-border">
+    <div className="flex w-full flex-col gap-4 md:flex-row md:items-start md:justify-center">
+      <div className="w-full max-w-sm rounded-3xl bg-card p-5 shadow-2xl border border-border">
       <div className="mb-5 rounded-2xl bg-background/50 px-4 py-6 text-right">
         <div className="h-5 text-sm text-muted-foreground truncate">{expression}</div>
         <div className="mt-1 text-5xl font-light tracking-tight text-foreground truncate">
@@ -210,6 +256,46 @@ export function Calculator() {
           ⌫ Delete
         </button>
       </div>
+      </div>
+
+      <aside className="w-full max-w-sm rounded-3xl bg-card p-5 shadow-2xl border border-border md:w-72">
+        <div className="mb-3 flex items-center justify-between">
+          <h2 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground">
+            History
+          </h2>
+          <button
+            onClick={clearHistory}
+            disabled={history.length === 0}
+            className="rounded-md px-2 py-1 text-xs text-muted-foreground hover:bg-muted disabled:opacity-40 disabled:hover:bg-transparent"
+          >
+            Clear
+          </button>
+        </div>
+        {history.length === 0 ? (
+          <p className="py-8 text-center text-sm text-muted-foreground">
+            No calculations yet.
+          </p>
+        ) : (
+          <ul className="max-h-96 space-y-1 overflow-y-auto pr-1">
+            {history.map((h) => (
+              <li key={h.id}>
+                <button
+                  onClick={() => useHistoryResult(h.result)}
+                  className="w-full rounded-xl px-3 py-2 text-right transition-colors hover:bg-muted"
+                  title="Use this result"
+                >
+                  <div className="text-xs text-muted-foreground truncate">
+                    {h.expression} =
+                  </div>
+                  <div className="text-lg font-medium text-foreground truncate">
+                    {h.result}
+                  </div>
+                </button>
+              </li>
+            ))}
+          </ul>
+        )}
+      </aside>
     </div>
   );
 }
