@@ -284,6 +284,96 @@ export type Database = {
         }
         Relationships: []
       }
+      proof_runs: {
+        Row: {
+          account_id: string
+          channel_title: string | null
+          channel_username: string | null
+          created_at: string
+          error: string | null
+          format_used: string | null
+          id: string
+          status: string
+          subscribers: number | null
+          task_id: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          account_id: string
+          channel_title?: string | null
+          channel_username?: string | null
+          created_at?: string
+          error?: string | null
+          format_used?: string | null
+          id?: string
+          status?: string
+          subscribers?: number | null
+          task_id: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          account_id?: string
+          channel_title?: string | null
+          channel_username?: string | null
+          created_at?: string
+          error?: string | null
+          format_used?: string | null
+          id?: string
+          status?: string
+          subscribers?: number | null
+          task_id?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "proof_runs_account_id_fkey"
+            columns: ["account_id"]
+            isOneToOne: false
+            referencedRelation: "telegram_accounts"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "proof_runs_task_id_fkey"
+            columns: ["task_id"]
+            isOneToOne: false
+            referencedRelation: "proof_tasks"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      proof_tasks: {
+        Row: {
+          caption: string | null
+          channel_link: string
+          created_at: string
+          format: string
+          id: string
+          target: string
+          user_id: string
+        }
+        Insert: {
+          caption?: string | null
+          channel_link: string
+          created_at?: string
+          format?: string
+          id?: string
+          target: string
+          user_id: string
+        }
+        Update: {
+          caption?: string | null
+          channel_link?: string
+          created_at?: string
+          format?: string
+          id?: string
+          target?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       scheduled_broadcast_items: {
         Row: {
           account_id: string
