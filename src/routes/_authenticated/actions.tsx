@@ -639,14 +639,78 @@ function ActionsPageInner() {
 
             {tab === "vote" && (
               <>
-                <div>
-                  <Label>Option indexes (0-based, comma-separated)</Label>
-                  <Input
-                    value={options}
-                    onChange={(e) => setOptions(e.target.value)}
-                    placeholder="0 or 0,2 for multi-select polls"
-                  />
+                <div className="flex flex-wrap items-center gap-2">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    disabled={pollLoading}
+                    onClick={async () => {
+                      const src = parseMessageLink(source);
+                      if (!src) return toast.error("Enter a valid message link first");
+                      setPollLoading(true);
+                      try {
+                        const info = await loadPollFn({ data: { chat: src.chat, msgId: src.msgId } });
+                        setPollInfo(info);
+                        setPollSelected([]);
+                        if (info.closed) toast.warning("Poll is closed");
+                      } catch (e) {
+                        toast.error((e as Error).message);
+                      } finally {
+                        setPollLoading(false);
+                      }
+                    }}
+                  >
+                    {pollLoading ? "Loading…" : "Load poll"}
+                  </Button>
+                  {pollInfo && (
+                    <span className="text-xs text-muted-foreground">
+                      {pollInfo.multipleChoice ? "Multi-choice" : "Single-choice"}
+                      {pollInfo.closed ? " · closed" : ""}
+                    </span>
+                  )}
                 </div>
+                {pollInfo ? (
+                  <div className="rounded-md border border-border p-3 space-y-2">
+                    {pollInfo.question && (
+                      <div className="text-sm font-medium">{pollInfo.question}</div>
+                    )}
+                    <div className="space-y-1">
+                      {pollInfo.answers.map((a, i) => {
+                        const checked = pollSelected.includes(i);
+                        return (
+                          <label key={i} className="flex items-start gap-2 text-sm rounded px-2 py-1 hover:bg-muted/40">
+                            <input
+                              type={pollInfo.multipleChoice ? "checkbox" : "radio"}
+                              name="poll-option"
+                              checked={checked}
+                              onChange={(e) => {
+                                if (pollInfo.multipleChoice) {
+                                  setPollSelected((prev) =>
+                                    e.target.checked ? [...prev, i] : prev.filter((x) => x !== i),
+                                  );
+                                } else {
+                                  setPollSelected([i]);
+                                }
+                              }}
+                            />
+                            <span className="text-xs text-muted-foreground w-6">#{i}</span>
+                            <span className="flex-1">{a}</span>
+                          </label>
+                        );
+                      })}
+                    </div>
+                  </div>
+                ) : (
+                  <div>
+                    <Label>Option indexes (0-based, comma-separated)</Label>
+                    <Input
+                      value={options}
+                      onChange={(e) => setOptions(e.target.value)}
+                      placeholder="0 or 0,2 — or click Load poll above"
+                    />
+                  </div>
+                )}
                 <label className="flex items-center gap-2 text-sm">
                   <input type="checkbox" checked={retake} onChange={(e) => setRetake(e.target.checked)} />
                   Retake (retract previous vote first)
