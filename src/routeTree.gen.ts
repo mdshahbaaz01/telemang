@@ -16,6 +16,7 @@ import { Route as AuthenticatedOwnerRouteImport } from './routes/_authenticated/
 import { Route as AuthenticatedDashboardRouteImport } from './routes/_authenticated/dashboard'
 import { Route as AuthenticatedCleanupRouteImport } from './routes/_authenticated/cleanup'
 import { Route as ApiPublicCleanupStreamRouteImport } from './routes/api/public/cleanup-stream'
+import { Route as ApiPublicActionsStreamRouteImport } from './routes/api/public/actions-stream'
 import { Route as AuthenticatedTasksNewRouteImport } from './routes/_authenticated/tasks.new'
 import { Route as AuthenticatedTasksIdRouteImport } from './routes/_authenticated/tasks.$id'
 import { Route as AuthenticatedGroupsRouteImport } from './routes/_authenticated/groups.'
@@ -54,6 +55,11 @@ const ApiPublicCleanupStreamRoute = ApiPublicCleanupStreamRouteImport.update({
   path: '/api/public/cleanup-stream',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ApiPublicActionsStreamRoute = ApiPublicActionsStreamRouteImport.update({
+  id: '/api/public/actions-stream',
+  path: '/api/public/actions-stream',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const AuthenticatedTasksNewRoute = AuthenticatedTasksNewRouteImport.update({
   id: '/tasks/new',
   path: '/tasks/new',
@@ -79,6 +85,7 @@ export interface FileRoutesByFullPath {
   '/groups/': typeof AuthenticatedGroupsRoute
   '/tasks/$id': typeof AuthenticatedTasksIdRoute
   '/tasks/new': typeof AuthenticatedTasksNewRoute
+  '/api/public/actions-stream': typeof ApiPublicActionsStreamRoute
   '/api/public/cleanup-stream': typeof ApiPublicCleanupStreamRoute
 }
 export interface FileRoutesByTo {
@@ -90,6 +97,7 @@ export interface FileRoutesByTo {
   '/groups': typeof AuthenticatedGroupsRoute
   '/tasks/$id': typeof AuthenticatedTasksIdRoute
   '/tasks/new': typeof AuthenticatedTasksNewRoute
+  '/api/public/actions-stream': typeof ApiPublicActionsStreamRoute
   '/api/public/cleanup-stream': typeof ApiPublicCleanupStreamRoute
 }
 export interface FileRoutesById {
@@ -103,6 +111,7 @@ export interface FileRoutesById {
   '/_authenticated/groups/': typeof AuthenticatedGroupsRoute
   '/_authenticated/tasks/$id': typeof AuthenticatedTasksIdRoute
   '/_authenticated/tasks/new': typeof AuthenticatedTasksNewRoute
+  '/api/public/actions-stream': typeof ApiPublicActionsStreamRoute
   '/api/public/cleanup-stream': typeof ApiPublicCleanupStreamRoute
 }
 export interface FileRouteTypes {
@@ -116,6 +125,7 @@ export interface FileRouteTypes {
     | '/groups/'
     | '/tasks/$id'
     | '/tasks/new'
+    | '/api/public/actions-stream'
     | '/api/public/cleanup-stream'
   fileRoutesByTo: FileRoutesByTo
   to:
@@ -127,6 +137,7 @@ export interface FileRouteTypes {
     | '/groups'
     | '/tasks/$id'
     | '/tasks/new'
+    | '/api/public/actions-stream'
     | '/api/public/cleanup-stream'
   id:
     | '__root__'
@@ -139,6 +150,7 @@ export interface FileRouteTypes {
     | '/_authenticated/groups/'
     | '/_authenticated/tasks/$id'
     | '/_authenticated/tasks/new'
+    | '/api/public/actions-stream'
     | '/api/public/cleanup-stream'
   fileRoutesById: FileRoutesById
 }
@@ -146,6 +158,7 @@ export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   AuthenticatedRouteRoute: typeof AuthenticatedRouteRouteWithChildren
   AuthRoute: typeof AuthRoute
+  ApiPublicActionsStreamRoute: typeof ApiPublicActionsStreamRoute
   ApiPublicCleanupStreamRoute: typeof ApiPublicCleanupStreamRoute
 }
 
@@ -200,6 +213,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiPublicCleanupStreamRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/api/public/actions-stream': {
+      id: '/api/public/actions-stream'
+      path: '/api/public/actions-stream'
+      fullPath: '/api/public/actions-stream'
+      preLoaderRoute: typeof ApiPublicActionsStreamRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/_authenticated/tasks/new': {
       id: '/_authenticated/tasks/new'
       path: '/tasks/new'
@@ -249,6 +269,7 @@ const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   AuthenticatedRouteRoute: AuthenticatedRouteRouteWithChildren,
   AuthRoute: AuthRoute,
+  ApiPublicActionsStreamRoute: ApiPublicActionsStreamRoute,
   ApiPublicCleanupStreamRoute: ApiPublicCleanupStreamRoute,
 }
 export const routeTree = rootRouteImport

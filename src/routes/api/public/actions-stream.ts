@@ -99,7 +99,7 @@ export const Route = createFileRoute("/api/public/actions-stream")({
             user_id: userId,
             kind: body.op.kind,
             status: "running",
-            params: body.op as unknown as Record<string, unknown>,
+            params: JSON.parse(JSON.stringify(body.op)),
           })
           .select("id")
           .single();
@@ -225,7 +225,8 @@ export const Route = createFileRoute("/api/public/actions-stream")({
                   try {
                     const [msg] = await client.getMessages(sourcePeer, { ids: [src.msgId] });
                     if (!msg?.poll) throw new Error("Message is not a poll");
-                    const answers = msg.poll.poll?.answers ?? msg.poll.answers ?? [];
+                    const pollObj = (msg.poll as { poll?: { answers?: Array<{ option: Uint8Array }> } }).poll;
+                    const answers = pollObj?.answers ?? [];
                     const chosen = body.op.options
                       .map((i) => answers[i]?.option)
                       .filter((x: unknown): x is Uint8Array => !!x);
@@ -254,11 +255,12 @@ export const Route = createFileRoute("/api/public/actions-stream")({
                       const dest = await client.getEntity(
                         t.replace(/^https?:\/\/(t\.me|telegram\.me)\//i, "").replace(/^@/, ""),
                       );
+                      const { default: bigInt } = await import("big-integer");
                       await client.invoke(
                         new Api.messages.ForwardMessages({
                           fromPeer: sourcePeer,
                           id: [src.msgId],
-                          randomId: [BigInt(Math.floor(Math.random() * 1e18)) as unknown as bigint],
+                          randomId: [bigInt(Math.floor(Math.random() * 1e18))],
                           toPeer: dest,
                         }),
                       );
