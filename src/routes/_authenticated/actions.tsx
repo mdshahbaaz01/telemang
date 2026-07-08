@@ -680,6 +680,12 @@ function ActionsPageInner() {
                         placeholder="@username&#10;@mygroup&#10;https://t.me/channel"
                       />
                     </div>
+                    <AttachmentField
+                      file={row.file ?? null}
+                      onChange={(f) =>
+                        setRows((rs) => rs.map((r) => (r.id === row.id ? { ...r, file: f } : r)))
+                      }
+                    />
                   </div>
                 ))}
                 <div className="flex flex-wrap gap-2">
