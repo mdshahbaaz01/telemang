@@ -29,8 +29,9 @@ export const Route = createFileRoute("/_authenticated/actions")({
 
 type Tab = "react" | "forward" | "vote" | "broadcast" | "reply";
 
-type BroadcastRow = { id: string; message: string; targets: string };
-type ReplyRow = { id: string; message: string };
+type BroadcastRow = { id: string; message: string; targets: string; accountId?: string };
+type ReplyRow = { id: string; message: string; accountId?: string };
+type SendMode = "per-account" | "all-ids";
 
 type LogEntry = {
   accountId?: string;
@@ -107,6 +108,8 @@ function ActionsPageInner() {
     { id: crypto.randomUUID(), message: "" },
   ]);
   const [viaDiscussion, setViaDiscussion] = useState(true);
+  const [broadcastMode, setBroadcastMode] = useState<SendMode>("per-account");
+  const [replyMode, setReplyMode] = useState<SendMode>("per-account");
 
   const [logs, setLogs] = useState<LogEntry[]>([]);
   const [running, setRunning] = useState(false);
@@ -300,13 +303,20 @@ function ActionsPageInner() {
     const src = parseMessageLink(source);
     if (!src) return toast.error("Enter a valid message link");
     if (allAccountIds.length === 0) return toast.error("No accounts available");
-    const messages = replyRows.map((r) => r.message.trim()).filter(Boolean);
-    if (!messages.length) return toast.error("Add at least one message");
-    // Expand: each account sends each message (round-robin messages across accounts).
-    const cleaned = allAccountIds.flatMap((accountId, i) => {
-      const message = messages[i % messages.length];
-      return [{ accountId, message }];
-    });
+    let cleaned: { accountId: string; message: string }[] = [];
+    if (replyMode === "per-account") {
+      cleaned = replyRows
+        .map((r) => ({ accountId: r.accountId ?? "", message: r.message.trim() }))
+        .filter((r) => r.accountId && r.message);
+      if (!cleaned.length) return toast.error("Pick an account and message for each row");
+    } else {
+      const messages = replyRows.map((r) => r.message.trim()).filter(Boolean);
+      if (!messages.length) return toast.error("Add at least one message");
+      // Same message(s) across all IDs — round-robin messages across accounts.
+      cleaned = allAccountIds.flatMap((accountId, i) => [
+        { accountId, message: messages[i % messages.length] },
+      ]);
+    }
     await streamRun({
       accountIds: [],
       minDelay,
@@ -322,9 +332,10 @@ function ActionsPageInner() {
     }
     const baseRows = rows
       .map((r) => ({
+        accountId: r.accountId ?? "",
         message: r.message.trim(),
         targets: r.targets
-          .split(/\r?\n|,/) 
+          .split(/\r?\n|,/)
           .map((s) => s.trim())
           .filter(Boolean),
       }))
@@ -333,10 +344,16 @@ function ActionsPageInner() {
       toast.error("Add at least one row with message and targets");
       return;
     }
-    // Expand: each account runs each row in parallel.
-    const cleaned = allAccountIds.flatMap((accountId) =>
-      baseRows.map((r) => ({ accountId, message: r.message, targets: r.targets })),
-    );
+    let cleaned: { accountId: string; message: string; targets: string[] }[] = [];
+    if (broadcastMode === "per-account") {
+      cleaned = baseRows.filter((r) => r.accountId);
+      if (!cleaned.length) return toast.error("Pick an account for each row");
+    } else {
+      // Same message across all IDs — each account runs each row in parallel.
+      cleaned = allAccountIds.flatMap((accountId) =>
+        baseRows.map((r) => ({ accountId, message: r.message, targets: r.targets })),
+      );
+    }
     const { data: sess } = await supabase.auth.getSession();
     const token = sess.session?.access_token;
     if (!token) return toast.error("Not signed in");
@@ -555,8 +572,26 @@ function ActionsPageInner() {
 
             {tab === "broadcast" && (
               <div className="space-y-3">
+                <div className="flex flex-wrap gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setBroadcastMode("per-account")}
+                    className={`rounded border px-3 py-1 text-xs ${broadcastMode === "per-account" ? "border-primary bg-primary/10 font-medium" : "border-border text-muted-foreground"}`}
+                  >
+                    Per-account rows
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setBroadcastMode("all-ids")}
+                    className={`rounded border px-3 py-1 text-xs ${broadcastMode === "all-ids" ? "border-primary bg-primary/10 font-medium" : "border-border text-muted-foreground"}`}
+                  >
+                    Same message from all IDs
+                  </button>
+                </div>
                 <p className="text-xs text-muted-foreground">
-                  Each row: one account sends its message to all listed targets (users, groups, or channels). Rows run in parallel — so multiple accounts can post different messages into the same group at the same time, or one account can spray one message across many groups.
+                  {broadcastMode === "per-account"
+                    ? "Each row: the chosen account sends its message to all listed targets. Rows run in parallel — multiple accounts can post different messages into the same group at the same time, or one account can spray one message across many groups."
+                    : "Every row is sent from every account. Same message goes out from all IDs in parallel."}
                 </p>
                 {rows.map((row, idx) => (
                   <div key={row.id} className="rounded-md border border-border p-3 space-y-2">
@@ -571,6 +606,25 @@ function ActionsPageInner() {
                         Remove
                       </button>
                     </div>
+                    {broadcastMode === "per-account" && (
+                      <div>
+                        <Label>Account</Label>
+                        <select
+                          className="w-full rounded-md border border-border bg-background px-2 py-2 text-sm"
+                          value={row.accountId ?? ""}
+                          onChange={(e) =>
+                            setRows((rs) => rs.map((r) => (r.id === row.id ? { ...r, accountId: e.target.value } : r)))
+                          }
+                        >
+                          <option value="">— Pick account —</option>
+                          {accountList.map((a) => (
+                            <option key={a.id} value={a.id}>
+                              {a.first_name || a.username || a.phone}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                    )}
                     <div>
                       <Label>Message</Label>
                       <Textarea
@@ -617,12 +671,30 @@ function ActionsPageInner() {
 
             {tab === "reply" && (
               <div className="space-y-3">
+                <div className="flex flex-wrap gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setReplyMode("per-account")}
+                    className={`rounded border px-3 py-1 text-xs ${replyMode === "per-account" ? "border-primary bg-primary/10 font-medium" : "border-border text-muted-foreground"}`}
+                  >
+                    Per-account rows
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setReplyMode("all-ids")}
+                    className={`rounded border px-3 py-1 text-xs ${replyMode === "all-ids" ? "border-primary bg-primary/10 font-medium" : "border-border text-muted-foreground"}`}
+                  >
+                    Same message from all IDs
+                  </button>
+                </div>
                 <label className="flex items-center gap-2 text-sm">
                   <input type="checkbox" checked={viaDiscussion} onChange={(e) => setViaDiscussion(e.target.checked)} />
                   Comment under a channel post (reply lands in the channel's linked discussion group)
                 </label>
                 <p className="text-xs text-muted-foreground">
-                  Uncheck to reply directly to a message in a group or DM. Each row runs in parallel — every account sends its own different reply/comment.
+                  {replyMode === "per-account"
+                    ? "Each row: the chosen account sends this reply/comment. Rows run in parallel — different accounts can post different replies on the same post."
+                    : "Same reply text goes out from every account (round-robin if you add multiple rows)."}
                 </p>
                 {replyRows.map((row, idx) => (
                   <div key={row.id} className="rounded-md border border-border p-3 space-y-2">
@@ -637,6 +709,25 @@ function ActionsPageInner() {
                         Remove
                       </button>
                     </div>
+                    {replyMode === "per-account" && (
+                      <div>
+                        <Label>Account</Label>
+                        <select
+                          className="w-full rounded-md border border-border bg-background px-2 py-2 text-sm"
+                          value={row.accountId ?? ""}
+                          onChange={(e) =>
+                            setReplyRows((rs) => rs.map((r) => (r.id === row.id ? { ...r, accountId: e.target.value } : r)))
+                          }
+                        >
+                          <option value="">— Pick account —</option>
+                          {accountList.map((a) => (
+                            <option key={a.id} value={a.id}>
+                              {a.first_name || a.username || a.phone}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                    )}
                     <div>
                       <Label>Message</Label>
                       <Textarea
