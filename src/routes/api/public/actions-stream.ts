@@ -30,10 +30,19 @@ const voteSchema = z.object({
   retake: z.boolean().optional(),
 });
 
+const attachmentSchema = z.object({
+  path: z.string().min(1).max(500), // storage path in "action-attachments" bucket
+  filename: z.string().min(1).max(200),
+  mimeType: z.string().min(1).max(200).optional(),
+});
+
 const broadcastRowSchema = z.object({
   accountId: z.string().uuid(),
-  message: z.string().min(1).max(4096),
+  message: z.string().max(4096).default(""),
   targets: z.array(z.string().min(1).max(200)).min(1).max(500),
+  attachment: attachmentSchema.optional(),
+}).refine((r) => r.message.length > 0 || !!r.attachment, {
+  message: "Row needs a message or an attachment",
 });
 
 const broadcastSchema = z.object({
@@ -43,7 +52,10 @@ const broadcastSchema = z.object({
 
 const replyRowSchema = z.object({
   accountId: z.string().uuid(),
-  message: z.string().min(1).max(4096),
+  message: z.string().max(4096).default(""),
+  attachment: attachmentSchema.optional(),
+}).refine((r) => r.message.length > 0 || !!r.attachment, {
+  message: "Row needs a message or an attachment",
 });
 
 const replySchema = z.object({
@@ -184,6 +196,26 @@ export const Route = createFileRoute("/api/public/actions-stream")({
 
             const { openClientForAccount } = await import("@/lib/cleanup.server");
             const { Api } = await import("telegram");
+            const { CustomFile } = await import("telegram/client/uploads");
+
+            const attachmentCache = new Map<string, { buf: Buffer; filename: string; mimeType?: string }>();
+            const loadAttachment = async (att: { path: string; filename: string; mimeType?: string }) => {
+              const key = att.path;
+              const cached = attachmentCache.get(key);
+              if (cached) return cached;
+              const { data, error } = await supabase.storage
+                .from("action-attachments")
+                .createSignedUrl(att.path, 300);
+              if (error || !data?.signedUrl) throw new Error(`Attachment fetch failed: ${error?.message ?? "no url"}`);
+              const res = await fetch(data.signedUrl);
+              if (!res.ok) throw new Error(`Attachment download failed: ${res.status}`);
+              const buf = Buffer.from(await res.arrayBuffer());
+              const val = { buf, filename: att.filename, mimeType: att.mimeType };
+              attachmentCache.set(key, val);
+              return val;
+            };
+            const buildCustomFile = (att: { buf: Buffer; filename: string; mimeType?: string }) =>
+              new CustomFile(att.filename, att.buf.length, att.filename, att.buf);
 
             // Resolve source peer & get message once per account (needed for react/vote/forward source)
             const resolveSource = async (client: any, src: { chat: string; msgId: number }) => {
@@ -383,7 +415,7 @@ export const Route = createFileRoute("/api/public/actions-stream")({
               return { ok, fail };
             };
 
-            const runBroadcastRow = async (row: { accountId: string; message: string; targets: string[] }) => {
+            const runBroadcastRow = async (row: { accountId: string; message: string; targets: string[]; attachment?: { path: string; filename: string; mimeType?: string } }) => {
               const accountId = row.accountId;
               send("log", { accountId, level: "info", message: "Connecting…" });
               let client;
@@ -397,12 +429,32 @@ export const Route = createFileRoute("/api/public/actions-stream")({
               }
               let ok = 0;
               let fail = 0;
+              let attData: { buf: Buffer; filename: string; mimeType?: string } | null = null;
+              if (row.attachment) {
+                try {
+                  attData = await loadAttachment(row.attachment);
+                } catch (e) {
+                  const em = (e as Error).message;
+                  send("log", { accountId, level: "error", message: em });
+                  await logDb(accountId, null, "error", em);
+                  await client.disconnect().catch(() => {});
+                  send("done", { accountId, ok: 0, fail: row.targets.length });
+                  return { ok: 0, fail: row.targets.length };
+                }
+              }
               try {
                 for (const t of row.targets) {
                   if (stopRequested) break;
                   try {
                     const dest = await resolveTarget(client, t);
-                    await client.sendMessage(dest, { message: row.message });
+                    if (attData) {
+                      await client.sendFile(dest, {
+                        file: buildCustomFile(attData),
+                        caption: row.message || undefined,
+                      });
+                    } else {
+                      await client.sendMessage(dest, { message: row.message });
+                    }
                     ok++;
                     const m = `Sent to ${t}`;
                     send("log", { accountId, level: "success", target: t, message: m });
@@ -437,7 +489,7 @@ export const Route = createFileRoute("/api/public/actions-stream")({
             };
 
             const runReplyRow = async (
-              row: { accountId: string; message: string },
+              row: { accountId: string; message: string; attachment?: { path: string; filename: string; mimeType?: string } },
               src: { chat: string; msgId: number },
               viaDiscussion: boolean,
             ) => {
@@ -489,13 +541,23 @@ export const Route = createFileRoute("/api/public/actions-stream")({
                     );
                   } catch {}
                 }
-                await client.sendMessage(replyPeer, {
-                  message: row.message,
-                  replyTo: new Api.InputReplyToMessage({
-                    replyToMsgId: replyToId,
-                    ...(topMsgId ? { topMsgId } : {}),
-                  }) as any,
-                });
+                const replyTo = new Api.InputReplyToMessage({
+                  replyToMsgId: replyToId,
+                  ...(topMsgId ? { topMsgId } : {}),
+                }) as any;
+                if (row.attachment) {
+                  const att = await loadAttachment(row.attachment);
+                  await client.sendFile(replyPeer, {
+                    file: buildCustomFile(att),
+                    caption: row.message || undefined,
+                    replyTo,
+                  });
+                } else {
+                  await client.sendMessage(replyPeer, {
+                    message: row.message,
+                    replyTo,
+                  });
+                }
                 ok++;
                 const label = viaDiscussion ? "Commented" : "Replied";
                 const m = `${label} on ${src.chat}/${src.msgId}`;
