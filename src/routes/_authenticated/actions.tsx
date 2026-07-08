@@ -1492,6 +1492,7 @@ function ActionsPageInner() {
                       className="bg-transparent text-sm outline-none"
                       title="Schedule time (with seconds — accurate to ±1s)"
                     />
+                    <span className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">IST</span>
                   </div>
                   <Button
                     type="button"
@@ -1555,14 +1556,7 @@ function ActionsPageInner() {
                       >
                         <Clock className="h-3.5 w-3.5 text-muted-foreground" />
                         <span className="font-mono text-xs">
-                          {when.toLocaleString(undefined, {
-                            year: "numeric",
-                            month: "2-digit",
-                            day: "2-digit",
-                            hour: "2-digit",
-                            minute: "2-digit",
-                            second: "2-digit",
-                          })}
+                          {formatIst(when)}
                         </span>
                         <span className="rounded bg-muted px-1.5 py-0.5 text-[10px] uppercase tracking-wide">
                           {s.kind}
