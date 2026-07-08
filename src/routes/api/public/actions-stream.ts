@@ -330,7 +330,7 @@ export const Route = createFileRoute("/api/public/actions-stream")({
             };
 
             const runOne = async (accountId: string) => {
-              if (body.op.kind === "broadcast" || body.op.kind === "reply") return { ok: 0, fail: 0 };
+              if (body.op.kind === "broadcast" || body.op.kind === "reply" || body.op.kind === "botflow") return { ok: 0, fail: 0 };
               const op = body.op;
               send("log", { accountId, level: "info", message: "Connecting…" });
               let client;
