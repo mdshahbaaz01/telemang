@@ -1415,6 +1415,23 @@ function ActionsPageInner() {
                             Cancel
                           </button>
                         )}
+                        {(s.status === "failed" || s.status === "cancelled" || s.status === "done") && (
+                          <button
+                            type="button"
+                            className="ml-auto text-xs text-primary underline"
+                            onClick={async () => {
+                              try {
+                                const res = await retrySchedFn({ data: { id: s.id } });
+                                toast.success(`Rescheduled for ${new Date(res.scheduledAt).toLocaleTimeString()}`);
+                                await qc.invalidateQueries({ queryKey: ["scheduled-broadcasts"] });
+                              } catch (e) {
+                                toast.error((e as Error).message);
+                              }
+                            }}
+                          >
+                            Retry
+                          </button>
+                        )}
                       </div>
                     );
                   })}
