@@ -18,7 +18,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { toast } from "sonner";
 import { AdminGate } from "@/components/AdminGate";
 import { AccountIdPaste } from "@/components/AccountIdPaste";
-import { Square, Play, Paperclip, X, AlertTriangle, Copy, Trash2, RotateCw, Pencil, Clock, CalendarClock } from "lucide-react";
+import { Square, Play, Paperclip, X, AlertTriangle, Copy, Trash2, RotateCw, Pencil, Clock, CalendarClock, Eye, EyeOff } from "lucide-react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { useQueryClient } from "@tanstack/react-query";
 
