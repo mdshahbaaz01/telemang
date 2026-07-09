@@ -12,6 +12,7 @@ import {
   listScheduledBroadcasts,
   cancelScheduledBroadcast,
   getScheduleReport,
+  clearScheduledHistory,
 } from "@/lib/schedule.functions";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
