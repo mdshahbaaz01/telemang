@@ -20,7 +20,7 @@ import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
 import { FloodWaitBadge } from "@/components/FloodWaitBadge";
 import { AdminGate, useMyRole } from "@/components/AdminGate";
-import { ArrowLeft, Plus, Trash2, Users } from "lucide-react";
+import { ArrowLeft, MessageSquare, Plus, Trash2, Users } from "lucide-react";
 import { toast } from "sonner";
 import { useState } from "react";
 
@@ -146,6 +146,7 @@ function OwnerPanel() {
                     <th className="py-2 pr-3">Status</th>
                     <th className="py-2 pr-3">Last update</th>
                     <th className="py-2 pr-3">Enabled</th>
+                    <th className="py-2 pr-3">Open</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -174,6 +175,13 @@ function OwnerPanel() {
                               acctMut.mutate({ id: a.id, enabled: !!v })
                             }
                           />
+                        </td>
+                        <td className="py-2 pr-3">
+                          <Button asChild size="sm" variant="ghost">
+                            <Link to="/accounts/$id" params={{ id: a.id }}>
+                              <MessageSquare className="mr-1 h-3.5 w-3.5" /> View
+                            </Link>
+                          </Button>
                         </td>
                       </tr>
                     );

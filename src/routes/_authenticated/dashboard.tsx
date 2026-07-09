@@ -31,7 +31,7 @@ import {
   DialogTrigger,
 } from "@/components/ui/dialog";
 import { toast } from "sonner";
-import { Pencil, Plus, RefreshCw, RotateCcw, Trash2 } from "lucide-react";
+import { MessageSquare, Pencil, Plus, RefreshCw, RotateCcw, Trash2 } from "lucide-react";
 import { AdminGate } from "@/components/AdminGate";
 import { AccountIdPaste } from "@/components/AccountIdPaste";
 
@@ -165,6 +165,11 @@ function Dashboard() {
                       <FloodWaitBadge pausedUntil={a.paused_until} lastError={a.last_error} />
                     </div>
                     <div className="mt-4 flex gap-2">
+                      <Button variant="secondary" size="sm" asChild>
+                        <Link to="/accounts/$id" params={{ id: a.id }}>
+                          <MessageSquare className="mr-1 h-3.5 w-3.5" /> Open
+                        </Link>
+                      </Button>
                       <Button variant="outline" size="sm" onClick={soon}>
                         <RefreshCw className="mr-1 h-3.5 w-3.5" /> Check
                       </Button>
