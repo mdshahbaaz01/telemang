@@ -44,7 +44,7 @@ export const Route = createFileRoute("/_authenticated/actions")({
 type Tab = "react" | "forward" | "vote" | "broadcast" | "comment" | "reply" | "edit" | "deleteMessages";
 
 type BroadcastRow = { id: string; message: string; targets: string; accountId?: string; files?: File[] };
-type ReplyRow = { id: string; message: string; accountId?: string; file?: File | null };
+type ReplyRow = { id: string; message: string; accountId?: string; files?: File[] };
 type SendMode = "per-account" | "all-ids";
 type TextFormat = "plain" | "mono" | "quote" | "html";
 
