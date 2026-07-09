@@ -1421,7 +1421,7 @@ function ActionsPageInner() {
                       <MessagePreview
                         message={row.message}
                         format={textFormat}
-                        fileName={row.file?.name ?? null}
+                        fileName={row.files?.length ? row.files.map((f) => f.name).join(", ") : null}
                       />
                     </div>
                     <div>
@@ -1435,10 +1435,10 @@ function ActionsPageInner() {
                         placeholder="@username&#10;@mygroup&#10;https://t.me/channel"
                       />
                     </div>
-                    <AttachmentField
-                      file={row.file ?? null}
-                      onChange={(f) =>
-                        setRows((rs) => rs.map((r) => (r.id === row.id ? { ...r, file: f } : r)))
+                    <MultiAttachmentField
+                      files={row.files ?? []}
+                      onChange={(fs) =>
+                        setRows((rs) => rs.map((r) => (r.id === row.id ? { ...r, files: fs } : r)))
                       }
                     />
                   </div>
