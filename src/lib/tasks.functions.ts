@@ -356,6 +356,24 @@ export const deleteGroup = createServerFn({ method: "POST" })
     return { ok: true };
   });
 
+export const clearTaskHistory = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .handler(async ({ context }) => {
+    // Delete all task groups that are not currently running.
+    const { data: tasks, error: selErr } = await context.supabase
+      .from("join_tasks")
+      .select("id, status");
+    if (selErr) throw new Error(selErr.message);
+    const idsToDelete = (tasks ?? []).filter((t) => t.status !== "running").map((t) => t.id as string);
+    if (!idsToDelete.length) return { deleted: 0 };
+    const { error: delErr } = await context.supabase
+      .from("join_tasks")
+      .delete()
+      .in("id", idsToDelete);
+    if (delErr) throw new Error(delErr.message);
+    return { deleted: idsToDelete.length };
+  });
+
 export const resetGroupItems = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .inputValidator((d: unknown) =>

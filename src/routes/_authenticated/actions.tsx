@@ -12,6 +12,7 @@ import {
   listScheduledBroadcasts,
   cancelScheduledBroadcast,
   getScheduleReport,
+  clearScheduledHistory,
 } from "@/lib/schedule.functions";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -238,6 +239,7 @@ function ActionsPageInner() {
   const listSchedFn = useServerFn(listScheduledBroadcasts);
   const createSchedFn = useServerFn(createScheduledBroadcast);
   const cancelSchedFn = useServerFn(cancelScheduledBroadcast);
+  const clearSchedHistoryFn = useServerFn(clearScheduledHistory);
   const reportSchedFn = useServerFn(getScheduleReport);
   const [reportOpen, setReportOpen] = useState(false);
   const [reportId, setReportId] = useState<string | null>(null);
@@ -1543,6 +1545,23 @@ function ActionsPageInner() {
                 <span className="ml-auto text-xs text-muted-foreground">
                   {schedulesQ.data?.length ?? 0} total · fires within ±1s of the target second
                 </span>
+                <button
+                  type="button"
+                  className="text-xs text-destructive underline disabled:opacity-40 disabled:no-underline"
+                  disabled={!(schedulesQ.data ?? []).some((s) => s.status !== "pending" && s.status !== "running")}
+                  onClick={async () => {
+                    if (!confirm("Clear finished/cancelled/failed schedules? Pending and running are kept.")) return;
+                    try {
+                      const res = await clearSchedHistoryFn();
+                      toast.success(`Cleared ${res.deleted} schedule${res.deleted === 1 ? "" : "s"}`);
+                      await qc.invalidateQueries({ queryKey: ["scheduled-broadcasts"] });
+                    } catch (e) {
+                      toast.error((e as Error).message);
+                    }
+                  }}
+                >
+                  Clear history
+                </button>
               </div>
               {(schedulesQ.data ?? []).length === 0 ? (
                 <p className="text-xs text-muted-foreground">No schedules yet.</p>

@@ -165,6 +165,26 @@ export const cancelScheduledBroadcast = createServerFn({ method: "POST" })
     return { ok: true };
   });
 
+export const clearScheduledHistory = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .handler(async ({ context }) => {
+    // Delete finished/cancelled/failed schedules; keep pending & running.
+    const { data: rows, error: selErr } = await context.supabase
+      .from("scheduled_broadcasts")
+      .select("id, status");
+    if (selErr) throw new Error(selErr.message);
+    const ids = (rows ?? [])
+      .filter((r) => r.status !== "pending" && r.status !== "running")
+      .map((r) => r.id as string);
+    if (!ids.length) return { deleted: 0 };
+    const { error: delErr } = await context.supabase
+      .from("scheduled_broadcasts")
+      .delete()
+      .in("id", ids);
+    if (delErr) throw new Error(delErr.message);
+    return { deleted: ids.length };
+  });
+
 export const getScheduleReport = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .inputValidator((d: unknown) => z.object({ id: z.string().uuid() }).parse(d))
