@@ -85,3 +85,44 @@ export async function notifyUser(
     }
   }
 }
+
+export type OwnerAlertKind = "ban" | "peer_flood" | "job_failure" | "daily_summary";
+
+export async function notifyOwner(
+  supabase: SupabaseClient<Database>,
+  userId: string,
+  kind: OwnerAlertKind,
+  title: string,
+  body: string,
+) {
+  const { data: settings } = await supabase
+    .from("notification_settings")
+    .select("*")
+    .eq("user_id", userId)
+    .maybeSingle();
+  const s = settings as any;
+  const gate =
+    kind === "ban" ? s?.alert_on_ban :
+    kind === "peer_flood" ? s?.alert_on_peer_flood :
+    kind === "job_failure" ? s?.alert_on_job_failure :
+    true;
+  const event: AlertEvent = kind === "job_failure" ? "failure" : "account";
+  await insertLog(supabase, userId, "app", event, title, body);
+  if (!settings || gate === false) return;
+  if (s.telegram_enabled && s.telegram_chat) {
+    try {
+      await sendTelegramAlert(supabase, userId, s.telegram_chat, `${title}\n${body}`);
+      await insertLog(supabase, userId, "telegram", event, title, body, "sent");
+    } catch (e) {
+      await insertLog(supabase, userId, "telegram", event, title, body, "failed", (e as Error).message);
+    }
+  }
+  if (s.email_enabled && s.email_to) {
+    try {
+      await sendEmailAlert(s.email_to, title, body);
+      await insertLog(supabase, userId, "email", event, title, body, "sent");
+    } catch (e) {
+      await insertLog(supabase, userId, "email", event, title, body, "failed", (e as Error).message);
+    }
+  }
+}
