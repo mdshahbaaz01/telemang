@@ -1,11 +1,14 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Database } from "@/integrations/supabase/types";
 
+export type Attachment = { path: string; filename: string; mimeType?: string; isVoice?: boolean };
+
 export type BroadcastRowInput = {
   accountId: string;
   message: string;
   targets: string[];
-  attachment?: { path: string; filename: string; mimeType?: string; isVoice?: boolean };
+  attachment?: Attachment;
+  attachments?: Attachment[];
   format?: "plain" | "mono" | "quote" | "html";
 };
 
@@ -26,7 +29,8 @@ export type SourceRef = { chat: string; msgId: number };
 export type ReplyRowInput = {
   accountId: string;
   message: string;
-  attachment?: { path: string; filename: string; mimeType?: string; isVoice?: boolean };
+  attachment?: Attachment;
+  attachments?: Attachment[];
   format?: "plain" | "mono" | "quote" | "html";
 };
 
@@ -166,10 +170,15 @@ export async function executeBroadcast(
       }
       try {
         for (const row of rows) {
-          let attData: { buf: Buffer; filename: string; mimeType?: string; isVoice?: boolean } | null = null;
-          if (row.attachment) {
+          const rowAtts = (row.attachments && row.attachments.length > 0
+            ? row.attachments
+            : row.attachment
+              ? [row.attachment]
+              : []) as Attachment[];
+          let attDatas: Array<{ buf: Buffer; filename: string; mimeType?: string; isVoice?: boolean }> = [];
+          if (rowAtts.length) {
             try {
-              attData = await loadAttachment(row.attachment);
+              attDatas = await Promise.all(rowAtts.map((a) => loadAttachment(a)));
             } catch (e) {
               const em = errorText(e);
               fail += row.targets.length;
@@ -180,7 +189,15 @@ export async function executeBroadcast(
           for (const t of row.targets) {
             try {
               const dest = await resolveTarget(client, t);
-              if (attData) {
+              if (attDatas.length > 1) {
+                const formatted = formatMessage(row.message, row.format);
+                await client.sendFile(dest, {
+                  file: attDatas.map((a) => new CustomFile(a.filename, a.buf.length, a.filename, a.buf)),
+                  caption: formatted.message || undefined,
+                  parseMode: formatted.parseMode,
+                });
+              } else if (attDatas.length === 1) {
+                const attData = attDatas[0];
                 const formatted = formatMessage(row.message, row.format);
                 await client.sendFile(dest, {
                   file: new CustomFile(attData.filename, attData.buf.length, attData.filename, attData.buf),

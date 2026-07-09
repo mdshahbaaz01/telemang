@@ -43,7 +43,7 @@ export const Route = createFileRoute("/_authenticated/actions")({
 
 type Tab = "react" | "forward" | "vote" | "broadcast" | "comment" | "reply" | "edit" | "deleteMessages";
 
-type BroadcastRow = { id: string; message: string; targets: string; accountId?: string; file?: File | null };
+type BroadcastRow = { id: string; message: string; targets: string; accountId?: string; files?: File[] };
 type ReplyRow = { id: string; message: string; accountId?: string; file?: File | null };
 type SendMode = "per-account" | "all-ids";
 type TextFormat = "plain" | "mono" | "quote" | "html";
@@ -129,6 +129,77 @@ function AttachmentField({ file, onChange }: { file: File | null; onChange: (f: 
       {file && (
         <p className="mt-1 text-xs text-muted-foreground">
           The message text above will be sent as the caption.
+        </p>
+      )}
+    </div>
+  );
+}
+
+function MultiAttachmentField({
+  files,
+  onChange,
+  max = 10,
+}: {
+  files: File[];
+  onChange: (f: File[]) => void;
+  max?: number;
+}) {
+  const inputRef = useRef<HTMLInputElement | null>(null);
+  const addFiles = (list: FileList | null) => {
+    if (!list || !list.length) return;
+    const next = [...files];
+    for (const f of Array.from(list)) {
+      if (next.length >= max) break;
+      next.push(f);
+    }
+    onChange(next);
+    if (inputRef.current) inputRef.current.value = "";
+  };
+  const removeAt = (i: number) => onChange(files.filter((_, idx) => idx !== i));
+  return (
+    <div>
+      <Label>Attachments (optional, up to {max})</Label>
+      <input
+        ref={inputRef}
+        type="file"
+        multiple
+        className="hidden"
+        onChange={(e) => addFiles(e.target.files)}
+      />
+      {files.length > 0 && (
+        <div className="mb-2 space-y-1">
+          {files.map((f, i) => (
+            <div key={`${f.name}-${i}`} className="flex items-center gap-2 rounded-md border border-border bg-background px-2 py-1.5 text-sm">
+              <Paperclip className="h-4 w-4 text-muted-foreground" />
+              <span className="truncate">{f.name}</span>
+              <span className="ml-auto text-xs text-muted-foreground">{(f.size / 1024).toFixed(1)} KB</span>
+              <button
+                type="button"
+                className="text-muted-foreground hover:text-destructive"
+                onClick={() => removeAt(i)}
+                aria-label="Remove attachment"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+          ))}
+        </div>
+      )}
+      <Button
+        type="button"
+        variant="outline"
+        size="sm"
+        disabled={files.length >= max}
+        onClick={() => inputRef.current?.click()}
+      >
+        <Paperclip className="mr-1 h-4 w-4" />
+        {files.length ? "Add more files" : "Attach files"}
+      </Button>
+      {files.length > 0 && (
+        <p className="mt-1 text-xs text-muted-foreground">
+          {files.length > 1
+            ? "Sent as a media album. Message text becomes the album caption."
+            : "The message text above will be sent as the caption."}
         </p>
       )}
     </div>
@@ -509,7 +580,7 @@ function ActionsPageInner() {
   };
 
   const buildBroadcastCleaned = async (): Promise<
-    { accountId: string; message: string; targets: string[]; attachment?: { path: string; filename: string; mimeType?: string; isVoice?: boolean }; format?: TextFormat }[] | null
+    { accountId: string; message: string; targets: string[]; attachments?: { path: string; filename: string; mimeType?: string; isVoice?: boolean }[]; format?: TextFormat }[] | null
   > => {
     const baseRows = rows
       .map((r) => ({
@@ -519,22 +590,26 @@ function ActionsPageInner() {
           .split(/\r?\n|,/)
           .map((s) => s.trim())
           .filter(Boolean),
-        file: r.file ?? null,
+        files: r.files ?? [],
       }))
-      .filter((r) => (r.message || r.file) && r.targets.length);
+      .filter((r) => (r.message || r.files.length > 0) && r.targets.length);
     if (!baseRows.length) {
-      toast.error("Add at least one row with message/file and targets");
+      toast.error("Add at least one row with message/files and targets");
       return null;
     }
     try {
       const uploaded = await Promise.all(
-        baseRows.map(async (r) => (r.file ? await uploadAttachment(r.file, voiceMode) : undefined)),
+        baseRows.map(async (r) =>
+          r.files.length
+            ? await Promise.all(r.files.map((f) => uploadAttachment(f, voiceMode && r.files.length === 1)))
+            : undefined,
+        ),
       );
       const withAtt = baseRows.map((r, i) => ({
         accountId: r.accountId,
         message: r.message,
         targets: r.targets,
-        attachment: uploaded[i],
+        attachments: uploaded[i],
         format: textFormat,
       }));
       if (broadcastMode === "per-account") {
@@ -551,7 +626,7 @@ function ActionsPageInner() {
         return null;
       }
       return targetIds.flatMap((accountId) =>
-        withAtt.map((r) => ({ accountId, message: r.message, targets: r.targets, attachment: r.attachment, format: r.format })),
+        withAtt.map((r) => ({ accountId, message: r.message, targets: r.targets, attachments: r.attachments, format: r.format })),
       );
     } catch (e) {
       toast.error((e as Error).message);
@@ -1346,7 +1421,7 @@ function ActionsPageInner() {
                       <MessagePreview
                         message={row.message}
                         format={textFormat}
-                        fileName={row.file?.name ?? null}
+                        fileName={row.files?.length ? row.files.map((f) => f.name).join(", ") : null}
                       />
                     </div>
                     <div>
@@ -1360,10 +1435,10 @@ function ActionsPageInner() {
                         placeholder="@username&#10;@mygroup&#10;https://t.me/channel"
                       />
                     </div>
-                    <AttachmentField
-                      file={row.file ?? null}
-                      onChange={(f) =>
-                        setRows((rs) => rs.map((r) => (r.id === row.id ? { ...r, file: f } : r)))
+                    <MultiAttachmentField
+                      files={row.files ?? []}
+                      onChange={(fs) =>
+                        setRows((rs) => rs.map((r) => (r.id === row.id ? { ...r, files: fs } : r)))
                       }
                     />
                   </div>
