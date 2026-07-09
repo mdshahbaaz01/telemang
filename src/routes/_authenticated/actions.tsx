@@ -225,6 +225,7 @@ function ActionsPageInner() {
   const [replySelectedIds, setReplySelectedIds] = useState<string[]>([]);
   const [actionSelectedIds, setActionSelectedIds] = useState<string[]>([]);
   const [textFormat, setTextFormat] = useState<TextFormat>("plain");
+  const [showFormatExamples, setShowFormatExamples] = useState(false);
   const [voiceMode, setVoiceMode] = useState(false);
   const [editText, setEditText] = useState("");
   const [deleteIds, setDeleteIds] = useState("");
@@ -881,16 +882,61 @@ function ActionsPageInner() {
                 >
                   HTML
                 </button>
-                {textFormat === "html" && (
-                  <span className="basis-full text-xs text-muted-foreground">
-                    Mix tags in one message: <code>&lt;b&gt;bold&lt;/b&gt;</code>, <code>&lt;code&gt;mono&lt;/code&gt;</code>, <code>&lt;pre&gt;block&lt;/pre&gt;</code>, <code>&lt;blockquote&gt;quote&lt;/blockquote&gt;</code>, <code>&lt;i&gt;</code>, <code>&lt;u&gt;</code>, <code>&lt;s&gt;</code>, <code>&lt;a href="…"&gt;</code>.
-                  </span>
-                )}
+                <button
+                  type="button"
+                  className="text-xs text-primary underline-offset-2 hover:underline"
+                  onClick={() => setShowFormatExamples((v) => !v)}
+                >
+                  {showFormatExamples ? "Hide examples" : "Show examples"}
+                </button>
                 {(tab === "broadcast" || tab === "reply" || tab === "comment") && (
                   <label className="ml-auto flex items-center gap-2 text-xs text-muted-foreground">
                     <input type="checkbox" checked={voiceMode} onChange={(e) => setVoiceMode(e.target.checked)} />
                     Send attachments as voice notes
                   </label>
+                )}
+                {showFormatExamples && (
+                  <div className="basis-full rounded-md border border-border bg-muted/30 p-3 text-xs">
+                    <div className="mb-2 flex items-center justify-between">
+                      <span className="font-medium">Format examples</span>
+                      <button
+                        type="button"
+                        className="text-muted-foreground hover:text-foreground"
+                        onClick={() => setShowFormatExamples(false)}
+                      >
+                        Hide
+                      </button>
+                    </div>
+                    <div className="grid gap-3 sm:grid-cols-2">
+                      <div>
+                        <div className="font-medium text-foreground">Plain</div>
+                        <div className="text-muted-foreground">Sends your text as-is.</div>
+                        <pre className="mt-1 whitespace-pre-wrap break-all rounded bg-background px-2 py-1">hello world</pre>
+                      </div>
+                      <div>
+                        <div className="font-medium text-foreground">Monospace</div>
+                        <div className="text-muted-foreground">Wraps the whole message in code style.</div>
+                        <pre className="mt-1 whitespace-pre-wrap break-all rounded bg-background px-2 py-1">hello world</pre>
+                      </div>
+                      <div>
+                        <div className="font-medium text-foreground">Quote</div>
+                        <div className="text-muted-foreground">Wraps the whole message in a blockquote.</div>
+                        <pre className="mt-1 whitespace-pre-wrap break-all rounded bg-background px-2 py-1">hello world</pre>
+                      </div>
+                      <div>
+                        <div className="font-medium text-foreground">HTML (mix any tags in one message)</div>
+                        <div className="text-muted-foreground">Type these tags directly in your message.</div>
+                        <pre className="mt-1 whitespace-pre-wrap break-all rounded bg-background px-2 py-1">{`<b>bold</b>
+<i>italic</i>
+<u>underline</u>
+<s>strikethrough</s>
+<code>mono</code>
+<pre>code block</pre>
+<blockquote>quote</blockquote>
+<a href="https://example.com">link</a>`}</pre>
+                      </div>
+                    </div>
+                  </div>
                 )}
               </div>
             )}
