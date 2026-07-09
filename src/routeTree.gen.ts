@@ -12,10 +12,12 @@ import { Route as rootRouteImport } from './routes/__root'
 import { Route as AuthRouteImport } from './routes/auth'
 import { Route as AuthenticatedRouteRouteImport } from './routes/_authenticated/route'
 import { Route as IndexRouteImport } from './routes/index'
+import { Route as AuthenticatedProfileUpdaterRouteImport } from './routes/_authenticated/profile-updater'
 import { Route as AuthenticatedOwnerRouteImport } from './routes/_authenticated/owner'
 import { Route as AuthenticatedDashboardRouteImport } from './routes/_authenticated/dashboard'
 import { Route as AuthenticatedCleanupRouteImport } from './routes/_authenticated/cleanup'
 import { Route as AuthenticatedButtonsRouteImport } from './routes/_authenticated/buttons'
+import { Route as AuthenticatedBulkMixRouteImport } from './routes/_authenticated/bulk-mix'
 import { Route as AuthenticatedBotFlowRouteImport } from './routes/_authenticated/bot-flow'
 import { Route as AuthenticatedAlertsRouteImport } from './routes/_authenticated/alerts'
 import { Route as AuthenticatedActionsRouteImport } from './routes/_authenticated/actions'
@@ -42,6 +44,12 @@ const IndexRoute = IndexRouteImport.update({
   path: '/',
   getParentRoute: () => rootRouteImport,
 } as any)
+const AuthenticatedProfileUpdaterRoute =
+  AuthenticatedProfileUpdaterRouteImport.update({
+    id: '/profile-updater',
+    path: '/profile-updater',
+    getParentRoute: () => AuthenticatedRouteRoute,
+  } as any)
 const AuthenticatedOwnerRoute = AuthenticatedOwnerRouteImport.update({
   id: '/owner',
   path: '/owner',
@@ -60,6 +68,11 @@ const AuthenticatedCleanupRoute = AuthenticatedCleanupRouteImport.update({
 const AuthenticatedButtonsRoute = AuthenticatedButtonsRouteImport.update({
   id: '/buttons',
   path: '/buttons',
+  getParentRoute: () => AuthenticatedRouteRoute,
+} as any)
+const AuthenticatedBulkMixRoute = AuthenticatedBulkMixRouteImport.update({
+  id: '/bulk-mix',
+  path: '/bulk-mix',
   getParentRoute: () => AuthenticatedRouteRoute,
 } as any)
 const AuthenticatedBotFlowRoute = AuthenticatedBotFlowRouteImport.update({
@@ -126,10 +139,12 @@ export interface FileRoutesByFullPath {
   '/actions': typeof AuthenticatedActionsRoute
   '/alerts': typeof AuthenticatedAlertsRoute
   '/bot-flow': typeof AuthenticatedBotFlowRoute
+  '/bulk-mix': typeof AuthenticatedBulkMixRoute
   '/buttons': typeof AuthenticatedButtonsRoute
   '/cleanup': typeof AuthenticatedCleanupRoute
   '/dashboard': typeof AuthenticatedDashboardRoute
   '/owner': typeof AuthenticatedOwnerRoute
+  '/profile-updater': typeof AuthenticatedProfileUpdaterRoute
   '/groups/$id': typeof AuthenticatedGroupsIdRoute
   '/tasks/$id': typeof AuthenticatedTasksIdRoute
   '/tasks/new': typeof AuthenticatedTasksNewRoute
@@ -145,10 +160,12 @@ export interface FileRoutesByTo {
   '/actions': typeof AuthenticatedActionsRoute
   '/alerts': typeof AuthenticatedAlertsRoute
   '/bot-flow': typeof AuthenticatedBotFlowRoute
+  '/bulk-mix': typeof AuthenticatedBulkMixRoute
   '/buttons': typeof AuthenticatedButtonsRoute
   '/cleanup': typeof AuthenticatedCleanupRoute
   '/dashboard': typeof AuthenticatedDashboardRoute
   '/owner': typeof AuthenticatedOwnerRoute
+  '/profile-updater': typeof AuthenticatedProfileUpdaterRoute
   '/groups/$id': typeof AuthenticatedGroupsIdRoute
   '/tasks/$id': typeof AuthenticatedTasksIdRoute
   '/tasks/new': typeof AuthenticatedTasksNewRoute
@@ -166,10 +183,12 @@ export interface FileRoutesById {
   '/_authenticated/actions': typeof AuthenticatedActionsRoute
   '/_authenticated/alerts': typeof AuthenticatedAlertsRoute
   '/_authenticated/bot-flow': typeof AuthenticatedBotFlowRoute
+  '/_authenticated/bulk-mix': typeof AuthenticatedBulkMixRoute
   '/_authenticated/buttons': typeof AuthenticatedButtonsRoute
   '/_authenticated/cleanup': typeof AuthenticatedCleanupRoute
   '/_authenticated/dashboard': typeof AuthenticatedDashboardRoute
   '/_authenticated/owner': typeof AuthenticatedOwnerRoute
+  '/_authenticated/profile-updater': typeof AuthenticatedProfileUpdaterRoute
   '/_authenticated/groups/$id': typeof AuthenticatedGroupsIdRoute
   '/_authenticated/tasks/$id': typeof AuthenticatedTasksIdRoute
   '/_authenticated/tasks/new': typeof AuthenticatedTasksNewRoute
@@ -187,10 +206,12 @@ export interface FileRouteTypes {
     | '/actions'
     | '/alerts'
     | '/bot-flow'
+    | '/bulk-mix'
     | '/buttons'
     | '/cleanup'
     | '/dashboard'
     | '/owner'
+    | '/profile-updater'
     | '/groups/$id'
     | '/tasks/$id'
     | '/tasks/new'
@@ -206,10 +227,12 @@ export interface FileRouteTypes {
     | '/actions'
     | '/alerts'
     | '/bot-flow'
+    | '/bulk-mix'
     | '/buttons'
     | '/cleanup'
     | '/dashboard'
     | '/owner'
+    | '/profile-updater'
     | '/groups/$id'
     | '/tasks/$id'
     | '/tasks/new'
@@ -226,10 +249,12 @@ export interface FileRouteTypes {
     | '/_authenticated/actions'
     | '/_authenticated/alerts'
     | '/_authenticated/bot-flow'
+    | '/_authenticated/bulk-mix'
     | '/_authenticated/buttons'
     | '/_authenticated/cleanup'
     | '/_authenticated/dashboard'
     | '/_authenticated/owner'
+    | '/_authenticated/profile-updater'
     | '/_authenticated/groups/$id'
     | '/_authenticated/tasks/$id'
     | '/_authenticated/tasks/new'
@@ -274,6 +299,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof IndexRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/_authenticated/profile-updater': {
+      id: '/_authenticated/profile-updater'
+      path: '/profile-updater'
+      fullPath: '/profile-updater'
+      preLoaderRoute: typeof AuthenticatedProfileUpdaterRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
     '/_authenticated/owner': {
       id: '/_authenticated/owner'
       path: '/owner'
@@ -300,6 +332,13 @@ declare module '@tanstack/react-router' {
       path: '/buttons'
       fullPath: '/buttons'
       preLoaderRoute: typeof AuthenticatedButtonsRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
+    '/_authenticated/bulk-mix': {
+      id: '/_authenticated/bulk-mix'
+      path: '/bulk-mix'
+      fullPath: '/bulk-mix'
+      preLoaderRoute: typeof AuthenticatedBulkMixRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
     '/_authenticated/bot-flow': {
@@ -386,10 +425,12 @@ interface AuthenticatedRouteRouteChildren {
   AuthenticatedActionsRoute: typeof AuthenticatedActionsRoute
   AuthenticatedAlertsRoute: typeof AuthenticatedAlertsRoute
   AuthenticatedBotFlowRoute: typeof AuthenticatedBotFlowRoute
+  AuthenticatedBulkMixRoute: typeof AuthenticatedBulkMixRoute
   AuthenticatedButtonsRoute: typeof AuthenticatedButtonsRoute
   AuthenticatedCleanupRoute: typeof AuthenticatedCleanupRoute
   AuthenticatedDashboardRoute: typeof AuthenticatedDashboardRoute
   AuthenticatedOwnerRoute: typeof AuthenticatedOwnerRoute
+  AuthenticatedProfileUpdaterRoute: typeof AuthenticatedProfileUpdaterRoute
   AuthenticatedGroupsIdRoute: typeof AuthenticatedGroupsIdRoute
   AuthenticatedTasksIdRoute: typeof AuthenticatedTasksIdRoute
   AuthenticatedTasksNewRoute: typeof AuthenticatedTasksNewRoute
@@ -399,10 +440,12 @@ const AuthenticatedRouteRouteChildren: AuthenticatedRouteRouteChildren = {
   AuthenticatedActionsRoute: AuthenticatedActionsRoute,
   AuthenticatedAlertsRoute: AuthenticatedAlertsRoute,
   AuthenticatedBotFlowRoute: AuthenticatedBotFlowRoute,
+  AuthenticatedBulkMixRoute: AuthenticatedBulkMixRoute,
   AuthenticatedButtonsRoute: AuthenticatedButtonsRoute,
   AuthenticatedCleanupRoute: AuthenticatedCleanupRoute,
   AuthenticatedDashboardRoute: AuthenticatedDashboardRoute,
   AuthenticatedOwnerRoute: AuthenticatedOwnerRoute,
+  AuthenticatedProfileUpdaterRoute: AuthenticatedProfileUpdaterRoute,
   AuthenticatedGroupsIdRoute: AuthenticatedGroupsIdRoute,
   AuthenticatedTasksIdRoute: AuthenticatedTasksIdRoute,
   AuthenticatedTasksNewRoute: AuthenticatedTasksNewRoute,
