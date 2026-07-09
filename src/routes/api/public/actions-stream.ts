@@ -379,6 +379,16 @@ export const Route = createFileRoute("/api/public/actions-stream")({
                 .update({ paused_until: pausedUntil, last_error: `FloodWait ${secs}s` })
                 .eq("id", accountId);
               await alertLog("account", "FloodWait detected", `Account ${accountId.slice(0, 8)} paused for ${secs}s: ${message}`);
+              try {
+                const { notifyOwner } = await import("@/lib/notifications.server");
+                await notifyOwner(
+                  supabase,
+                  userId,
+                  "peer_flood",
+                  "FloodWait triggered",
+                  `Account ${accountId.slice(0, 8)} paused ${secs}s — ${message}`,
+                ).catch(() => undefined);
+              } catch { /* ignore */ }
               return secs;
             };
 
