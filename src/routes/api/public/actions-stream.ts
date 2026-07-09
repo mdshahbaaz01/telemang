@@ -119,9 +119,14 @@ function htmlEscape(input: string) {
   return input.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 }
 
-function formatMessage(message: string, format?: "plain" | "mono") {
-  if (format !== "mono") return { message };
-  return { message: `<code>${htmlEscape(message)}</code>`, parseMode: "html" as const };
+function formatMessage(message: string, format?: "plain" | "mono" | "quote") {
+  if (format === "mono") {
+    return { message: `<code>${htmlEscape(message)}</code>`, parseMode: "html" as const };
+  }
+  if (format === "quote") {
+    return { message: `<blockquote>${htmlEscape(message)}</blockquote>`, parseMode: "html" as const };
+  }
+  return { message };
 }
 
 function floodWaitSeconds(message: string) {
