@@ -2192,6 +2192,7 @@ function HistorySection({
   onDelete,
   onRefresh,
   onClearAll,
+  onViewReplies,
 }: {
   runs: any[];
   accountList: Account[];
@@ -2201,6 +2202,7 @@ function HistorySection({
   onDelete: (id: string) => void;
   onRefresh: () => void;
   onClearAll: () => void;
+  onViewReplies: (runId: string) => void;
 }) {
   return (
     <div className="rounded-lg border border-border bg-card p-4">
@@ -2222,6 +2224,7 @@ function HistorySection({
           const t = r.totals ?? {};
           const ok = t.ok ?? 0;
           const fail = t.fail ?? 0;
+          const isBroadcast = r.kind === "broadcast";
           return (
             <div key={r.id} className="rounded-md border border-border p-3">
               <div className="flex flex-wrap items-center gap-2">
@@ -2248,6 +2251,11 @@ function HistorySection({
                 <Button size="sm" variant="outline" onClick={() => onRerun(r.params)}>
                   <Play className="mr-1 h-3.5 w-3.5" /> Re-run
                 </Button>
+                {isBroadcast && (
+                  <Button size="sm" variant="outline" onClick={() => onViewReplies(r.id)}>
+                    <MessageSquareReply className="mr-1 h-3.5 w-3.5" /> View replies
+                  </Button>
+                )}
                 <Button size="sm" variant="outline" onClick={() => onEdit(r)}>
                   <Pencil className="mr-1 h-3.5 w-3.5" /> Edit
                 </Button>
