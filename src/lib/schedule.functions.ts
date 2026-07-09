@@ -19,6 +19,7 @@ const broadcastRowSchema = z.object({
   message: z.string().max(4096).default(""),
   targets: z.array(z.string().min(1).max(200)).min(1).max(500),
   attachment: attachmentSchema.optional(),
+  attachments: z.array(attachmentSchema).max(10).optional(),
   format: z.enum(["plain", "mono", "quote", "html"]).default("plain"),
 });
 
