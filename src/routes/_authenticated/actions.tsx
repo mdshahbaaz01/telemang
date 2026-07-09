@@ -403,6 +403,8 @@ function ActionsPageInner() {
       toast.error(message);
       return;
     }
+    let currentRunId: string | null = null;
+    let currentKind: string | null = null;
     const reader = res.body.getReader();
     const dec = new TextDecoder();
     let buf = "";
@@ -419,7 +421,11 @@ function ActionsPageInner() {
         const event = evLine.slice(7).trim();
         let data: any = {};
         try { data = JSON.parse(dataLine.slice(6)); } catch {}
-        if (event === "start") addLog({ level: "info", message: `Run started: ${data.kind ?? "action"}` });
+        if (event === "start") {
+          if (data.runId) currentRunId = String(data.runId);
+          if (data.kind) currentKind = String(data.kind);
+          addLog({ level: "info", message: `Run started: ${data.kind ?? "action"}` });
+        }
         else if (event === "log") addLog({ accountId: data.accountId, level: data.level ?? "info", target: data.target, message: data.message ?? "" });
         else if (event === "done") addLog({ accountId: data.accountId, level: data.fail ? "warn" : "info", message: `Account done — ok ${data.ok}, fail ${data.fail}` });
         else if (event === "end") {
@@ -427,6 +433,11 @@ function ActionsPageInner() {
           const message = `Finished — ok ${data.ok}, fail ${data.fail}`;
           if (data.fail) toast.warning(message);
           else toast.success(message);
+          if (currentKind === "broadcast" && currentRunId && (data.ok ?? 0) > 0) {
+            // Auto-open the replies panel for the just-completed broadcast.
+            setRepliesRunId(currentRunId);
+            qc.invalidateQueries({ queryKey: ["action-runs"] });
+          }
         }
         else if (event === "aborted") addLog({ level: "warn", message: data.message ?? "Stopped" });
       }
