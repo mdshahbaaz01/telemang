@@ -3,7 +3,7 @@ import { createFileRoute } from "@tanstack/react-router";
 import { z } from "zod";
 import { useServerFn } from "@tanstack/react-start";
 import { useQuery } from "@tanstack/react-query";
-import { useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { listAccounts } from "@/lib/accounts.functions";
 import { loadPoll, listActionRuns, deleteActionRun, clearActionRuns } from "@/lib/actions.functions";
