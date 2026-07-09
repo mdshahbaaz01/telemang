@@ -100,6 +100,18 @@ async function downloadSmallPhoto(client: any, msg: any): Promise<string | null>
   }
 }
 
+async function downloadEntityAvatar(client: any, entity: any): Promise<string | null> {
+  try {
+    if (!entity || !entity.photo) return null;
+    const buf = await client.downloadProfilePhoto(entity, { isBig: false });
+    if (!buf || (buf as any).length === 0) return null;
+    const b64 = Buffer.from(buf).toString("base64");
+    return `data:image/jpeg;base64,${b64}`;
+  } catch {
+    return null;
+  }
+}
+
 // ── listDialogs ─────────────────────────────────────────────────────────
 export const listDialogs = createServerFn({ method: "GET" })
   .middleware([requireSupabaseAuth])
