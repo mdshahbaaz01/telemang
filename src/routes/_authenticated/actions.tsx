@@ -8,6 +8,11 @@ import { supabase } from "@/integrations/supabase/client";
 import { listAccounts } from "@/lib/accounts.functions";
 import { loadPoll, listActionRuns, deleteActionRun, clearActionRuns } from "@/lib/actions.functions";
 import {
+  getBroadcastReplies,
+  refreshReplyThread,
+  pressInlineButton,
+} from "@/lib/broadcast-replies.functions";
+import {
   createScheduledBroadcast,
   listScheduledBroadcasts,
   cancelScheduledBroadcast,
@@ -21,7 +26,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { toast } from "sonner";
 import { AdminGate } from "@/components/AdminGate";
 import { AccountIdPaste } from "@/components/AccountIdPaste";
-import { Square, Play, Paperclip, X, AlertTriangle, Copy, Trash2, RotateCw, Pencil, Clock, CalendarClock, Eye, EyeOff } from "lucide-react";
+import { Square, Play, Paperclip, X, AlertTriangle, Copy, Trash2, RotateCw, Pencil, Clock, CalendarClock, Eye, EyeOff, MessageSquareReply, ExternalLink, Loader2 } from "lucide-react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { useQueryClient } from "@tanstack/react-query";
 import { ChatIdChip } from "@/components/chat/ChatIdChip";
@@ -292,6 +297,8 @@ function ActionsPageInner() {
   const qc = useQueryClient();
   const runsQ = useQuery({ queryKey: ["action-runs"], queryFn: () => listRunsFn() });
   const [editingRun, setEditingRun] = useState<any | null>(null);
+  // Broadcast-replies panel state
+  const [repliesRunId, setRepliesRunId] = useState<string | null>(null);
 
   const [tab, setTab] = useState<Tab>(search.tab ?? "react");
   const [showAccounts, setShowAccounts] = useState<boolean>(() => {
@@ -396,6 +403,8 @@ function ActionsPageInner() {
       toast.error(message);
       return;
     }
+    let currentRunId: string | null = null;
+    let currentKind: string | null = null;
     const reader = res.body.getReader();
     const dec = new TextDecoder();
     let buf = "";
@@ -412,7 +421,11 @@ function ActionsPageInner() {
         const event = evLine.slice(7).trim();
         let data: any = {};
         try { data = JSON.parse(dataLine.slice(6)); } catch {}
-        if (event === "start") addLog({ level: "info", message: `Run started: ${data.kind ?? "action"}` });
+        if (event === "start") {
+          if (data.runId) currentRunId = String(data.runId);
+          if (data.kind) currentKind = String(data.kind);
+          addLog({ level: "info", message: `Run started: ${data.kind ?? "action"}` });
+        }
         else if (event === "log") addLog({ accountId: data.accountId, level: data.level ?? "info", target: data.target, message: data.message ?? "" });
         else if (event === "done") addLog({ accountId: data.accountId, level: data.fail ? "warn" : "info", message: `Account done — ok ${data.ok}, fail ${data.fail}` });
         else if (event === "end") {
@@ -420,6 +433,11 @@ function ActionsPageInner() {
           const message = `Finished — ok ${data.ok}, fail ${data.fail}`;
           if (data.fail) toast.warning(message);
           else toast.success(message);
+          if (currentKind === "broadcast" && currentRunId && (data.ok ?? 0) > 0) {
+            // Auto-open the replies panel for the just-completed broadcast.
+            setRepliesRunId(currentRunId);
+            qc.invalidateQueries({ queryKey: ["action-runs"] });
+          }
         }
         else if (event === "aborted") addLog({ level: "warn", message: data.message ?? "Stopped" });
       }
@@ -2049,6 +2067,7 @@ function ActionsPageInner() {
             onDelete={deleteRun}
             onRefresh={() => qc.invalidateQueries({ queryKey: ["action-runs"] })}
             onClearAll={clearAllRuns}
+            onViewReplies={(runId) => setRepliesRunId(runId)}
           />
         </section>
       </div>
@@ -2062,6 +2081,13 @@ function ActionsPageInner() {
             setEditingRun(null);
             await rerunFromParams(newParams);
           }}
+        />
+      )}
+
+      {repliesRunId && (
+        <BroadcastRepliesDialog
+          runId={repliesRunId}
+          onClose={() => setRepliesRunId(null)}
         />
       )}
     </main>
@@ -2166,6 +2192,7 @@ function HistorySection({
   onDelete,
   onRefresh,
   onClearAll,
+  onViewReplies,
 }: {
   runs: any[];
   accountList: Account[];
@@ -2175,6 +2202,7 @@ function HistorySection({
   onDelete: (id: string) => void;
   onRefresh: () => void;
   onClearAll: () => void;
+  onViewReplies: (runId: string) => void;
 }) {
   return (
     <div className="rounded-lg border border-border bg-card p-4">
@@ -2196,6 +2224,7 @@ function HistorySection({
           const t = r.totals ?? {};
           const ok = t.ok ?? 0;
           const fail = t.fail ?? 0;
+          const isBroadcast = r.kind === "broadcast";
           return (
             <div key={r.id} className="rounded-md border border-border p-3">
               <div className="flex flex-wrap items-center gap-2">
@@ -2222,6 +2251,11 @@ function HistorySection({
                 <Button size="sm" variant="outline" onClick={() => onRerun(r.params)}>
                   <Play className="mr-1 h-3.5 w-3.5" /> Re-run
                 </Button>
+                {isBroadcast && (
+                  <Button size="sm" variant="outline" onClick={() => onViewReplies(r.id)}>
+                    <MessageSquareReply className="mr-1 h-3.5 w-3.5" /> View replies
+                  </Button>
+                )}
                 <Button size="sm" variant="outline" onClick={() => onEdit(r)}>
                   <Pencil className="mr-1 h-3.5 w-3.5" /> Edit
                 </Button>
@@ -2599,5 +2633,347 @@ function EditRunDialog({
         </div>
       </DialogContent>
     </Dialog>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────────
+// Broadcast Replies viewer
+// ─────────────────────────────────────────────────────────────────────────
+
+type ReplyButton =
+  | { kind: "callback"; text: string; data: string; requiresPassword?: boolean }
+  | { kind: "url"; text: string; url: string }
+  | { kind: "urlAuth"; text: string; url: string; buttonId?: number }
+  | { kind: "switchInline"; text: string; query: string; samePeer: boolean }
+  | { kind: "webview"; text: string; url?: string }
+  | { kind: "game"; text: string }
+  | { kind: "buy"; text: string }
+  | { kind: "other"; text: string; className: string };
+
+type ReplyMsg = {
+  id: number;
+  date: number;
+  senderId: string | null;
+  text: string;
+  mediaKind: string | null;
+  replyMarkup: ReplyButton[][] | null;
+};
+
+type ReplyPair = {
+  accountId: string;
+  accountName: string;
+  target: string;
+  messages: ReplyMsg[];
+  error: string | null;
+};
+
+function BroadcastRepliesDialog({
+  runId,
+  onClose,
+}: {
+  runId: string;
+  onClose: () => void;
+}) {
+  const fetchReplies = useServerFn(getBroadcastReplies);
+  const refresh = useServerFn(refreshReplyThread);
+  const press = useServerFn(pressInlineButton);
+
+  const [loading, setLoading] = useState(true);
+  const [pairs, setPairs] = useState<ReplyPair[]>([]);
+  const [runCreatedAt, setRunCreatedAt] = useState<number>(Date.now());
+  const [error, setError] = useState<string | null>(null);
+  const [busy, setBusy] = useState<string | null>(null); // key of button being clicked
+  const [confirmUrl, setConfirmUrl] = useState<string | null>(null);
+  const [autoRefresh, setAutoRefresh] = useState(true);
+
+  const load = async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      const res = await fetchReplies({ data: { runId } });
+      setPairs(res.pairs as ReplyPair[]);
+      setRunCreatedAt(res.runCreatedAt);
+    } catch (e) {
+      setError((e as Error).message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    load();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [runId]);
+
+  // Per-card auto-refresh — pulls single pair every 6s if the tab is visible.
+  useEffect(() => {
+    if (!autoRefresh) return;
+    const id = window.setInterval(async () => {
+      if (document.visibilityState !== "visible") return;
+      // Refresh each pair sequentially to avoid opening many connections at once.
+      for (const p of pairs) {
+        try {
+          const lastId = p.messages.reduce((m, x) => Math.max(m, x.id), 0);
+          const res = await refresh({
+            data: {
+              accountId: p.accountId,
+              target: p.target,
+              sinceMs: runCreatedAt - 5000,
+              sinceMsgId: lastId,
+            },
+          });
+          const fresh = res.messages as ReplyMsg[];
+          if (fresh.length) {
+            setPairs((prev) =>
+              prev.map((row) =>
+                row.accountId === p.accountId && row.target === p.target
+                  ? {
+                      ...row,
+                      messages: [
+                        ...row.messages,
+                        ...fresh.filter((m) => !row.messages.some((x) => x.id === m.id)),
+                      ].sort((a, b) => a.id - b.id),
+                    }
+                  : row,
+              ),
+            );
+          }
+        } catch {
+          /* ignore transient refresh errors */
+        }
+      }
+    }, 6000);
+    return () => window.clearInterval(id);
+  }, [autoRefresh, pairs, runCreatedAt, refresh]);
+
+  const onPress = async (pair: ReplyPair, msgId: number, btn: ReplyButton, key: string) => {
+    if (btn.kind === "url" || btn.kind === "urlAuth" || btn.kind === "webview") {
+      const url = (btn as any).url as string | undefined;
+      if (!url) {
+        toast.error("Button has no URL");
+        return;
+      }
+      setConfirmUrl(url);
+      return;
+    }
+    if (btn.kind !== "callback") {
+      toast.info("This button type isn't supported from a user account");
+      return;
+    }
+    setBusy(key);
+    try {
+      const res = await press({
+        data: {
+          accountId: pair.accountId,
+          target: pair.target,
+          msgId,
+          data: btn.data,
+        },
+      });
+      if (res.message) {
+        if (res.alert) toast.warning(res.message);
+        else toast.success(res.message);
+      } else if (res.url) {
+        setConfirmUrl(res.url);
+      } else {
+        toast.success("Sent");
+      }
+      // Pull fresh messages for this pair immediately.
+      const lastId = pair.messages.reduce((m, x) => Math.max(m, x.id), 0);
+      const rf = await refresh({
+        data: {
+          accountId: pair.accountId,
+          target: pair.target,
+          sinceMs: runCreatedAt - 5000,
+          sinceMsgId: lastId,
+        },
+      });
+      const fresh = rf.messages as ReplyMsg[];
+      if (fresh.length) {
+        setPairs((prev) =>
+          prev.map((row) =>
+            row.accountId === pair.accountId && row.target === pair.target
+              ? {
+                  ...row,
+                  messages: [
+                    ...row.messages,
+                    ...fresh.filter((m) => !row.messages.some((x) => x.id === m.id)),
+                  ].sort((a, b) => a.id - b.id),
+                }
+              : row,
+          ),
+        );
+      }
+    } catch (e) {
+      toast.error((e as Error).message);
+    } finally {
+      setBusy(null);
+    }
+  };
+
+  return (
+    <>
+      <Dialog open onOpenChange={(o) => !o && onClose()}>
+        <DialogContent className="max-w-3xl">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <MessageSquareReply className="h-4 w-4" />
+              Broadcast replies
+            </DialogTitle>
+          </DialogHeader>
+          <div className="mb-3 flex items-center gap-2">
+            <span className="text-xs text-muted-foreground">
+              Since {new Date(runCreatedAt).toLocaleString()}
+            </span>
+            <label className="ml-auto flex items-center gap-1 text-xs text-muted-foreground">
+              <input
+                type="checkbox"
+                checked={autoRefresh}
+                onChange={(e) => setAutoRefresh(e.target.checked)}
+              />
+              Auto-refresh
+            </label>
+            <Button size="sm" variant="outline" onClick={load} disabled={loading}>
+              <RotateCw className={`mr-1 h-3.5 w-3.5 ${loading ? "animate-spin" : ""}`} />
+              Refresh all
+            </Button>
+          </div>
+
+          {loading && pairs.length === 0 && (
+            <div className="flex items-center gap-2 text-sm text-muted-foreground">
+              <Loader2 className="h-4 w-4 animate-spin" /> Loading replies…
+            </div>
+          )}
+          {error && <p className="text-sm text-destructive">{error}</p>}
+          {!loading && !error && pairs.length === 0 && (
+            <p className="text-sm text-muted-foreground">
+              This run has no account/target pairs.
+            </p>
+          )}
+
+          <div className="max-h-[65vh] space-y-3 overflow-auto pr-1">
+            {pairs.map((p) => (
+              <div
+                key={`${p.accountId}:${p.target}`}
+                className="rounded-md border border-border bg-card p-3"
+              >
+                <div className="mb-2 flex flex-wrap items-center gap-2">
+                  <span className="text-xs font-medium">{p.accountName}</span>
+                  <span className="text-xs text-muted-foreground">→</span>
+                  <ChatIdChip id={p.target} accountId={p.accountId} />
+                  <span className="ml-auto text-xs text-muted-foreground">
+                    {p.messages.length} reply{p.messages.length === 1 ? "" : "ies"}
+                  </span>
+                </div>
+                {p.error && (
+                  <p className="mb-2 text-xs text-destructive">
+                    <AlertTriangle className="mr-1 inline h-3 w-3" />
+                    {p.error}
+                  </p>
+                )}
+                {p.messages.length === 0 && !p.error && (
+                  <p className="text-xs text-muted-foreground">
+                    No replies yet — the chat hasn't answered.
+                  </p>
+                )}
+                <div className="space-y-2">
+                  {p.messages.map((m) => (
+                    <div key={m.id} className="rounded-md bg-muted/40 p-2">
+                      <div className="mb-1 text-[10px] uppercase tracking-wide text-muted-foreground">
+                        #{m.id} · {new Date(m.date).toLocaleTimeString()}
+                        {m.mediaKind ? ` · ${m.mediaKind}` : ""}
+                      </div>
+                      {m.text && (
+                        <div className="whitespace-pre-wrap break-words text-sm">
+                          {m.text}
+                        </div>
+                      )}
+                      {!m.text && !m.mediaKind && (
+                        <div className="text-xs italic text-muted-foreground">
+                          (empty message)
+                        </div>
+                      )}
+                      {m.replyMarkup && (
+                        <div className="mt-2 space-y-1">
+                          {m.replyMarkup.map((row, ri) => (
+                            <div key={ri} className="flex flex-wrap gap-1">
+                              {row.map((btn, ci) => {
+                                const key = `${p.accountId}:${p.target}:${m.id}:${ri}:${ci}`;
+                                const isBusy = busy === key;
+                                const clickable =
+                                  btn.kind === "callback" ||
+                                  btn.kind === "url" ||
+                                  btn.kind === "urlAuth" ||
+                                  btn.kind === "webview";
+                                const title =
+                                  btn.kind === "callback"
+                                    ? "Callback button"
+                                    : btn.kind === "url" || btn.kind === "urlAuth"
+                                      ? `Opens: ${(btn as any).url}`
+                                      : btn.kind === "webview"
+                                        ? "Opens a Telegram WebApp (limited support)"
+                                        : btn.kind === "switchInline"
+                                          ? "Switch-inline button (not supported)"
+                                          : `${btn.kind} button (not supported)`;
+                                return (
+                                  <button
+                                    key={ci}
+                                    type="button"
+                                    title={title}
+                                    disabled={!clickable || isBusy}
+                                    onClick={() => onPress(p, m.id, btn, key)}
+                                    className={`inline-flex items-center gap-1 rounded-md border px-2 py-1 text-xs transition-colors ${
+                                      clickable
+                                        ? "border-primary/40 bg-primary/10 text-foreground hover:bg-primary/20"
+                                        : "cursor-not-allowed border-border bg-muted text-muted-foreground opacity-60"
+                                    }`}
+                                  >
+                                    {isBusy && <Loader2 className="h-3 w-3 animate-spin" />}
+                                    {btn.kind === "url" || btn.kind === "urlAuth" ? (
+                                      <ExternalLink className="h-3 w-3" />
+                                    ) : null}
+                                    <span className="truncate max-w-[16rem]">{btn.text}</span>
+                                  </button>
+                                );
+                              })}
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            ))}
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {confirmUrl && (
+        <Dialog open onOpenChange={(o) => !o && setConfirmUrl(null)}>
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle>Open external link?</DialogTitle>
+            </DialogHeader>
+            <p className="break-all rounded-md border border-border bg-muted p-2 text-xs">
+              {confirmUrl}
+            </p>
+            <div className="mt-3 flex justify-end gap-2">
+              <Button variant="outline" onClick={() => setConfirmUrl(null)}>
+                Cancel
+              </Button>
+              <Button
+                onClick={() => {
+                  window.open(confirmUrl, "_blank", "noopener,noreferrer");
+                  setConfirmUrl(null);
+                }}
+              >
+                <ExternalLink className="mr-1 h-4 w-4" /> Open
+              </Button>
+            </div>
+          </DialogContent>
+        </Dialog>
+      )}
+    </>
   );
 }
