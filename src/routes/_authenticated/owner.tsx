@@ -158,11 +158,9 @@ function OwnerPanel() {
                         <td className="py-2 pr-3 text-xs">{a.phone}</td>
                         <td className="py-2 pr-3 text-xs">
                           {a.status}
-                          {a.last_error ? (
-                            <span className="ml-1 text-destructive">
-                              · {a.last_error}
-                            </span>
-                          ) : null}
+                          <span className="ml-1">
+                            <FloodWaitBadge pausedUntil={(a as any).paused_until} lastError={a.last_error} compact />
+                          </span>
                         </td>
                         <td className="py-2 pr-3 text-xs text-muted-foreground">
                           {new Date(a.updated_at ?? a.created_at).toLocaleString()}
