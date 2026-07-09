@@ -138,6 +138,14 @@ export const verifyAccountLogin = createServerFn({ method: "POST" })
 export const listAccounts = createServerFn({ method: "GET" })
   .middleware([requireSupabaseAuth])
   .handler(async ({ context }) => {
+    // Auto-clear expired flood-wait pauses so cards stop showing stale "FloodWait Xs".
+    const nowIso = new Date().toISOString();
+    await context.supabase
+      .from("telegram_accounts")
+      .update({ paused_until: null, last_error: null })
+      .lt("paused_until", nowIso)
+      .not("paused_until", "is", null)
+      .ilike("last_error", "%flood%");
     const { data, error } = await context.supabase
       .from("telegram_accounts")
       .select(

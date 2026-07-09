@@ -1,4 +1,5 @@
 import { Loader } from "@/components/ui/loader";
+import { FloodWaitBadge } from "@/components/FloodWaitBadge";
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useServerFn } from "@tanstack/react-start";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
@@ -161,9 +162,7 @@ function Dashboard() {
                         {email || "—"} ·{" "}
                         {new Date(a.updated_at ?? a.created_at).toLocaleString()}
                       </div>
-                      {a.last_error ? (
-                        <div className="text-destructive">{a.last_error}</div>
-                      ) : null}
+                      <FloodWaitBadge pausedUntil={a.paused_until} lastError={a.last_error} />
                     </div>
                     <div className="mt-4 flex gap-2">
                       <Button variant="outline" size="sm" onClick={soon}>

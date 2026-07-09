@@ -343,12 +343,13 @@ export const Route = createFileRoute("/api/public/actions-stream")({
             };
 
             const pauseAccountOnFlood = async (accountId: string, message: string) => {
-              const secs = floodWaitSeconds(message);
+              const match = message.match(/FLOOD_WAIT_?(\d+)/i);
+              const secs = match ? Number(match[1]) : null;
               if (!secs) return false;
               const pausedUntil = new Date(Date.now() + secs * 1000).toISOString();
               await supabase
                 .from("telegram_accounts")
-                .update({ paused_until: pausedUntil, last_error: message })
+                .update({ paused_until: pausedUntil, last_error: `FloodWait ${secs}s` })
                 .eq("id", accountId);
               await alertLog("account", "FloodWait detected", `Account ${accountId.slice(0, 8)} paused for ${secs}s: ${message}`);
               return secs;
