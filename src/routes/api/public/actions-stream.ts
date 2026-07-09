@@ -242,12 +242,39 @@ export const Route = createFileRoute("/api/public/actions-stream")({
                 console.error("action log insert failed:", error.message);
                 send("log", { accountId, target: target ?? undefined, level: "warn", message: `Log save failed: ${error.message}` });
               }
+              if (level === "error") {
+                void maybeOwnerAlertFromError(accountId, message);
+              }
             };
 
             const alertLog = async (event: string, title: string, bodyText: string) => {
               const { notifyUser } = await import("@/lib/notifications.server");
               await notifyUser(supabase, userId, event as "success" | "failure" | "account", title, bodyText)
                 .catch(() => undefined);
+            };
+
+            // De-duplicate owner alerts per run: only first ban / peer_flood per account fires.
+            const ownerAlerted = new Set<string>();
+            const maybeOwnerAlertFromError = async (accountId: string | null, message: string) => {
+              try {
+                const isBan = /USER_BANNED_IN_CHANNEL|CHAT_WRITE_FORBIDDEN|USER_DEACTIVATED|USER_BANNED|AUTH_KEY_UNREGISTERED|SESSION_REVOKED/i.test(message);
+                const isPeerFlood = /PEER_FLOOD/i.test(message);
+                if (!isBan && !isPeerFlood) return;
+                const key = `${accountId ?? "?"}:${isBan ? "ban" : "pf"}`;
+                if (ownerAlerted.has(key)) return;
+                ownerAlerted.add(key);
+                const { notifyOwner } = await import("@/lib/notifications.server");
+                const shortId = accountId ? accountId.slice(0, 8) : "unknown";
+                await notifyOwner(
+                  supabase,
+                  userId,
+                  isBan ? "ban" : "peer_flood",
+                  isBan ? "Account ban detected" : "Peer flood detected",
+                  `Account ${shortId}: ${message}`,
+                ).catch(() => undefined);
+              } catch {
+                /* swallow — alerts must never break a run */
+              }
             };
 
             let stopRequested = false;
