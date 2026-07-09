@@ -21,10 +21,19 @@ async function resolvePeerFromKey(client: any, Api: any, key: string) {
   const [kind, raw] = key.split(":");
   const { default: bigInt } = await import("big-integer");
   const id = bigInt(raw);
-  if (kind === "u") return await client.getEntity(new Api.PeerUser({ userId: id }));
-  if (kind === "c") return await client.getEntity(new Api.PeerChannel({ channelId: id }));
-  if (kind === "g") return await client.getEntity(new Api.PeerChat({ chatId: id }));
-  throw new Error(`Bad peer key: ${key}`);
+  const peer =
+    kind === "u" ? new Api.PeerUser({ userId: id }) :
+    kind === "c" ? new Api.PeerChannel({ channelId: id }) :
+    kind === "g" ? new Api.PeerChat({ chatId: id }) :
+    null;
+  if (!peer) throw new Error(`Bad peer key: ${key}`);
+  try {
+    return await client.getEntity(peer);
+  } catch {
+    // Prime entity cache (access_hash) then retry.
+    await client.getDialogs({ limit: 200 }).catch(() => {});
+    return await client.getEntity(peer);
+  }
 }
 
 function extractName(entity: any): string {
@@ -191,6 +200,9 @@ export const getHistory = createServerFn({ method: "GET" })
     try {
       const me = await client.getMe();
       const meId = String((me as any).id);
+      // Prime entity cache: GramJS can't resolve raw PeerUser/PeerChannel
+      // without access_hash unless the entity is in the session cache.
+      await client.getDialogs({ limit: 200 }).catch(() => {});
       const peer = await resolvePeerFromKey(client, Api, data.peerKey);
       const messages = await client.getMessages(peer, { limit: data.limit, offsetId: data.offsetId });
       // messages are newest→oldest; reverse for chronological order.
