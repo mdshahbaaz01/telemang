@@ -44,7 +44,7 @@ const broadcastRowSchema = z.object({
   message: z.string().max(4096).default(""),
   targets: z.array(z.string().min(1).max(200)).min(1).max(500),
   attachment: attachmentSchema.optional(),
-  format: z.enum(["plain", "mono", "quote"]).default("plain"),
+  format: z.enum(["plain", "mono", "quote", "html"]).default("plain"),
 }).refine((r) => r.message.length > 0 || !!r.attachment, {
   message: "Row needs a message or an attachment",
 });
@@ -58,7 +58,7 @@ const replyRowSchema = z.object({
   accountId: z.string().uuid(),
   message: z.string().max(4096).default(""),
   attachment: attachmentSchema.optional(),
-  format: z.enum(["plain", "mono", "quote"]).default("plain"),
+  format: z.enum(["plain", "mono", "quote", "html"]).default("plain"),
 }).refine((r) => r.message.length > 0 || !!r.attachment, {
   message: "Row needs a message or an attachment",
 });
@@ -81,7 +81,7 @@ const editSchema = z.object({
   kind: z.literal("edit"),
   source: msgRefSchema,
   message: z.string().min(1).max(4096),
-  format: z.enum(["plain", "mono", "quote"]).default("plain"),
+  format: z.enum(["plain", "mono", "quote", "html"]).default("plain"),
 });
 
 const deleteMessagesSchema = z.object({
@@ -119,7 +119,7 @@ function htmlEscape(input: string) {
   return input.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 }
 
-function formatMessage(message: string, format?: "plain" | "mono" | "quote" | "quote") {
+function formatMessage(message: string, format?: "plain" | "mono" | "quote" | "html" | "quote") {
   if (format === "mono") {
     return { message: `<code>${htmlEscape(message)}</code>`, parseMode: "html" as const };
   }
@@ -577,7 +577,7 @@ export const Route = createFileRoute("/api/public/actions-stream")({
                     await client.editMessage(sourcePeer, {
                       message: src.msgId,
                       text: formatMessage(op.message, op.format).message,
-                      parseMode: op.format === "mono" || op.format === "quote" ? "html" : undefined,
+                      parseMode: op.format && op.format !== "plain" ? "html" : undefined,
                     });
                     ok++;
                     const m = `Edited ${src.chat}/${src.msgId}`;
@@ -611,7 +611,7 @@ export const Route = createFileRoute("/api/public/actions-stream")({
               return { ok, fail };
             };
 
-            const runBroadcastRowsForAccount = async (accountId: string, rows: Array<{ accountId: string; message: string; targets: string[]; attachment?: { path: string; filename: string; mimeType?: string; isVoice?: boolean }; format?: "plain" | "mono" | "quote" }>) => {
+            const runBroadcastRowsForAccount = async (accountId: string, rows: Array<{ accountId: string; message: string; targets: string[]; attachment?: { path: string; filename: string; mimeType?: string; isVoice?: boolean }; format?: "plain" | "mono" | "quote" | "html" }>) => {
               send("log", { accountId, level: "info", message: "Connecting…" });
               let client;
               try {
@@ -649,7 +649,7 @@ export const Route = createFileRoute("/api/public/actions-stream")({
                         await client.sendFile(dest, {
                           file: buildCustomFile(attData),
                           caption: formatted.message || undefined,
-                          parseMode: row.format === "mono" || row.format === "quote" ? "html" : undefined,
+                          parseMode: row.format && row.format !== "plain" ? "html" : undefined,
                           voiceNote: !!row.attachment?.isVoice,
                         });
                       } else {
@@ -684,7 +684,7 @@ export const Route = createFileRoute("/api/public/actions-stream")({
             };
 
             const runReplyRow = async (
-              row: { accountId: string; message: string; attachment?: { path: string; filename: string; mimeType?: string; isVoice?: boolean }; format?: "plain" | "mono" | "quote" },
+              row: { accountId: string; message: string; attachment?: { path: string; filename: string; mimeType?: string; isVoice?: boolean }; format?: "plain" | "mono" | "quote" | "html" },
               src: { chat: string; msgId: number },
               viaDiscussion: boolean,
             ) => {
@@ -740,7 +740,7 @@ export const Route = createFileRoute("/api/public/actions-stream")({
                   await client.sendFile(replyPeer, {
                     file: buildCustomFile(att),
                     caption: formatted.message || undefined,
-                    parseMode: row.format === "mono" || row.format === "quote" ? "html" : undefined,
+                    parseMode: row.format && row.format !== "plain" ? "html" : undefined,
                     voiceNote: !!row.attachment?.isVoice,
                     replyTo: replyToId,
                     ...(topMsgId ? { topMsgId } : {}),
