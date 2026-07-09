@@ -149,6 +149,8 @@ export type Database = {
         Row: {
           error: string | null
           id: string
+          leave_after: string | null
+          left_at: string | null
           position: number
           processed_at: string | null
           status: string
@@ -159,6 +161,8 @@ export type Database = {
         Insert: {
           error?: string | null
           id?: string
+          leave_after?: string | null
+          left_at?: string | null
           position?: number
           processed_at?: string | null
           status?: string
@@ -169,6 +173,8 @@ export type Database = {
         Update: {
           error?: string | null
           id?: string
+          leave_after?: string | null
+          left_at?: string | null
           position?: number
           processed_at?: string | null
           status?: string
@@ -312,8 +318,13 @@ export type Database = {
         Row: {
           alert_account: boolean
           alert_failure: boolean
+          alert_on_ban: boolean
+          alert_on_job_failure: boolean
+          alert_on_peer_flood: boolean
           alert_success: boolean
           created_at: string
+          daily_summary_ist_time: string | null
+          daily_summary_last_sent_date: string | null
           email_enabled: boolean
           email_to: string | null
           telegram_chat: string | null
@@ -324,8 +335,13 @@ export type Database = {
         Insert: {
           alert_account?: boolean
           alert_failure?: boolean
+          alert_on_ban?: boolean
+          alert_on_job_failure?: boolean
+          alert_on_peer_flood?: boolean
           alert_success?: boolean
           created_at?: string
+          daily_summary_ist_time?: string | null
+          daily_summary_last_sent_date?: string | null
           email_enabled?: boolean
           email_to?: string | null
           telegram_chat?: string | null
@@ -336,8 +352,13 @@ export type Database = {
         Update: {
           alert_account?: boolean
           alert_failure?: boolean
+          alert_on_ban?: boolean
+          alert_on_job_failure?: boolean
+          alert_on_peer_flood?: boolean
           alert_success?: boolean
           created_at?: string
+          daily_summary_ist_time?: string | null
+          daily_summary_last_sent_date?: string | null
           email_enabled?: boolean
           email_to?: string | null
           telegram_chat?: string | null
