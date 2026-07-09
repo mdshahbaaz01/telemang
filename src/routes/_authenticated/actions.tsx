@@ -1342,6 +1342,11 @@ function ActionsPageInner() {
                         }
                         placeholder="Text to send…"
                       />
+                      <MessagePreview
+                        message={row.message}
+                        format={textFormat}
+                        fileName={row.file?.name ?? null}
+                      />
                     </div>
                     <div>
                       <Label>Targets (users, groups, channels — one per line)</Label>
