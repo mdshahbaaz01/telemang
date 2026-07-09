@@ -9,6 +9,8 @@ import {
   BellRing,
   Plus,
   MousePointerClick,
+  UserCog,
+  Sparkles,
 } from "lucide-react";
 import {
   Sidebar,
@@ -50,6 +52,8 @@ const items: Item[] = [
   { title: "Bot Flow", to: "/bot-flow", icon: Bot },
   { title: "Alerts", to: "/alerts", icon: BellRing },
   { title: "Buttons", to: "/buttons", icon: MousePointerClick },
+  { title: "Bulk Mix", to: "/bulk-mix", icon: Sparkles },
+  { title: "Profile Updater", to: "/profile-updater", icon: UserCog },
 ];
 
 export function AppSidebar() {
