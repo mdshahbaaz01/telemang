@@ -15,9 +15,15 @@ function htmlEscape(input: string) {
   return input.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 }
 
-function formatMessage(message: string, format?: "plain" | "mono") {
-  if (format !== "mono") return { text: message, parseMode: undefined as undefined | "html" };
-  return { text: `<code>${htmlEscape(message)}</code>`, parseMode: "html" as const };
+function hasTelegramHtmlTags(message: string) {
+  return /<\/?(?:b|strong|i|em|u|ins|s|strike|del|code|pre|blockquote|a)(?:\s+[^>]*)?>/i.test(message);
+}
+
+function formatMessage(message: string, format?: "plain" | "mono" | "quote" | "html") {
+  if (format === "mono") return { text: `<code>${htmlEscape(message)}</code>`, parseMode: "html" as const };
+  if (format === "quote") return { text: `<blockquote>${htmlEscape(message)}</blockquote>`, parseMode: "html" as const };
+  if (format === "html" || hasTelegramHtmlTags(message)) return { text: message, parseMode: "html" as const };
+  return { text: message, parseMode: undefined as undefined | "html" };
 }
 
 async function resolveScheduledPeer(client: any, Api: any, chat: string, msgId = 1) {
