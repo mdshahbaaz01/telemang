@@ -11,19 +11,10 @@ type ScheduleRow = {
 };
 type QueueItem = Database["public"]["Tables"]["scheduled_broadcast_items"]["Row"];
 
-function htmlEscape(input: string) {
-  return input.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
-}
-
-function hasTelegramHtmlTags(message: string) {
-  return /<\/?(?:b|strong|i|em|u|ins|s|strike|del|code|pre|blockquote|a)(?:\s+[^>]*)?>/i.test(message);
-}
-
+import { formatMessage as formatMessageBase } from "@/lib/message-format";
 function formatMessage(message: string, format?: "plain" | "mono" | "quote" | "html") {
-  if (format === "mono") return { text: `<code>${htmlEscape(message)}</code>`, parseMode: "html" as const };
-  if (format === "quote") return { text: `<blockquote>${htmlEscape(message)}</blockquote>`, parseMode: "html" as const };
-  if (format === "html" || hasTelegramHtmlTags(message)) return { text: message, parseMode: "html" as const };
-  return { text: message, parseMode: undefined as undefined | "html" };
+  const r = formatMessageBase(message, format);
+  return { text: r.message, parseMode: r.parseMode };
 }
 
 async function resolveScheduledPeer(client: any, Api: any, chat: string, msgId = 1) {
