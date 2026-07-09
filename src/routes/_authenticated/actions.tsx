@@ -146,10 +146,8 @@ function MultiAttachmentField({
 }) {
   const inputRef = useRef<HTMLInputElement | null>(null);
   const [dragOver, setDragOver] = useState(false);
-  const [previews, setPreviews] = useState<Array<{ url?: string; kind: "image" | "video" | "audio" | "other" }>>([]);
-  useMemo(() => {
-    // Build ephemeral object URLs for preview thumbnails
-    const items = files.map((f) => {
+  const previews = useMemo(() => {
+    return files.map((f) => {
       const kind: "image" | "video" | "audio" | "other" = f.type.startsWith("image/")
         ? "image"
         : f.type.startsWith("video/")
@@ -160,12 +158,12 @@ function MultiAttachmentField({
       const url = kind === "image" || kind === "video" ? URL.createObjectURL(f) : undefined;
       return { url, kind };
     });
-    setPreviews((prev) => {
-      for (const p of prev) if (p.url) URL.revokeObjectURL(p.url);
-      return items;
-    });
-    return items;
   }, [files]);
+  useEffect(() => {
+    return () => {
+      for (const p of previews) if (p.url) URL.revokeObjectURL(p.url);
+    };
+  }, [previews]);
   const addFiles = (list: FileList | null) => {
     if (!list || !list.length) return;
     const next = [...files];
