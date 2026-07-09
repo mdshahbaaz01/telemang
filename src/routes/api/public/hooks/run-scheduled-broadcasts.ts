@@ -245,7 +245,10 @@ async function executeQueueItem(admin: AdminClient, item: QueueItem) {
 export const Route = createFileRoute("/api/public/hooks/run-scheduled-broadcasts")({
   server: {
     handlers: {
-      POST: async () => {
+      POST: async ({ request }) => {
+        const { verifyHookAuth } = await import("@/lib/hook-auth.server");
+        const denied = verifyHookAuth(request);
+        if (denied) return denied;
         const SUPABASE_URL = process.env.SUPABASE_URL!;
         const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY!;
         const admin = createClient<Database>(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, {

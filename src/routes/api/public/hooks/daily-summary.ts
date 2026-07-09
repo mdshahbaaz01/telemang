@@ -22,8 +22,9 @@ export const Route = createFileRoute("/api/public/hooks/daily-summary")({
   server: {
     handlers: {
       POST: async ({ request }) => {
-        const key = request.headers.get("apikey") ?? request.headers.get("authorization")?.replace("Bearer ", "");
-        if (!key) return new Response("Missing key", { status: 401 });
+        const { verifyHookAuth } = await import("@/lib/hook-auth.server");
+        const denied = verifyHookAuth(request);
+        if (denied) return denied;
         const supabase = createClient(
           process.env.SUPABASE_URL!,
           process.env.SUPABASE_SERVICE_ROLE_KEY!,
