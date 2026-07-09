@@ -44,7 +44,7 @@ const broadcastRowSchema = z.object({
   message: z.string().max(4096).default(""),
   targets: z.array(z.string().min(1).max(200)).min(1).max(500),
   attachment: attachmentSchema.optional(),
-  format: z.enum(["plain", "mono"]).default("plain"),
+  format: z.enum(["plain", "mono", "quote"]).default("plain"),
 }).refine((r) => r.message.length > 0 || !!r.attachment, {
   message: "Row needs a message or an attachment",
 });
@@ -58,7 +58,7 @@ const replyRowSchema = z.object({
   accountId: z.string().uuid(),
   message: z.string().max(4096).default(""),
   attachment: attachmentSchema.optional(),
-  format: z.enum(["plain", "mono"]).default("plain"),
+  format: z.enum(["plain", "mono", "quote"]).default("plain"),
 }).refine((r) => r.message.length > 0 || !!r.attachment, {
   message: "Row needs a message or an attachment",
 });
@@ -81,7 +81,7 @@ const editSchema = z.object({
   kind: z.literal("edit"),
   source: msgRefSchema,
   message: z.string().min(1).max(4096),
-  format: z.enum(["plain", "mono"]).default("plain"),
+  format: z.enum(["plain", "mono", "quote"]).default("plain"),
 });
 
 const deleteMessagesSchema = z.object({
