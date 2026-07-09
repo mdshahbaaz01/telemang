@@ -544,23 +544,27 @@ function ActionsPageInner() {
     const src = parseMessageLink(source);
     if (!src) return toast.error("Enter a valid message link");
     if (allAccountIds.length === 0) return toast.error("No accounts available");
-    let cleaned: { accountId: string; message: string; attachment?: { path: string; filename: string; mimeType?: string; isVoice?: boolean }; format?: TextFormat }[] = [];
+    let cleaned: { accountId: string; message: string; attachments?: { path: string; filename: string; mimeType?: string; isVoice?: boolean }[]; format?: TextFormat }[] = [];
     try {
       if (replyMode === "per-account") {
-        const rows = replyRows.filter((r) => (r.accountId ?? "") && (r.message.trim() || r.file));
+        const rows = replyRows.filter((r) => (r.accountId ?? "") && (r.message.trim() || (r.files?.length ?? 0) > 0));
         if (!rows.length) return toast.error("Pick an account and add message or file for each row");
         cleaned = await Promise.all(rows.map(async (r) => ({
           accountId: r.accountId!,
           message: r.message.trim(),
-          attachment: r.file ? await uploadAttachment(r.file, voiceMode) : undefined,
+          attachments: r.files?.length
+            ? await Promise.all(r.files.map((f) => uploadAttachment(f, voiceMode && r.files!.length === 1)))
+            : undefined,
           format: textFormat,
         })));
       } else {
-        const rows = replyRows.filter((r) => r.message.trim() || r.file);
+        const rows = replyRows.filter((r) => r.message.trim() || (r.files?.length ?? 0) > 0);
         if (!rows.length) return toast.error("Add at least one message or file");
         const uploads = await Promise.all(rows.map(async (r) => ({
           message: r.message.trim(),
-          attachment: r.file ? await uploadAttachment(r.file, voiceMode) : undefined,
+          attachments: r.files?.length
+            ? await Promise.all(r.files.map((f) => uploadAttachment(f, voiceMode && r.files!.length === 1)))
+            : undefined,
           format: textFormat,
         })));
         const targetIds = replySelectedIds.length ? replySelectedIds : allAccountIds;
@@ -739,23 +743,27 @@ function ActionsPageInner() {
     const src = parseMessageLink(source);
     if (!src) return toast.error("Enter a valid message link");
     if (allAccountIds.length === 0) return toast.error("No accounts available");
-    let cleaned: { accountId: string; message: string; attachment?: { path: string; filename: string; mimeType?: string; isVoice?: boolean }; format?: TextFormat }[] = [];
+    let cleaned: { accountId: string; message: string; attachments?: { path: string; filename: string; mimeType?: string; isVoice?: boolean }[]; format?: TextFormat }[] = [];
     try {
       if (replyMode === "per-account") {
-        const rs = replyRows.filter((r) => (r.accountId ?? "") && (r.message.trim() || r.file));
+        const rs = replyRows.filter((r) => (r.accountId ?? "") && (r.message.trim() || (r.files?.length ?? 0) > 0));
         if (!rs.length) return toast.error("Pick an account and add message or file for each row");
         cleaned = await Promise.all(rs.map(async (r) => ({
           accountId: r.accountId!,
           message: r.message.trim(),
-          attachment: r.file ? await uploadAttachment(r.file, voiceMode) : undefined,
+          attachments: r.files?.length
+            ? await Promise.all(r.files.map((f) => uploadAttachment(f, voiceMode && r.files!.length === 1)))
+            : undefined,
           format: textFormat,
         })));
       } else {
-        const rs = replyRows.filter((r) => r.message.trim() || r.file);
+        const rs = replyRows.filter((r) => r.message.trim() || (r.files?.length ?? 0) > 0);
         if (!rs.length) return toast.error("Add at least one message or file");
         const uploads = await Promise.all(rs.map(async (r) => ({
           message: r.message.trim(),
-          attachment: r.file ? await uploadAttachment(r.file, voiceMode) : undefined,
+          attachments: r.files?.length
+            ? await Promise.all(r.files.map((f) => uploadAttachment(f, voiceMode && r.files!.length === 1)))
+            : undefined,
           format: textFormat,
         })));
         const targetIds = replySelectedIds.length ? replySelectedIds : allAccountIds;
@@ -1587,13 +1595,14 @@ function ActionsPageInner() {
                       <MessagePreview
                         message={row.message}
                         format={textFormat}
-                        fileName={row.file?.name ?? null}
+                        fileName={row.files?.length ? row.files.map((f) => f.name).join(", ") : null}
+                        files={row.files ?? []}
                       />
                     </div>
-                    <AttachmentField
-                      file={row.file ?? null}
-                      onChange={(f) =>
-                        setReplyRows((rs) => rs.map((r) => (r.id === row.id ? { ...r, file: f } : r)))
+                    <MultiAttachmentField
+                      files={row.files ?? []}
+                      onChange={(fs) =>
+                        setReplyRows((rs) => rs.map((r) => (r.id === row.id ? { ...r, files: fs } : r)))
                       }
                     />
                   </div>
