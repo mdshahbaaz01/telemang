@@ -144,7 +144,8 @@ export const listAccounts = createServerFn({ method: "GET" })
       .from("telegram_accounts")
       .update({ paused_until: null, last_error: null })
       .lt("paused_until", nowIso)
-      .not("paused_until", "is", null);
+      .not("paused_until", "is", null)
+      .ilike("last_error", "%flood%");
     const { data, error } = await context.supabase
       .from("telegram_accounts")
       .select(
