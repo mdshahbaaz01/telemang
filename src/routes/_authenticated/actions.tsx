@@ -1025,6 +1025,7 @@ function ActionsPageInner() {
                     onChange={(e) => setEditText(e.target.value)}
                     placeholder="New text for the selected message…"
                   />
+                  <MessagePreview message={editText} format={textFormat} />
                 </div>
                 <DelayFields minDelay={minDelay} maxDelay={maxDelay} setMin={setMinDelay} setMax={setMaxDelay} />
                 <AccountMultiPicker
