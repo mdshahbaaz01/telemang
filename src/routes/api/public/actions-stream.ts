@@ -343,7 +343,6 @@ export const Route = createFileRoute("/api/public/actions-stream")({
             };
 
             const pauseAccountOnFlood = async (accountId: string, message: string) => {
-              const err = arguments as any;
               const match = message.match(/FLOOD_WAIT_?(\d+)/i);
               const secs = match ? Number(match[1]) : null;
               if (!secs) return false;
