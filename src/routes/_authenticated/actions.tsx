@@ -239,6 +239,7 @@ function ActionsPageInner() {
   const listSchedFn = useServerFn(listScheduledBroadcasts);
   const createSchedFn = useServerFn(createScheduledBroadcast);
   const cancelSchedFn = useServerFn(cancelScheduledBroadcast);
+  const clearSchedHistoryFn = useServerFn(clearScheduledHistory);
   const reportSchedFn = useServerFn(getScheduleReport);
   const [reportOpen, setReportOpen] = useState(false);
   const [reportId, setReportId] = useState<string | null>(null);
