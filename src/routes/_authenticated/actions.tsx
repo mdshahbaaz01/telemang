@@ -45,7 +45,7 @@ type Tab = "react" | "forward" | "vote" | "broadcast" | "comment" | "reply" | "e
 type BroadcastRow = { id: string; message: string; targets: string; accountId?: string; file?: File | null };
 type ReplyRow = { id: string; message: string; accountId?: string; file?: File | null };
 type SendMode = "per-account" | "all-ids";
-type TextFormat = "plain" | "mono" | "quote";
+type TextFormat = "plain" | "mono" | "quote" | "html";
 
 type LogEntry = {
   accountId?: string;
@@ -873,6 +873,19 @@ function ActionsPageInner() {
                 >
                   Quote
                 </button>
+                <button
+                  type="button"
+                  className={`rounded border px-2 py-1 font-mono text-xs ${textFormat === "html" ? "border-primary bg-primary/10" : "border-border text-muted-foreground"}`}
+                  onClick={() => setTextFormat("html")}
+                  title="Use raw HTML tags in your message: <b>bold</b>, <i>italic</i>, <u>underline</u>, <s>strike</s>, <code>mono</code>, <pre>block</pre>, <blockquote>quote</blockquote>, <a href='url'>link</a>"
+                >
+                  HTML
+                </button>
+                {textFormat === "html" && (
+                  <span className="basis-full text-xs text-muted-foreground">
+                    Mix tags in one message: <code>&lt;b&gt;bold&lt;/b&gt;</code>, <code>&lt;code&gt;mono&lt;/code&gt;</code>, <code>&lt;pre&gt;block&lt;/pre&gt;</code>, <code>&lt;blockquote&gt;quote&lt;/blockquote&gt;</code>, <code>&lt;i&gt;</code>, <code>&lt;u&gt;</code>, <code>&lt;s&gt;</code>, <code>&lt;a href="…"&gt;</code>.
+                  </span>
+                )}
                 {(tab === "broadcast" || tab === "reply" || tab === "comment") && (
                   <label className="ml-auto flex items-center gap-2 text-xs text-muted-foreground">
                     <input type="checkbox" checked={voiceMode} onChange={(e) => setVoiceMode(e.target.checked)} />
