@@ -1508,6 +1508,11 @@ function ActionsPageInner() {
                         }
                         placeholder="Reply text…"
                       />
+                      <MessagePreview
+                        message={row.message}
+                        format={textFormat}
+                        fileName={row.file?.name ?? null}
+                      />
                     </div>
                     <AttachmentField
                       file={row.file ?? null}
