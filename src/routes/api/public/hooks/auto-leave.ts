@@ -16,7 +16,7 @@ export const Route = createFileRoute("/api/public/hooks/auto-leave")({
         const nowIso = new Date().toISOString();
         const { data: items, error } = await (supabase as any)
           .from("join_task_items")
-          .select("id, account_id, target, task_id")
+          .select("id, target, task_id, join_tasks(account_id)")
           .lt("leave_after", nowIso)
           .is("left_at", null)
           .eq("status", "joined")
@@ -30,9 +30,11 @@ export const Route = createFileRoute("/api/public/hooks/auto-leave")({
         let fail = 0;
 
         for (const item of items) {
+          const accountId = (item as any).join_tasks?.account_id as string | undefined;
+          if (!accountId) { fail++; continue; }
           let client;
           try {
-            client = await openClientForAccount(supabase as any, item.account_id as string);
+            client = await openClientForAccount(supabase as any, accountId);
           } catch {
             fail++;
             continue;
