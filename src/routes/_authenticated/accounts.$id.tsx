@@ -109,7 +109,7 @@ function AccountViewerPage() {
     staleTime: 2_000,
   });
 
-  const dialogs: Dialog[] = dialogsQ.data?.dialogs ?? [];
+  const dialogs: Dialog[] = (dialogsQ.data?.dialogs ?? []) as Dialog[];
   const meId: string | undefined = dialogsQ.data?.me?.id;
   const activeDialog = dialogs.find((d) => d.peerKey === activePeer);
   const messages: Message[] = historyQ.data?.messages ?? [];

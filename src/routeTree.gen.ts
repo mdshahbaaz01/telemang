@@ -26,6 +26,7 @@ import { Route as ApiPublicActionsStreamRouteImport } from './routes/api/public/
 import { Route as AuthenticatedTasksNewRouteImport } from './routes/_authenticated/tasks.new'
 import { Route as AuthenticatedTasksIdRouteImport } from './routes/_authenticated/tasks.$id'
 import { Route as AuthenticatedGroupsIdRouteImport } from './routes/_authenticated/groups.$id'
+import { Route as AuthenticatedAccountsIdRouteImport } from './routes/_authenticated/accounts.$id'
 import { Route as ApiPublicHooksRunScheduledBroadcastsRouteImport } from './routes/api/public/hooks/run-scheduled-broadcasts'
 import { Route as ApiPublicHooksDailySummaryRouteImport } from './routes/api/public/hooks/daily-summary'
 import { Route as ApiPublicHooksAutoLeaveRouteImport } from './routes/api/public/hooks/auto-leave'
@@ -115,6 +116,11 @@ const AuthenticatedGroupsIdRoute = AuthenticatedGroupsIdRouteImport.update({
   path: '/groups/$id',
   getParentRoute: () => AuthenticatedRouteRoute,
 } as any)
+const AuthenticatedAccountsIdRoute = AuthenticatedAccountsIdRouteImport.update({
+  id: '/accounts/$id',
+  path: '/accounts/$id',
+  getParentRoute: () => AuthenticatedRouteRoute,
+} as any)
 const ApiPublicHooksRunScheduledBroadcastsRoute =
   ApiPublicHooksRunScheduledBroadcastsRouteImport.update({
     id: '/api/public/hooks/run-scheduled-broadcasts',
@@ -145,6 +151,7 @@ export interface FileRoutesByFullPath {
   '/dashboard': typeof AuthenticatedDashboardRoute
   '/owner': typeof AuthenticatedOwnerRoute
   '/profile-updater': typeof AuthenticatedProfileUpdaterRoute
+  '/accounts/$id': typeof AuthenticatedAccountsIdRoute
   '/groups/$id': typeof AuthenticatedGroupsIdRoute
   '/tasks/$id': typeof AuthenticatedTasksIdRoute
   '/tasks/new': typeof AuthenticatedTasksNewRoute
@@ -166,6 +173,7 @@ export interface FileRoutesByTo {
   '/dashboard': typeof AuthenticatedDashboardRoute
   '/owner': typeof AuthenticatedOwnerRoute
   '/profile-updater': typeof AuthenticatedProfileUpdaterRoute
+  '/accounts/$id': typeof AuthenticatedAccountsIdRoute
   '/groups/$id': typeof AuthenticatedGroupsIdRoute
   '/tasks/$id': typeof AuthenticatedTasksIdRoute
   '/tasks/new': typeof AuthenticatedTasksNewRoute
@@ -189,6 +197,7 @@ export interface FileRoutesById {
   '/_authenticated/dashboard': typeof AuthenticatedDashboardRoute
   '/_authenticated/owner': typeof AuthenticatedOwnerRoute
   '/_authenticated/profile-updater': typeof AuthenticatedProfileUpdaterRoute
+  '/_authenticated/accounts/$id': typeof AuthenticatedAccountsIdRoute
   '/_authenticated/groups/$id': typeof AuthenticatedGroupsIdRoute
   '/_authenticated/tasks/$id': typeof AuthenticatedTasksIdRoute
   '/_authenticated/tasks/new': typeof AuthenticatedTasksNewRoute
@@ -212,6 +221,7 @@ export interface FileRouteTypes {
     | '/dashboard'
     | '/owner'
     | '/profile-updater'
+    | '/accounts/$id'
     | '/groups/$id'
     | '/tasks/$id'
     | '/tasks/new'
@@ -233,6 +243,7 @@ export interface FileRouteTypes {
     | '/dashboard'
     | '/owner'
     | '/profile-updater'
+    | '/accounts/$id'
     | '/groups/$id'
     | '/tasks/$id'
     | '/tasks/new'
@@ -255,6 +266,7 @@ export interface FileRouteTypes {
     | '/_authenticated/dashboard'
     | '/_authenticated/owner'
     | '/_authenticated/profile-updater'
+    | '/_authenticated/accounts/$id'
     | '/_authenticated/groups/$id'
     | '/_authenticated/tasks/$id'
     | '/_authenticated/tasks/new'
@@ -397,6 +409,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedGroupsIdRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
+    '/_authenticated/accounts/$id': {
+      id: '/_authenticated/accounts/$id'
+      path: '/accounts/$id'
+      fullPath: '/accounts/$id'
+      preLoaderRoute: typeof AuthenticatedAccountsIdRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
     '/api/public/hooks/run-scheduled-broadcasts': {
       id: '/api/public/hooks/run-scheduled-broadcasts'
       path: '/api/public/hooks/run-scheduled-broadcasts'
@@ -431,6 +450,7 @@ interface AuthenticatedRouteRouteChildren {
   AuthenticatedDashboardRoute: typeof AuthenticatedDashboardRoute
   AuthenticatedOwnerRoute: typeof AuthenticatedOwnerRoute
   AuthenticatedProfileUpdaterRoute: typeof AuthenticatedProfileUpdaterRoute
+  AuthenticatedAccountsIdRoute: typeof AuthenticatedAccountsIdRoute
   AuthenticatedGroupsIdRoute: typeof AuthenticatedGroupsIdRoute
   AuthenticatedTasksIdRoute: typeof AuthenticatedTasksIdRoute
   AuthenticatedTasksNewRoute: typeof AuthenticatedTasksNewRoute
@@ -446,6 +466,7 @@ const AuthenticatedRouteRouteChildren: AuthenticatedRouteRouteChildren = {
   AuthenticatedDashboardRoute: AuthenticatedDashboardRoute,
   AuthenticatedOwnerRoute: AuthenticatedOwnerRoute,
   AuthenticatedProfileUpdaterRoute: AuthenticatedProfileUpdaterRoute,
+  AuthenticatedAccountsIdRoute: AuthenticatedAccountsIdRoute,
   AuthenticatedGroupsIdRoute: AuthenticatedGroupsIdRoute,
   AuthenticatedTasksIdRoute: AuthenticatedTasksIdRoute,
   AuthenticatedTasksNewRoute: AuthenticatedTasksNewRoute,
