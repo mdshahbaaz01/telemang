@@ -653,7 +653,7 @@ export const Route = createFileRoute("/api/public/actions-stream")({
                           file: buildCustomFile(attData),
                           caption: formatted.message || undefined,
                           parseMode: formatted.parseMode,
-                          voiceNote: !!attData.isVoice,
+                          voiceNote: !!rowAtts[0]?.isVoice,
                         });
                       } else {
                         await client.sendMessage(dest, formatMessage(row.message, row.format));
