@@ -235,6 +235,10 @@ const notificationSettingsSchema = z.object({
   alertSuccess: z.boolean(),
   alertFailure: z.boolean(),
   alertAccount: z.boolean(),
+  alertOnBan: z.boolean().default(true),
+  alertOnPeerFlood: z.boolean().default(true),
+  alertOnJobFailure: z.boolean().default(true),
+  dailySummaryIstTime: z.string().regex(/^\d{2}:\d{2}$/).or(z.literal("")).optional(),
 });
 
 export const getNotificationSettings = createServerFn({ method: "GET" })
@@ -243,18 +247,23 @@ export const getNotificationSettings = createServerFn({ method: "GET" })
     await assertAdmin(context.supabase, context.userId);
     const { data, error } = await context.supabase
       .from("notification_settings")
-      .select("email_enabled, telegram_enabled, email_to, telegram_chat, alert_success, alert_failure, alert_account")
+      .select("*")
       .eq("user_id", context.userId)
       .maybeSingle();
     if (error) throw new Error(error.message);
+    const d = data as any;
     return {
-      emailEnabled: !!data?.email_enabled,
-      telegramEnabled: !!data?.telegram_enabled,
-      emailTo: data?.email_to ?? "",
-      telegramChat: data?.telegram_chat ?? "",
-      alertSuccess: data?.alert_success ?? true,
-      alertFailure: data?.alert_failure ?? true,
-      alertAccount: data?.alert_account ?? true,
+      emailEnabled: !!d?.email_enabled,
+      telegramEnabled: !!d?.telegram_enabled,
+      emailTo: d?.email_to ?? "",
+      telegramChat: d?.telegram_chat ?? "",
+      alertSuccess: d?.alert_success ?? true,
+      alertFailure: d?.alert_failure ?? true,
+      alertAccount: d?.alert_account ?? true,
+      alertOnBan: d?.alert_on_ban ?? true,
+      alertOnPeerFlood: d?.alert_on_peer_flood ?? true,
+      alertOnJobFailure: d?.alert_on_job_failure ?? true,
+      dailySummaryIstTime: d?.daily_summary_ist_time ?? "",
     };
   });
 
@@ -263,7 +272,7 @@ export const saveNotificationSettings = createServerFn({ method: "POST" })
   .inputValidator((d: unknown) => notificationSettingsSchema.parse(d))
   .handler(async ({ data, context }) => {
     await assertAdmin(context.supabase, context.userId);
-    const { error } = await context.supabase.from("notification_settings").upsert({
+    const { error } = await (context.supabase as any).from("notification_settings").upsert({
       user_id: context.userId,
       email_enabled: data.emailEnabled,
       telegram_enabled: data.telegramEnabled,
@@ -272,6 +281,10 @@ export const saveNotificationSettings = createServerFn({ method: "POST" })
       alert_success: data.alertSuccess,
       alert_failure: data.alertFailure,
       alert_account: data.alertAccount,
+      alert_on_ban: data.alertOnBan,
+      alert_on_peer_flood: data.alertOnPeerFlood,
+      alert_on_job_failure: data.alertOnJobFailure,
+      daily_summary_ist_time: data.dailySummaryIstTime || null,
     });
     if (error) throw new Error(error.message);
     return { ok: true };
