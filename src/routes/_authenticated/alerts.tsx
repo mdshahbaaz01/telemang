@@ -43,6 +43,10 @@ function AlertsPage() {
     alertSuccess: true,
     alertFailure: true,
     alertAccount: true,
+    alertOnBan: true,
+    alertOnPeerFlood: true,
+    alertOnJobFailure: true,
+    dailySummaryIstTime: "",
   });
   const [saving, setSaving] = useState(false);
 
@@ -103,6 +107,15 @@ function AlertsPage() {
                 <label className="flex items-center gap-2"><Checkbox checked={form.alertSuccess} onCheckedChange={(v) => setForm((f) => ({ ...f, alertSuccess: !!v }))} />Success</label>
                 <label className="flex items-center gap-2"><Checkbox checked={form.alertFailure} onCheckedChange={(v) => setForm((f) => ({ ...f, alertFailure: !!v }))} />Failure</label>
                 <label className="flex items-center gap-2"><Checkbox checked={form.alertAccount} onCheckedChange={(v) => setForm((f) => ({ ...f, alertAccount: !!v }))} />FloodWait</label>
+              </div>
+              <div className="grid gap-2 text-sm sm:grid-cols-3 border-t border-border pt-3">
+                <label className="flex items-center gap-2"><Checkbox checked={form.alertOnBan} onCheckedChange={(v) => setForm((f) => ({ ...f, alertOnBan: !!v }))} />Account banned</label>
+                <label className="flex items-center gap-2"><Checkbox checked={form.alertOnPeerFlood} onCheckedChange={(v) => setForm((f) => ({ ...f, alertOnPeerFlood: !!v }))} />Peer flood</label>
+                <label className="flex items-center gap-2"><Checkbox checked={form.alertOnJobFailure} onCheckedChange={(v) => setForm((f) => ({ ...f, alertOnJobFailure: !!v }))} />Job failure</label>
+              </div>
+              <div>
+                <Label>Daily summary time (IST, HH:MM)</Label>
+                <Input value={form.dailySummaryIstTime} onChange={(e) => setForm((f) => ({ ...f, dailySummaryIstTime: e.target.value }))} placeholder="20:00 (blank = off)" />
               </div>
               <Button onClick={save} disabled={saving}>
                 <Save className="mr-1 h-4 w-4" /> {saving ? "Saving…" : "Save settings"}
