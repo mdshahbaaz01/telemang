@@ -25,6 +25,7 @@ import { Square, Play, Paperclip, X, AlertTriangle, Copy, Trash2, RotateCw, Penc
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { useQueryClient } from "@tanstack/react-query";
 import { ChatIdChip } from "@/components/chat/ChatIdChip";
+import { MessagePreview } from "@/components/MessagePreview";
 
 export const Route = createFileRoute("/_authenticated/actions")({
   validateSearch: (s: Record<string, unknown>) =>
