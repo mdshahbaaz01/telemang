@@ -60,6 +60,36 @@ function initials(s: string) {
   return s.split(/\s+/).filter(Boolean).slice(0, 2).map((w) => w[0]?.toUpperCase()).join("") || "?";
 }
 
+function Avatar({
+  photoDataUrl, fallback, kind, size,
+}: {
+  photoDataUrl: string | null;
+  fallback: string;
+  kind: "user" | "channel" | "group";
+  size: number;
+}) {
+  const dim = `${size * 0.25}rem`;
+  const bg = kind === "channel" ? "bg-blue-600" : kind === "group" ? "bg-green-600" : "bg-purple-600";
+  if (photoDataUrl) {
+    return (
+      <img
+        src={photoDataUrl}
+        alt=""
+        className="shrink-0 rounded-full object-cover"
+        style={{ width: dim, height: dim }}
+      />
+    );
+  }
+  return (
+    <div
+      className={cn("flex shrink-0 items-center justify-center rounded-full text-xs font-semibold text-white", bg)}
+      style={{ width: dim, height: dim }}
+    >
+      {fallback}
+    </div>
+  );
+}
+
 function fmtTime(ms: number) {
   const d = new Date(ms);
   return d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
