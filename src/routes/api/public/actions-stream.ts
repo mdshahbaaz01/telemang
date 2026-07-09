@@ -115,26 +115,7 @@ function errorText(error: unknown) {
   return String(error);
 }
 
-function htmlEscape(input: string) {
-  return input.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
-}
-
-function hasTelegramHtmlTags(message: string) {
-  return /<\/?(?:b|strong|i|em|u|ins|s|strike|del|code|pre|blockquote|a)(?:\s+[^>]*)?>/i.test(message);
-}
-
-function formatMessage(message: string, format?: "plain" | "mono" | "quote" | "html") {
-  if (format === "mono") {
-    return { message: `<code>${htmlEscape(message)}</code>`, parseMode: "html" as const };
-  }
-  if (format === "quote") {
-    return { message: `<blockquote>${htmlEscape(message)}</blockquote>`, parseMode: "html" as const };
-  }
-  if (format === "html" || hasTelegramHtmlTags(message)) {
-    return { message, parseMode: "html" as const };
-  }
-  return { message };
-}
+import { formatMessage } from "@/lib/message-format";
 
 function floodWaitSeconds(message: string) {
   const floodMatch = message.match(/FLOOD_WAIT_?(\d+)/i);
