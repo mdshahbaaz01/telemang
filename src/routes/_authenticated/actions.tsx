@@ -2067,6 +2067,7 @@ function ActionsPageInner() {
             onDelete={deleteRun}
             onRefresh={() => qc.invalidateQueries({ queryKey: ["action-runs"] })}
             onClearAll={clearAllRuns}
+            onViewReplies={(runId) => setRepliesRunId(runId)}
           />
         </section>
       </div>
@@ -2080,6 +2081,13 @@ function ActionsPageInner() {
             setEditingRun(null);
             await rerunFromParams(newParams);
           }}
+        />
+      )}
+
+      {repliesRunId && (
+        <BroadcastRepliesDialog
+          runId={repliesRunId}
+          onClose={() => setRepliesRunId(null)}
         />
       )}
     </main>
