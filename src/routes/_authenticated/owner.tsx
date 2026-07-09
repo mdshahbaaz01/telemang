@@ -20,7 +20,7 @@ import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
 import { FloodWaitBadge } from "@/components/FloodWaitBadge";
 import { AdminGate, useMyRole } from "@/components/AdminGate";
-import { ArrowLeft, Plus, Trash2, Users } from "lucide-react";
+import { ArrowLeft, MessageSquare, Plus, Trash2, Users } from "lucide-react";
 import { toast } from "sonner";
 import { useState } from "react";
 
