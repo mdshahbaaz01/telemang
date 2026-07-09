@@ -82,9 +82,10 @@ function ProfileUpdater() {
           },
         },
       });
-      setResults(out as any);
-      const ok = (out as any[]).filter((r) => r.ok).length;
-      toast.success(`Updated ${ok}/${(out as any[]).length} account(s)`);
+      const list = (out as { results: typeof results }).results;
+      setResults(list);
+      const ok = list.filter((r) => r.ok).length;
+      toast.success(`Updated ${ok}/${list.length} account(s)`);
     } catch (e) {
       toast.error((e as Error).message);
     } finally {
