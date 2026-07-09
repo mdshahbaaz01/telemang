@@ -50,7 +50,12 @@ function buildQueueItems(row: ScheduleRow) {
           account_id: r.accountId,
           target,
           scheduled_for: nextTime(r.accountId),
-          payload: { message: r.message ?? "", attachment: r.attachment ?? null, format: r.format ?? "plain" },
+          payload: {
+            message: r.message ?? "",
+            attachment: r.attachment ?? null,
+            attachments: Array.isArray(r.attachments) ? r.attachments : null,
+            format: r.format ?? "plain",
+          },
         });
       }
     }
@@ -214,7 +219,14 @@ async function executeQueueItem(admin: AdminClient, item: QueueItem) {
   return executeBroadcast(admin, {
     minDelay: 0,
     maxDelay: 0,
-    rows: [{ accountId: item.account_id, message: payload.message ?? "", targets: item.target ? [item.target] : [], attachment: payload.attachment ?? undefined, format: payload.format ?? "plain" }],
+    rows: [{
+      accountId: item.account_id,
+      message: payload.message ?? "",
+      targets: item.target ? [item.target] : [],
+      attachment: payload.attachment ?? undefined,
+      attachments: Array.isArray(payload.attachments) && payload.attachments.length ? payload.attachments : undefined,
+      format: payload.format ?? "plain",
+    }],
   });
 }
 
