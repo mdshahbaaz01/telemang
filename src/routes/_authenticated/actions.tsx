@@ -25,6 +25,7 @@ import { Square, Play, Paperclip, X, AlertTriangle, Copy, Trash2, RotateCw, Penc
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { useQueryClient } from "@tanstack/react-query";
 import { ChatIdChip } from "@/components/chat/ChatIdChip";
+import { MessagePreview } from "@/components/MessagePreview";
 
 export const Route = createFileRoute("/_authenticated/actions")({
   validateSearch: (s: Record<string, unknown>) =>
@@ -1024,6 +1025,7 @@ function ActionsPageInner() {
                     onChange={(e) => setEditText(e.target.value)}
                     placeholder="New text for the selected message…"
                   />
+                  <MessagePreview message={editText} format={textFormat} />
                 </div>
                 <DelayFields minDelay={minDelay} maxDelay={maxDelay} setMin={setMinDelay} setMax={setMaxDelay} />
                 <AccountMultiPicker
@@ -1341,6 +1343,11 @@ function ActionsPageInner() {
                         }
                         placeholder="Text to send…"
                       />
+                      <MessagePreview
+                        message={row.message}
+                        format={textFormat}
+                        fileName={row.file?.name ?? null}
+                      />
                     </div>
                     <div>
                       <Label>Targets (users, groups, channels — one per line)</Label>
@@ -1501,6 +1508,11 @@ function ActionsPageInner() {
                           setReplyRows((rs) => rs.map((r) => (r.id === row.id ? { ...r, message: e.target.value } : r)))
                         }
                         placeholder="Reply text…"
+                      />
+                      <MessagePreview
+                        message={row.message}
+                        format={textFormat}
+                        fileName={row.file?.name ?? null}
                       />
                     </div>
                     <AttachmentField
