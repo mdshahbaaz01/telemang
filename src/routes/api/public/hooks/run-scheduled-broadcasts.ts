@@ -156,6 +156,16 @@ async function finalizeSchedule(admin: AdminClient, scheduleId: string) {
       failed.length ? "Scheduled action finished with failures" : "Scheduled action completed",
       `${kind}: ${processed - failed.length} delivered, ${failed.length} failed${errorText ? ` — ${errorText}` : ""}`,
     ).catch(() => undefined);
+    if (failed.length) {
+      const { notifyOwner } = await import("@/lib/notifications.server");
+      await notifyOwner(
+        admin,
+        schedule.user_id,
+        "job_failure",
+        "Scheduled job failed",
+        `${kind}: ${failed.length}/${processed} failed${errorText ? ` — ${errorText}` : ""}`,
+      ).catch(() => undefined);
+    }
   }
 }
 
