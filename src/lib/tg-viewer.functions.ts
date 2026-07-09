@@ -100,6 +100,18 @@ async function downloadSmallPhoto(client: any, msg: any): Promise<string | null>
   }
 }
 
+async function downloadEntityAvatar(client: any, entity: any): Promise<string | null> {
+  try {
+    if (!entity || !entity.photo) return null;
+    const buf = await client.downloadProfilePhoto(entity, { isBig: false });
+    if (!buf || (buf as any).length === 0) return null;
+    const b64 = Buffer.from(buf).toString("base64");
+    return `data:image/jpeg;base64,${b64}`;
+  } catch {
+    return null;
+  }
+}
+
 // ── listDialogs ─────────────────────────────────────────────────────────
 export const listDialogs = createServerFn({ method: "GET" })
   .middleware([requireSupabaseAuth])
@@ -112,7 +124,7 @@ export const listDialogs = createServerFn({ method: "GET" })
       const me = await client.getMe();
       const meId = String((me as any).id);
       const dialogs = await client.getDialogs({ limit: data.limit });
-      const out = dialogs.map((d: any) => {
+      const rawOut = dialogs.map((d: any) => {
         const entity = d.entity ?? {};
         const kind = entity.className?.includes("Channel") ? (entity.broadcast ? "channel" : "group") : entity.className?.includes("Chat") ? "group" : "user";
         const peerKey = normalizePeerKey({
@@ -132,9 +144,30 @@ export const listDialogs = createServerFn({ method: "GET" })
           isSelf: kind === "user" && String(entity.id) === meId,
           verified: !!entity.verified,
           isChannel: kind === "channel",
+          _entity: entity,
         };
       }).filter((x: any) => x.peerKey);
-      return { me: { id: meId, firstName: (me as any).firstName ?? "", username: (me as any).username ?? null }, dialogs: out };
+      const withPhotos = await Promise.all(rawOut.map(async (d: any) => {
+        const photoDataUrl = await downloadEntityAvatar(client, d._entity);
+        const { _entity, ...rest } = d;
+        return { ...rest, photoDataUrl };
+      }));
+      const mePhoto = await downloadEntityAvatar(client, me);
+      const meFirst = (me as any).firstName ?? "";
+      const meLast = (me as any).lastName ?? "";
+      const meName = `${meFirst} ${meLast}`.trim() || (me as any).username || "Me";
+      return {
+        me: {
+          id: meId,
+          firstName: meFirst,
+          lastName: meLast,
+          name: meName,
+          username: (me as any).username ?? null,
+          phone: (me as any).phone ?? null,
+          photoDataUrl: mePhoto,
+        },
+        dialogs: withPhotos,
+      };
     } finally {
       await client.disconnect().catch(() => {});
     }
