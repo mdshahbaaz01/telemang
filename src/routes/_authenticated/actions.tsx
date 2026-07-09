@@ -580,7 +580,7 @@ function ActionsPageInner() {
   };
 
   const buildBroadcastCleaned = async (): Promise<
-    { accountId: string; message: string; targets: string[]; attachment?: { path: string; filename: string; mimeType?: string; isVoice?: boolean }; format?: TextFormat }[] | null
+    { accountId: string; message: string; targets: string[]; attachments?: { path: string; filename: string; mimeType?: string; isVoice?: boolean }[]; format?: TextFormat }[] | null
   > => {
     const baseRows = rows
       .map((r) => ({
@@ -590,22 +590,26 @@ function ActionsPageInner() {
           .split(/\r?\n|,/)
           .map((s) => s.trim())
           .filter(Boolean),
-        file: r.file ?? null,
+        files: r.files ?? [],
       }))
-      .filter((r) => (r.message || r.file) && r.targets.length);
+      .filter((r) => (r.message || r.files.length > 0) && r.targets.length);
     if (!baseRows.length) {
-      toast.error("Add at least one row with message/file and targets");
+      toast.error("Add at least one row with message/files and targets");
       return null;
     }
     try {
       const uploaded = await Promise.all(
-        baseRows.map(async (r) => (r.file ? await uploadAttachment(r.file, voiceMode) : undefined)),
+        baseRows.map(async (r) =>
+          r.files.length
+            ? await Promise.all(r.files.map((f) => uploadAttachment(f, voiceMode && r.files.length === 1)))
+            : undefined,
+        ),
       );
       const withAtt = baseRows.map((r, i) => ({
         accountId: r.accountId,
         message: r.message,
         targets: r.targets,
-        attachment: uploaded[i],
+        attachments: uploaded[i],
         format: textFormat,
       }));
       if (broadcastMode === "per-account") {
@@ -622,7 +626,7 @@ function ActionsPageInner() {
         return null;
       }
       return targetIds.flatMap((accountId) =>
-        withAtt.map((r) => ({ accountId, message: r.message, targets: r.targets, attachment: r.attachment, format: r.format })),
+        withAtt.map((r) => ({ accountId, message: r.message, targets: r.targets, attachments: r.attachments, format: r.format })),
       );
     } catch (e) {
       toast.error((e as Error).message);
