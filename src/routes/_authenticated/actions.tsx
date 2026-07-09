@@ -225,6 +225,7 @@ function ActionsPageInner() {
   const [replySelectedIds, setReplySelectedIds] = useState<string[]>([]);
   const [actionSelectedIds, setActionSelectedIds] = useState<string[]>([]);
   const [textFormat, setTextFormat] = useState<TextFormat>("plain");
+  const [showFormatExamples, setShowFormatExamples] = useState(false);
   const [voiceMode, setVoiceMode] = useState(false);
   const [editText, setEditText] = useState("");
   const [deleteIds, setDeleteIds] = useState("");
