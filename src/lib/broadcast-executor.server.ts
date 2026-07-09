@@ -1,11 +1,14 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Database } from "@/integrations/supabase/types";
 
+export type Attachment = { path: string; filename: string; mimeType?: string; isVoice?: boolean };
+
 export type BroadcastRowInput = {
   accountId: string;
   message: string;
   targets: string[];
-  attachment?: { path: string; filename: string; mimeType?: string; isVoice?: boolean };
+  attachment?: Attachment;
+  attachments?: Attachment[];
   format?: "plain" | "mono" | "quote" | "html";
 };
 
@@ -26,7 +29,8 @@ export type SourceRef = { chat: string; msgId: number };
 export type ReplyRowInput = {
   accountId: string;
   message: string;
-  attachment?: { path: string; filename: string; mimeType?: string; isVoice?: boolean };
+  attachment?: Attachment;
+  attachments?: Attachment[];
   format?: "plain" | "mono" | "quote" | "html";
 };
 
