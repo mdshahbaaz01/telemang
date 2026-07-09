@@ -25,6 +25,7 @@ import { Route as AuthenticatedTasksNewRouteImport } from './routes/_authenticat
 import { Route as AuthenticatedTasksIdRouteImport } from './routes/_authenticated/tasks.$id'
 import { Route as AuthenticatedGroupsIdRouteImport } from './routes/_authenticated/groups.$id'
 import { Route as ApiPublicHooksRunScheduledBroadcastsRouteImport } from './routes/api/public/hooks/run-scheduled-broadcasts'
+import { Route as ApiPublicHooksAutoLeaveRouteImport } from './routes/api/public/hooks/auto-leave'
 
 const AuthRoute = AuthRouteImport.update({
   id: '/auth',
@@ -106,6 +107,11 @@ const ApiPublicHooksRunScheduledBroadcastsRoute =
     path: '/api/public/hooks/run-scheduled-broadcasts',
     getParentRoute: () => rootRouteImport,
   } as any)
+const ApiPublicHooksAutoLeaveRoute = ApiPublicHooksAutoLeaveRouteImport.update({
+  id: '/api/public/hooks/auto-leave',
+  path: '/api/public/hooks/auto-leave',
+  getParentRoute: () => rootRouteImport,
+} as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
@@ -122,6 +128,7 @@ export interface FileRoutesByFullPath {
   '/tasks/new': typeof AuthenticatedTasksNewRoute
   '/api/public/actions-stream': typeof ApiPublicActionsStreamRoute
   '/api/public/cleanup-stream': typeof ApiPublicCleanupStreamRoute
+  '/api/public/hooks/auto-leave': typeof ApiPublicHooksAutoLeaveRoute
   '/api/public/hooks/run-scheduled-broadcasts': typeof ApiPublicHooksRunScheduledBroadcastsRoute
 }
 export interface FileRoutesByTo {
@@ -139,6 +146,7 @@ export interface FileRoutesByTo {
   '/tasks/new': typeof AuthenticatedTasksNewRoute
   '/api/public/actions-stream': typeof ApiPublicActionsStreamRoute
   '/api/public/cleanup-stream': typeof ApiPublicCleanupStreamRoute
+  '/api/public/hooks/auto-leave': typeof ApiPublicHooksAutoLeaveRoute
   '/api/public/hooks/run-scheduled-broadcasts': typeof ApiPublicHooksRunScheduledBroadcastsRoute
 }
 export interface FileRoutesById {
@@ -158,6 +166,7 @@ export interface FileRoutesById {
   '/_authenticated/tasks/new': typeof AuthenticatedTasksNewRoute
   '/api/public/actions-stream': typeof ApiPublicActionsStreamRoute
   '/api/public/cleanup-stream': typeof ApiPublicCleanupStreamRoute
+  '/api/public/hooks/auto-leave': typeof ApiPublicHooksAutoLeaveRoute
   '/api/public/hooks/run-scheduled-broadcasts': typeof ApiPublicHooksRunScheduledBroadcastsRoute
 }
 export interface FileRouteTypes {
@@ -177,6 +186,7 @@ export interface FileRouteTypes {
     | '/tasks/new'
     | '/api/public/actions-stream'
     | '/api/public/cleanup-stream'
+    | '/api/public/hooks/auto-leave'
     | '/api/public/hooks/run-scheduled-broadcasts'
   fileRoutesByTo: FileRoutesByTo
   to:
@@ -194,6 +204,7 @@ export interface FileRouteTypes {
     | '/tasks/new'
     | '/api/public/actions-stream'
     | '/api/public/cleanup-stream'
+    | '/api/public/hooks/auto-leave'
     | '/api/public/hooks/run-scheduled-broadcasts'
   id:
     | '__root__'
@@ -212,6 +223,7 @@ export interface FileRouteTypes {
     | '/_authenticated/tasks/new'
     | '/api/public/actions-stream'
     | '/api/public/cleanup-stream'
+    | '/api/public/hooks/auto-leave'
     | '/api/public/hooks/run-scheduled-broadcasts'
   fileRoutesById: FileRoutesById
 }
@@ -221,6 +233,7 @@ export interface RootRouteChildren {
   AuthRoute: typeof AuthRoute
   ApiPublicActionsStreamRoute: typeof ApiPublicActionsStreamRoute
   ApiPublicCleanupStreamRoute: typeof ApiPublicCleanupStreamRoute
+  ApiPublicHooksAutoLeaveRoute: typeof ApiPublicHooksAutoLeaveRoute
   ApiPublicHooksRunScheduledBroadcastsRoute: typeof ApiPublicHooksRunScheduledBroadcastsRoute
 }
 
@@ -338,6 +351,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiPublicHooksRunScheduledBroadcastsRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/api/public/hooks/auto-leave': {
+      id: '/api/public/hooks/auto-leave'
+      path: '/api/public/hooks/auto-leave'
+      fullPath: '/api/public/hooks/auto-leave'
+      preLoaderRoute: typeof ApiPublicHooksAutoLeaveRouteImport
+      parentRoute: typeof rootRouteImport
+    }
   }
 }
 
@@ -376,6 +396,7 @@ const rootRouteChildren: RootRouteChildren = {
   AuthRoute: AuthRoute,
   ApiPublicActionsStreamRoute: ApiPublicActionsStreamRoute,
   ApiPublicCleanupStreamRoute: ApiPublicCleanupStreamRoute,
+  ApiPublicHooksAutoLeaveRoute: ApiPublicHooksAutoLeaveRoute,
   ApiPublicHooksRunScheduledBroadcastsRoute:
     ApiPublicHooksRunScheduledBroadcastsRoute,
 }
