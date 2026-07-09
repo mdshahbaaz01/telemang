@@ -5,8 +5,9 @@ export const Route = createFileRoute("/api/public/hooks/auto-leave")({
   server: {
     handlers: {
       POST: async ({ request }) => {
-        const authHeader = request.headers.get("apikey") ?? request.headers.get("authorization")?.replace("Bearer ", "");
-        if (!authHeader) return new Response("Missing key", { status: 401 });
+        const { verifyHookAuth } = await import("@/lib/hook-auth.server");
+        const denied = verifyHookAuth(request);
+        if (denied) return denied;
         const supabase = createClient(
           process.env.SUPABASE_URL!,
           process.env.SUPABASE_SERVICE_ROLE_KEY!,
