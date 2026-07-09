@@ -6,7 +6,7 @@ export type BroadcastRowInput = {
   message: string;
   targets: string[];
   attachment?: { path: string; filename: string; mimeType?: string; isVoice?: boolean };
-  format?: "plain" | "mono";
+  format?: "plain" | "mono" | "quote";
 };
 
 export type BroadcastExecInput = {
@@ -27,7 +27,7 @@ export type ReplyRowInput = {
   accountId: string;
   message: string;
   attachment?: { path: string; filename: string; mimeType?: string; isVoice?: boolean };
-  format?: "plain" | "mono";
+  format?: "plain" | "mono" | "quote";
 };
 
 export type ReplyExecInput = {
@@ -61,9 +61,14 @@ function htmlEscape(input: string) {
   return input.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 }
 
-function formatMessage(message: string, format?: "plain" | "mono") {
-  if (format !== "mono") return { message };
-  return { message: `<code>${htmlEscape(message)}</code>`, parseMode: "html" as const };
+function formatMessage(message: string, format?: "plain" | "mono" | "quote") {
+  if (format === "mono") {
+    return { message: `<code>${htmlEscape(message)}</code>`, parseMode: "html" as const };
+  }
+  if (format === "quote") {
+    return { message: `<blockquote>${htmlEscape(message)}</blockquote>`, parseMode: "html" as const };
+  }
+  return { message };
 }
 
 async function resolveTargetEntity(client: any, Api: any, t: string) {
@@ -192,7 +197,7 @@ export async function executeBroadcast(
                 await client.sendFile(dest, {
                   file: new CustomFile(attData.filename, attData.buf.length, attData.filename, attData.buf),
                   caption: formatted.message || undefined,
-                  parseMode: row.format === "mono" ? "html" : undefined,
+                  parseMode: row.format === "mono" || row.format === "quote" ? "html" : undefined,
                   voiceNote: !!attData.isVoice,
                 });
               } else {
@@ -295,7 +300,7 @@ export async function executeReply(
               await client.sendFile(replyPeer, {
                 file: new CustomFile(attData.filename, attData.buf.length, attData.filename, attData.buf),
                 caption: formatted.message || undefined,
-                parseMode: row.format === "mono" ? "html" : undefined,
+                parseMode: row.format === "mono" || row.format === "quote" ? "html" : undefined,
                 voiceNote: !!attData.isVoice,
                 replyTo: replyToId,
                 ...(topMsgId ? { topMsgId } : {}),

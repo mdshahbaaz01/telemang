@@ -45,7 +45,7 @@ type Tab = "react" | "forward" | "vote" | "broadcast" | "comment" | "reply" | "e
 type BroadcastRow = { id: string; message: string; targets: string; accountId?: string; file?: File | null };
 type ReplyRow = { id: string; message: string; accountId?: string; file?: File | null };
 type SendMode = "per-account" | "all-ids";
-type TextFormat = "plain" | "mono";
+type TextFormat = "plain" | "mono" | "quote";
 
 type LogEntry = {
   accountId?: string;
@@ -865,6 +865,13 @@ function ActionsPageInner() {
                   onClick={() => setTextFormat("mono")}
                 >
                   Monospace
+                </button>
+                <button
+                  type="button"
+                  className={`rounded border px-2 py-1 text-xs italic ${textFormat === "quote" ? "border-primary bg-primary/10" : "border-border text-muted-foreground"}`}
+                  onClick={() => setTextFormat("quote")}
+                >
+                  Quote
                 </button>
                 {(tab === "broadcast" || tab === "reply" || tab === "comment") && (
                   <label className="ml-auto flex items-center gap-2 text-xs text-muted-foreground">
