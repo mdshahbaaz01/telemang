@@ -297,6 +297,8 @@ function ActionsPageInner() {
   const qc = useQueryClient();
   const runsQ = useQuery({ queryKey: ["action-runs"], queryFn: () => listRunsFn() });
   const [editingRun, setEditingRun] = useState<any | null>(null);
+  // Broadcast-replies panel state
+  const [repliesRunId, setRepliesRunId] = useState<string | null>(null);
 
   const [tab, setTab] = useState<Tab>(search.tab ?? "react");
   const [showAccounts, setShowAccounts] = useState<boolean>(() => {
