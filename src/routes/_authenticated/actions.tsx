@@ -135,6 +135,77 @@ function AttachmentField({ file, onChange }: { file: File | null; onChange: (f: 
   );
 }
 
+function MultiAttachmentField({
+  files,
+  onChange,
+  max = 10,
+}: {
+  files: File[];
+  onChange: (f: File[]) => void;
+  max?: number;
+}) {
+  const inputRef = useRef<HTMLInputElement | null>(null);
+  const addFiles = (list: FileList | null) => {
+    if (!list || !list.length) return;
+    const next = [...files];
+    for (const f of Array.from(list)) {
+      if (next.length >= max) break;
+      next.push(f);
+    }
+    onChange(next);
+    if (inputRef.current) inputRef.current.value = "";
+  };
+  const removeAt = (i: number) => onChange(files.filter((_, idx) => idx !== i));
+  return (
+    <div>
+      <Label>Attachments (optional, up to {max})</Label>
+      <input
+        ref={inputRef}
+        type="file"
+        multiple
+        className="hidden"
+        onChange={(e) => addFiles(e.target.files)}
+      />
+      {files.length > 0 && (
+        <div className="mb-2 space-y-1">
+          {files.map((f, i) => (
+            <div key={`${f.name}-${i}`} className="flex items-center gap-2 rounded-md border border-border bg-background px-2 py-1.5 text-sm">
+              <Paperclip className="h-4 w-4 text-muted-foreground" />
+              <span className="truncate">{f.name}</span>
+              <span className="ml-auto text-xs text-muted-foreground">{(f.size / 1024).toFixed(1)} KB</span>
+              <button
+                type="button"
+                className="text-muted-foreground hover:text-destructive"
+                onClick={() => removeAt(i)}
+                aria-label="Remove attachment"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+          ))}
+        </div>
+      )}
+      <Button
+        type="button"
+        variant="outline"
+        size="sm"
+        disabled={files.length >= max}
+        onClick={() => inputRef.current?.click()}
+      >
+        <Paperclip className="mr-1 h-4 w-4" />
+        {files.length ? "Add more files" : "Attach files"}
+      </Button>
+      {files.length > 0 && (
+        <p className="mt-1 text-xs text-muted-foreground">
+          {files.length > 1
+            ? "Sent as a media album. Message text becomes the album caption."
+            : "The message text above will be sent as the caption."}
+        </p>
+      )}
+    </div>
+  );
+}
+
 function DelayFields({
   minDelay,
   maxDelay,
