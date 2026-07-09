@@ -17,6 +17,7 @@ import {
   updateGroup,
   deleteGroup,
   resetGroupItems,
+  clearTaskHistory,
 } from "@/lib/tasks.functions";
 import { Textarea } from "@/components/ui/textarea";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -51,6 +52,7 @@ function Dashboard() {
   const listGroupsFn = useServerFn(listTaskGroups);
   const delGroupFn = useServerFn(deleteGroup);
   const resetGroupFn = useServerFn(resetGroupItems);
+  const clearHistoryFn = useServerFn(clearTaskHistory);
   const delAcc = useServerFn(deleteAccount);
   const [email, setEmail] = useState<string>("");
 
@@ -197,14 +199,33 @@ function Dashboard() {
         <section>
           <div className="mb-4 flex items-center justify-between">
             <h2 className="text-2xl font-semibold tracking-tight">Recent tasks</h2>
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={invalidateGroups}
-              aria-label="Refresh"
-            >
-              <RefreshCw className="mr-1 h-3.5 w-3.5" /> Refresh
-            </Button>
+            <div className="flex items-center gap-2">
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={invalidateGroups}
+                aria-label="Refresh"
+              >
+                <RefreshCw className="mr-1 h-3.5 w-3.5" /> Refresh
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={async () => {
+                  if (!confirm("Clear all task history? Running tasks are kept.")) return;
+                  try {
+                    const res = await clearHistoryFn();
+                    toast.success(`Cleared ${res.deleted} task${res.deleted === 1 ? "" : "s"}`);
+                    invalidateGroups();
+                  } catch (e) {
+                    toast.error((e as Error).message);
+                  }
+                }}
+                disabled={!groupsQ.data?.length}
+              >
+                <Trash2 className="mr-1 h-3.5 w-3.5" /> Clear history
+              </Button>
+            </div>
           </div>
           {groupsQ.isLoading ? (
             <Loader size="sm" />
