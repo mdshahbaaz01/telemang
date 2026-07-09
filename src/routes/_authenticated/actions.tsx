@@ -1430,6 +1430,7 @@ function ActionsPageInner() {
                         message={row.message}
                         format={textFormat}
                         fileName={row.files?.length ? row.files.map((f) => f.name).join(", ") : null}
+                        files={row.files ?? []}
                       />
                     </div>
                     <div>
