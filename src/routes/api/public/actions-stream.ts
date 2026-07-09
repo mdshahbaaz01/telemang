@@ -59,8 +59,9 @@ const replyRowSchema = z.object({
   accountId: z.string().uuid(),
   message: z.string().max(4096).default(""),
   attachment: attachmentSchema.optional(),
+  attachments: z.array(attachmentSchema).max(10).optional(),
   format: z.enum(["plain", "mono", "quote", "html"]).default("plain"),
-}).refine((r) => r.message.length > 0 || !!r.attachment, {
+}).refine((r) => r.message.length > 0 || !!r.attachment || (r.attachments?.length ?? 0) > 0, {
   message: "Row needs a message or an attachment",
 });
 
@@ -737,14 +738,29 @@ export const Route = createFileRoute("/api/public/actions-stream")({
                     );
                   } catch {}
                 }
-                if (row.attachment) {
-                  const att = await loadAttachment(row.attachment);
+                const rowAtts = ((row as any).attachments && (row as any).attachments.length > 0
+                  ? (row as any).attachments
+                  : row.attachment
+                    ? [row.attachment]
+                    : []) as Array<{ path: string; filename: string; mimeType?: string; isVoice?: boolean }>;
+                if (rowAtts.length > 1) {
+                  const atts = await Promise.all(rowAtts.map((a) => loadAttachment(a)));
+                  const formatted = formatMessage(row.message, row.format);
+                  await client.sendFile(replyPeer, {
+                    file: atts.map((a) => buildCustomFile(a)),
+                    caption: formatted.message || undefined,
+                    parseMode: formatted.parseMode,
+                    replyTo: replyToId,
+                    ...(topMsgId ? { topMsgId } : {}),
+                  });
+                } else if (rowAtts.length === 1) {
+                  const att = await loadAttachment(rowAtts[0]);
                   const formatted = formatMessage(row.message, row.format);
                   await client.sendFile(replyPeer, {
                     file: buildCustomFile(att),
                     caption: formatted.message || undefined,
                     parseMode: formatted.parseMode,
-                    voiceNote: !!row.attachment?.isVoice,
+                    voiceNote: !!rowAtts[0]?.isVoice,
                     replyTo: replyToId,
                     ...(topMsgId ? { topMsgId } : {}),
                   });

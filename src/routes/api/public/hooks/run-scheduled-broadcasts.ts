@@ -73,6 +73,7 @@ function buildQueueItems(row: ScheduleRow) {
           viaDiscussion: !!payload.viaDiscussion,
           message: r.message ?? "",
           attachment: r.attachment ?? null,
+          attachments: Array.isArray(r.attachments) ? r.attachments : null,
           format: r.format ?? "plain",
         },
       });
@@ -180,7 +181,13 @@ async function executeQueueItem(admin: AdminClient, item: QueueItem) {
       viaDiscussion: !!payload.viaDiscussion,
       minDelay: 0,
       maxDelay: 0,
-      rows: [{ accountId: item.account_id, message: payload.message ?? "", attachment: payload.attachment ?? undefined, format: payload.format ?? "plain" }],
+      rows: [{
+        accountId: item.account_id,
+        message: payload.message ?? "",
+        attachment: payload.attachment ?? undefined,
+        attachments: Array.isArray(payload.attachments) && payload.attachments.length ? payload.attachments : undefined,
+        format: payload.format ?? "plain",
+      }],
     });
   }
   if (item.kind === "forward") {

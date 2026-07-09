@@ -3,7 +3,7 @@ import { createFileRoute } from "@tanstack/react-router";
 import { z } from "zod";
 import { useServerFn } from "@tanstack/react-start";
 import { useQuery } from "@tanstack/react-query";
-import { useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { listAccounts } from "@/lib/accounts.functions";
 import { loadPoll, listActionRuns, deleteActionRun, clearActionRuns } from "@/lib/actions.functions";
@@ -44,7 +44,7 @@ export const Route = createFileRoute("/_authenticated/actions")({
 type Tab = "react" | "forward" | "vote" | "broadcast" | "comment" | "reply" | "edit" | "deleteMessages";
 
 type BroadcastRow = { id: string; message: string; targets: string; accountId?: string; files?: File[] };
-type ReplyRow = { id: string; message: string; accountId?: string; file?: File | null };
+type ReplyRow = { id: string; message: string; accountId?: string; files?: File[] };
 type SendMode = "per-account" | "all-ids";
 type TextFormat = "plain" | "mono" | "quote" | "html";
 
@@ -145,6 +145,25 @@ function MultiAttachmentField({
   max?: number;
 }) {
   const inputRef = useRef<HTMLInputElement | null>(null);
+  const [dragOver, setDragOver] = useState(false);
+  const previews = useMemo(() => {
+    return files.map((f) => {
+      const kind: "image" | "video" | "audio" | "other" = f.type.startsWith("image/")
+        ? "image"
+        : f.type.startsWith("video/")
+          ? "video"
+          : f.type.startsWith("audio/")
+            ? "audio"
+            : "other";
+      const url = kind === "image" || kind === "video" ? URL.createObjectURL(f) : undefined;
+      return { url, kind };
+    });
+  }, [files]);
+  useEffect(() => {
+    return () => {
+      for (const p of previews) if (p.url) URL.revokeObjectURL(p.url);
+    };
+  }, [previews]);
   const addFiles = (list: FileList | null) => {
     if (!list || !list.length) return;
     const next = [...files];
@@ -166,35 +185,59 @@ function MultiAttachmentField({
         className="hidden"
         onChange={(e) => addFiles(e.target.files)}
       />
+      <div
+        onDragOver={(e) => {
+          e.preventDefault();
+          setDragOver(true);
+        }}
+        onDragLeave={() => setDragOver(false)}
+        onDrop={(e) => {
+          e.preventDefault();
+          setDragOver(false);
+          addFiles(e.dataTransfer.files);
+        }}
+        onClick={() => inputRef.current?.click()}
+        role="button"
+        tabIndex={0}
+        className={`mt-1 flex cursor-pointer flex-col items-center justify-center gap-1 rounded-md border-2 border-dashed p-3 text-xs transition ${
+          dragOver ? "border-primary bg-primary/5" : "border-border text-muted-foreground hover:bg-muted/40"
+        }`}
+      >
+        <Paperclip className="h-4 w-4" />
+        <span>Drag &amp; drop files here, or click to browse (max {max})</span>
+      </div>
       {files.length > 0 && (
-        <div className="mb-2 space-y-1">
+        <div className="mt-2 grid grid-cols-2 gap-2 sm:grid-cols-3">
           {files.map((f, i) => (
-            <div key={`${f.name}-${i}`} className="flex items-center gap-2 rounded-md border border-border bg-background px-2 py-1.5 text-sm">
-              <Paperclip className="h-4 w-4 text-muted-foreground" />
-              <span className="truncate">{f.name}</span>
-              <span className="ml-auto text-xs text-muted-foreground">{(f.size / 1024).toFixed(1)} KB</span>
+            <div key={`${f.name}-${i}`} className="group relative overflow-hidden rounded-md border border-border bg-background">
+              {previews[i]?.kind === "image" && previews[i]?.url ? (
+                <img src={previews[i]!.url} alt={f.name} className="h-24 w-full object-cover" />
+              ) : previews[i]?.kind === "video" && previews[i]?.url ? (
+                <video src={previews[i]!.url} className="h-24 w-full object-cover" muted />
+              ) : (
+                <div className="flex h-24 flex-col items-center justify-center gap-1 p-2 text-xs text-muted-foreground">
+                  <Paperclip className="h-5 w-5" />
+                  <span className="truncate w-full text-center">{f.name}</span>
+                </div>
+              )}
               <button
                 type="button"
-                className="text-muted-foreground hover:text-destructive"
-                onClick={() => removeAt(i)}
+                className="absolute right-1 top-1 rounded-full bg-background/80 p-0.5 text-muted-foreground opacity-0 shadow group-hover:opacity-100 hover:text-destructive"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  removeAt(i);
+                }}
                 aria-label="Remove attachment"
               >
-                <X className="h-4 w-4" />
+                <X className="h-3.5 w-3.5" />
               </button>
+              <div className="truncate px-1.5 py-1 text-[10px] text-muted-foreground">
+                {f.name} · {(f.size / 1024).toFixed(1)} KB
+              </div>
             </div>
           ))}
         </div>
       )}
-      <Button
-        type="button"
-        variant="outline"
-        size="sm"
-        disabled={files.length >= max}
-        onClick={() => inputRef.current?.click()}
-      >
-        <Paperclip className="mr-1 h-4 w-4" />
-        {files.length ? "Add more files" : "Attach files"}
-      </Button>
       {files.length > 0 && (
         <p className="mt-1 text-xs text-muted-foreground">
           {files.length > 1
@@ -544,23 +587,27 @@ function ActionsPageInner() {
     const src = parseMessageLink(source);
     if (!src) return toast.error("Enter a valid message link");
     if (allAccountIds.length === 0) return toast.error("No accounts available");
-    let cleaned: { accountId: string; message: string; attachment?: { path: string; filename: string; mimeType?: string; isVoice?: boolean }; format?: TextFormat }[] = [];
+    let cleaned: { accountId: string; message: string; attachments?: { path: string; filename: string; mimeType?: string; isVoice?: boolean }[]; format?: TextFormat }[] = [];
     try {
       if (replyMode === "per-account") {
-        const rows = replyRows.filter((r) => (r.accountId ?? "") && (r.message.trim() || r.file));
+        const rows = replyRows.filter((r) => (r.accountId ?? "") && (r.message.trim() || (r.files?.length ?? 0) > 0));
         if (!rows.length) return toast.error("Pick an account and add message or file for each row");
         cleaned = await Promise.all(rows.map(async (r) => ({
           accountId: r.accountId!,
           message: r.message.trim(),
-          attachment: r.file ? await uploadAttachment(r.file, voiceMode) : undefined,
+          attachments: r.files?.length
+            ? await Promise.all(r.files.map((f) => uploadAttachment(f, voiceMode && r.files!.length === 1)))
+            : undefined,
           format: textFormat,
         })));
       } else {
-        const rows = replyRows.filter((r) => r.message.trim() || r.file);
+        const rows = replyRows.filter((r) => r.message.trim() || (r.files?.length ?? 0) > 0);
         if (!rows.length) return toast.error("Add at least one message or file");
         const uploads = await Promise.all(rows.map(async (r) => ({
           message: r.message.trim(),
-          attachment: r.file ? await uploadAttachment(r.file, voiceMode) : undefined,
+          attachments: r.files?.length
+            ? await Promise.all(r.files.map((f) => uploadAttachment(f, voiceMode && r.files!.length === 1)))
+            : undefined,
           format: textFormat,
         })));
         const targetIds = replySelectedIds.length ? replySelectedIds : allAccountIds;
@@ -739,23 +786,27 @@ function ActionsPageInner() {
     const src = parseMessageLink(source);
     if (!src) return toast.error("Enter a valid message link");
     if (allAccountIds.length === 0) return toast.error("No accounts available");
-    let cleaned: { accountId: string; message: string; attachment?: { path: string; filename: string; mimeType?: string; isVoice?: boolean }; format?: TextFormat }[] = [];
+    let cleaned: { accountId: string; message: string; attachments?: { path: string; filename: string; mimeType?: string; isVoice?: boolean }[]; format?: TextFormat }[] = [];
     try {
       if (replyMode === "per-account") {
-        const rs = replyRows.filter((r) => (r.accountId ?? "") && (r.message.trim() || r.file));
+        const rs = replyRows.filter((r) => (r.accountId ?? "") && (r.message.trim() || (r.files?.length ?? 0) > 0));
         if (!rs.length) return toast.error("Pick an account and add message or file for each row");
         cleaned = await Promise.all(rs.map(async (r) => ({
           accountId: r.accountId!,
           message: r.message.trim(),
-          attachment: r.file ? await uploadAttachment(r.file, voiceMode) : undefined,
+          attachments: r.files?.length
+            ? await Promise.all(r.files.map((f) => uploadAttachment(f, voiceMode && r.files!.length === 1)))
+            : undefined,
           format: textFormat,
         })));
       } else {
-        const rs = replyRows.filter((r) => r.message.trim() || r.file);
+        const rs = replyRows.filter((r) => r.message.trim() || (r.files?.length ?? 0) > 0);
         if (!rs.length) return toast.error("Add at least one message or file");
         const uploads = await Promise.all(rs.map(async (r) => ({
           message: r.message.trim(),
-          attachment: r.file ? await uploadAttachment(r.file, voiceMode) : undefined,
+          attachments: r.files?.length
+            ? await Promise.all(r.files.map((f) => uploadAttachment(f, voiceMode && r.files!.length === 1)))
+            : undefined,
           format: textFormat,
         })));
         const targetIds = replySelectedIds.length ? replySelectedIds : allAccountIds;
@@ -1422,6 +1473,7 @@ function ActionsPageInner() {
                         message={row.message}
                         format={textFormat}
                         fileName={row.files?.length ? row.files.map((f) => f.name).join(", ") : null}
+                        files={row.files ?? []}
                       />
                     </div>
                     <div>
@@ -1587,13 +1639,14 @@ function ActionsPageInner() {
                       <MessagePreview
                         message={row.message}
                         format={textFormat}
-                        fileName={row.file?.name ?? null}
+                        fileName={row.files?.length ? row.files.map((f) => f.name).join(", ") : null}
+                        files={row.files ?? []}
                       />
                     </div>
-                    <AttachmentField
-                      file={row.file ?? null}
-                      onChange={(f) =>
-                        setReplyRows((rs) => rs.map((r) => (r.id === row.id ? { ...r, file: f } : r)))
+                    <MultiAttachmentField
+                      files={row.files ?? []}
+                      onChange={(fs) =>
+                        setReplyRows((rs) => rs.map((r) => (r.id === row.id ? { ...r, files: fs } : r)))
                       }
                     />
                   </div>

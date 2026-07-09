@@ -298,9 +298,23 @@ export async function executeReply(
         }
         for (const row of rows) {
           try {
-            let attData: { buf: Buffer; filename: string; mimeType?: string; isVoice?: boolean } | null = null;
-            if (row.attachment) attData = await loadAttachment(row.attachment);
-            if (attData) {
+            const rowAtts = (row.attachments && row.attachments.length > 0
+              ? row.attachments
+              : row.attachment
+                ? [row.attachment]
+                : []) as Attachment[];
+            const attDatas = rowAtts.length ? await Promise.all(rowAtts.map((a) => loadAttachment(a))) : [];
+            if (attDatas.length > 1) {
+              const formatted = formatMessage(row.message, row.format);
+              await client.sendFile(replyPeer, {
+                file: attDatas.map((a) => new CustomFile(a.filename, a.buf.length, a.filename, a.buf)),
+                caption: formatted.message || undefined,
+                parseMode: formatted.parseMode,
+                replyTo: replyToId,
+                ...(topMsgId ? { topMsgId } : {}),
+              });
+            } else if (attDatas.length === 1) {
+              const attData = attDatas[0];
               const formatted = formatMessage(row.message, row.format);
               await client.sendFile(replyPeer, {
                 file: new CustomFile(attData.filename, attData.buf.length, attData.filename, attData.buf),
