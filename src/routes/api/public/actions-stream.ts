@@ -119,6 +119,10 @@ function htmlEscape(input: string) {
   return input.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 }
 
+function hasTelegramHtmlTags(message: string) {
+  return /<\/?(?:b|strong|i|em|u|ins|s|strike|del|code|pre|blockquote|a)(?:\s+[^>]*)?>/i.test(message);
+}
+
 function formatMessage(message: string, format?: "plain" | "mono" | "quote" | "html") {
   if (format === "mono") {
     return { message: `<code>${htmlEscape(message)}</code>`, parseMode: "html" as const };
@@ -126,7 +130,7 @@ function formatMessage(message: string, format?: "plain" | "mono" | "quote" | "h
   if (format === "quote") {
     return { message: `<blockquote>${htmlEscape(message)}</blockquote>`, parseMode: "html" as const };
   }
-  if (format === "html") {
+  if (format === "html" || hasTelegramHtmlTags(message)) {
     return { message, parseMode: "html" as const };
   }
   return { message };
@@ -577,10 +581,11 @@ export const Route = createFileRoute("/api/public/actions-stream")({
                 } else if (op.kind === "edit") {
                   try {
                     await new Promise((r) => setTimeout(r, jitter(body.minDelay, body.maxDelay)));
+                    const formatted = formatMessage(op.message, op.format);
                     await client.editMessage(sourcePeer, {
                       message: src.msgId,
-                      text: formatMessage(op.message, op.format).message,
-                      parseMode: op.format && op.format !== "plain" ? "html" : undefined,
+                      text: formatted.message,
+                      parseMode: formatted.parseMode,
                     });
                     ok++;
                     const m = `Edited ${src.chat}/${src.msgId}`;
@@ -652,7 +657,7 @@ export const Route = createFileRoute("/api/public/actions-stream")({
                         await client.sendFile(dest, {
                           file: buildCustomFile(attData),
                           caption: formatted.message || undefined,
-                          parseMode: row.format && row.format !== "plain" ? "html" : undefined,
+                          parseMode: formatted.parseMode,
                           voiceNote: !!row.attachment?.isVoice,
                         });
                       } else {
@@ -743,7 +748,7 @@ export const Route = createFileRoute("/api/public/actions-stream")({
                   await client.sendFile(replyPeer, {
                     file: buildCustomFile(att),
                     caption: formatted.message || undefined,
-                    parseMode: row.format && row.format !== "plain" ? "html" : undefined,
+                    parseMode: formatted.parseMode,
                     voiceNote: !!row.attachment?.isVoice,
                     replyTo: replyToId,
                     ...(topMsgId ? { topMsgId } : {}),
