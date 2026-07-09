@@ -2860,7 +2860,7 @@ function BroadcastRepliesDialog({
                 <div className="mb-2 flex flex-wrap items-center gap-2">
                   <span className="text-xs font-medium">{p.accountName}</span>
                   <span className="text-xs text-muted-foreground">→</span>
-                  <ChatIdChip value={p.target} />
+                  <ChatIdChip id={p.target} accountId={p.accountId} />
                   <span className="ml-auto text-xs text-muted-foreground">
                     {p.messages.length} reply{p.messages.length === 1 ? "" : "ies"}
                   </span>
