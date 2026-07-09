@@ -1,4 +1,5 @@
 import { Loader } from "@/components/ui/loader";
+import { FloodWaitBadge } from "@/components/FloodWaitBadge";
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useServerFn } from "@tanstack/react-start";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
