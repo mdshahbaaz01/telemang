@@ -191,6 +191,9 @@ export const getHistory = createServerFn({ method: "GET" })
     try {
       const me = await client.getMe();
       const meId = String((me as any).id);
+      // Prime entity cache: GramJS can't resolve raw PeerUser/PeerChannel
+      // without access_hash unless the entity is in the session cache.
+      await client.getDialogs({ limit: 200 }).catch(() => {});
       const peer = await resolvePeerFromKey(client, Api, data.peerKey);
       const messages = await client.getMessages(peer, { limit: data.limit, offsetId: data.offsetId });
       // messages are newest→oldest; reverse for chronological order.
