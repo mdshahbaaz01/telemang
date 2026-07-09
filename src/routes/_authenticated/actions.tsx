@@ -8,6 +8,11 @@ import { supabase } from "@/integrations/supabase/client";
 import { listAccounts } from "@/lib/accounts.functions";
 import { loadPoll, listActionRuns, deleteActionRun, clearActionRuns } from "@/lib/actions.functions";
 import {
+  getBroadcastReplies,
+  refreshReplyThread,
+  pressInlineButton,
+} from "@/lib/broadcast-replies.functions";
+import {
   createScheduledBroadcast,
   listScheduledBroadcasts,
   cancelScheduledBroadcast,
