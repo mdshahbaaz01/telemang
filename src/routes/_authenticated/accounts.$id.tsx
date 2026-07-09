@@ -37,6 +37,7 @@ type Dialog = {
   isSelf: boolean;
   verified: boolean;
   isChannel: boolean;
+  photoDataUrl: string | null;
 };
 
 type Message = {
@@ -111,6 +112,9 @@ function AccountViewerPage() {
 
   const dialogs: Dialog[] = (dialogsQ.data?.dialogs ?? []) as Dialog[];
   const meId: string | undefined = dialogsQ.data?.me?.id;
+  const me = dialogsQ.data?.me as
+    | { id: string; name: string; username: string | null; phone: string | null; photoDataUrl: string | null }
+    | undefined;
   const activeDialog = dialogs.find((d) => d.peerKey === activePeer);
   const messages: Message[] = historyQ.data?.messages ?? [];
 
@@ -217,9 +221,17 @@ function AccountViewerPage() {
     <div className="flex h-[calc(100vh-3.5rem)] flex-col">
       <div className="flex items-center gap-2 border-b px-3 py-2">
         <Link to="/owner"><Button variant="ghost" size="icon"><ArrowLeft className="h-4 w-4" /></Button></Link>
+        <Avatar
+          photoDataUrl={me?.photoDataUrl ?? null}
+          fallback={initials(me?.name ?? "?")}
+          kind="user"
+          size={9}
+        />
         <div className="flex flex-col leading-tight">
-          <span className="text-sm font-semibold">Account Viewer</span>
-          <span className="text-xs text-muted-foreground">{accountId.slice(0, 8)}… · {dialogs.length} chats</span>
+          <span className="text-sm font-semibold">{me?.name ?? (dialogsQ.isLoading ? "Loading…" : "Account")}</span>
+          <span className="text-xs text-muted-foreground">
+            {me?.username ? `@${me.username}` : me?.phone ? me.phone : accountId.slice(0, 8) + "…"} · {dialogs.length} chats
+          </span>
         </div>
         <div className="ml-auto">
           <Button size="sm" variant="ghost" onClick={() => { dialogsQ.refetch(); historyQ.refetch(); }}>
@@ -255,10 +267,12 @@ function AccountViewerPage() {
                   activePeer === d.peerKey && "bg-muted",
                 )}
               >
-                <div className={cn(
-                  "flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-xs font-semibold text-white",
-                  d.kind === "channel" ? "bg-blue-600" : d.kind === "group" ? "bg-green-600" : "bg-purple-600",
-                )}>{d.isSelf ? "★" : initials(d.title)}</div>
+                <Avatar
+                  photoDataUrl={d.photoDataUrl}
+                  fallback={d.isSelf ? "★" : initials(d.title)}
+                  kind={d.kind}
+                  size={10}
+                />
                 <div className="min-w-0 flex-1">
                   <div className="flex items-center gap-1">
                     <span className="truncate text-sm font-medium">{d.isSelf ? "Saved Messages" : d.title}</span>
@@ -289,10 +303,12 @@ function AccountViewerPage() {
           {activePeer && (
             <>
               <div className="flex items-center gap-3 border-b px-4 py-2">
-                <div className={cn(
-                  "flex h-9 w-9 items-center justify-center rounded-full text-xs font-semibold text-white",
-                  activeDialog?.kind === "channel" ? "bg-blue-600" : activeDialog?.kind === "group" ? "bg-green-600" : "bg-purple-600",
-                )}>{initials(activeDialog?.title ?? "?")}</div>
+                <Avatar
+                  photoDataUrl={activeDialog?.photoDataUrl ?? null}
+                  fallback={initials(activeDialog?.title ?? "?")}
+                  kind={activeDialog?.kind ?? "user"}
+                  size={9}
+                />
                 <div className="min-w-0">
                   <div className="truncate text-sm font-semibold">{activeDialog?.isSelf ? "Saved Messages" : activeDialog?.title ?? activePeer}</div>
                   <div className="text-xs text-muted-foreground">
