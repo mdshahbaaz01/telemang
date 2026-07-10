@@ -135,6 +135,7 @@ function AccountViewerPage() {
   const markReadFn = useServerFn(markRead);
   const sendReactionFn = useServerFn(sendReactionAs);
   const deleteMsgsFn = useServerFn(deleteMessagesAs);
+  const pressBtnFn = useServerFn(pressInlineButtonAs);
   const qc = useQueryClient();
 
   const dialogsQ = useQuery({
@@ -259,6 +260,56 @@ function AccountViewerPage() {
     }
   };
 
+  // Inline-button clicks + per-chat bot response log
+  const [botLogs, setBotLogs] = useState<
+    Record<string, { time: number; text: string; alert: boolean }[]>
+  >({});
+  const [logsOpen, setLogsOpen] = useState<Record<string, boolean>>({});
+  const [confirmUrl, setConfirmUrl] = useState<string | null>(null);
+  const [pressingKey, setPressingKey] = useState<string | null>(null);
+
+  const pressButton = async (msg: Message, btn: InlineButton, key: string) => {
+    if (!activePeer) return;
+    if (btn.kind === "url" || btn.kind === "urlAuth" || btn.kind === "webview") {
+      const url = (btn as any).url as string | undefined;
+      if (!url) return toast.error("Button has no URL");
+      setConfirmUrl(url);
+      return;
+    }
+    if (btn.kind !== "callback") {
+      toast.info("This button type isn't supported from a user account");
+      return;
+    }
+    setPressingKey(key);
+    try {
+      const res = await pressBtnFn({
+        data: { accountId, peerKey: activePeer, msgId: msg.id, data: btn.data },
+      });
+      const logKey = activePeer;
+      if (res.message) {
+        setBotLogs((p) => ({
+          ...p,
+          [logKey]: [...(p[logKey] ?? []), { time: Date.now(), text: res.message, alert: !!res.alert }],
+        }));
+        setLogsOpen((p) => ({ ...p, [logKey]: true }));
+      } else if (res.url) {
+        setConfirmUrl(res.url);
+      } else {
+        setBotLogs((p) => ({
+          ...p,
+          [logKey]: [...(p[logKey] ?? []), { time: Date.now(), text: "(no response)", alert: false }],
+        }));
+        setLogsOpen((p) => ({ ...p, [logKey]: true }));
+      }
+      // Refresh so edits / new buttons appear
+      qc.invalidateQueries({ queryKey: ["tg-history", accountId, activePeer] });
+    } catch (e) {
+      toast.error((e as Error).message);
+    } finally {
+      setPressingKey(null);
+    }
+  };
+
   return (
     <div className="flex h-[calc(100vh-3.5rem)] flex-col">
       <div className="flex items-center gap-2 border-b px-3 py-2">
@@ -380,10 +431,53 @@ function AccountViewerPage() {
                           <span className="rounded-full bg-muted px-3 py-0.5 text-[10px] uppercase tracking-wide text-muted-foreground">{fmtDay(m.date)}</span>
                         </div>
                       )}
-                      <MessageRow msg={m} parentReply={parentReply ?? null} onReply={() => setReplyTo(m)} onReact={react} onDelete={deleteMsg} isOwn={m.out} canModify={m.out} />
+                      <MessageRow
+                        msg={m}
+                        parentReply={parentReply ?? null}
+                        onReply={() => setReplyTo(m)}
+                        onReact={react}
+                        onDelete={deleteMsg}
+                        isOwn={m.out}
+                        canModify={m.out}
+                        onPressButton={pressButton}
+                        pressingKey={pressingKey}
+                      />
                     </div>
                   );
                 })}
+                {activePeer && (botLogs[activePeer]?.length ?? 0) > 0 && (
+                  <div className="sticky bottom-0 rounded-md border border-dashed border-primary/40 bg-primary/5 p-2">
+                    <div className="mb-1 flex items-center justify-between">
+                      <button
+                        className="text-[10px] uppercase tracking-wide text-muted-foreground hover:underline"
+                        onClick={() =>
+                          setLogsOpen((p) => ({ ...p, [activePeer]: !p[activePeer] }))
+                        }
+                      >
+                        {logsOpen[activePeer] ? "Hide" : "Show"} bot responses (
+                        {botLogs[activePeer].length})
+                      </button>
+                      <button
+                        className="text-[10px] text-muted-foreground hover:underline"
+                        onClick={() => setBotLogs((p) => ({ ...p, [activePeer]: [] }))}
+                      >
+                        Clear
+                      </button>
+                    </div>
+                    {logsOpen[activePeer] && (
+                      <div className="space-y-1">
+                        {botLogs[activePeer].map((l, i) => (
+                          <div key={i} className="flex items-start gap-2 text-xs">
+                            <span className="mt-0.5 text-[10px] text-muted-foreground">
+                              {fmtTime(l.time)}
+                            </span>
+                            <span className={l.alert ? "text-amber-600" : ""}>{l.text}</span>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                )}
                 {!historyQ.isLoading && messages.length === 0 && (
                   <div className="pt-6 text-center text-sm text-muted-foreground">No messages yet</div>
                 )}
@@ -418,12 +512,41 @@ function AccountViewerPage() {
           )}
         </section>
       </div>
+
+      {confirmUrl && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4"
+          onClick={() => setConfirmUrl(null)}
+        >
+          <div
+            className="w-full max-w-md rounded-lg border bg-card p-4 shadow-lg"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="mb-2 text-sm font-semibold">Open external link?</div>
+            <p className="mb-3 break-all rounded-md border bg-muted p-2 text-xs">{confirmUrl}</p>
+            <div className="flex justify-end gap-2">
+              <Button variant="outline" size="sm" onClick={() => setConfirmUrl(null)}>
+                Cancel
+              </Button>
+              <Button
+                size="sm"
+                onClick={() => {
+                  window.open(confirmUrl, "_blank", "noopener,noreferrer");
+                  setConfirmUrl(null);
+                }}
+              >
+                <ExternalLink className="mr-1 h-4 w-4" /> Open
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
 
 function MessageRow({
-  msg, parentReply, onReply, onReact, onDelete, isOwn, canModify,
+  msg, parentReply, onReply, onReact, onDelete, isOwn, canModify, onPressButton, pressingKey,
 }: {
   msg: Message;
   parentReply: Message | null;
@@ -432,6 +555,8 @@ function MessageRow({
   onDelete: (msg: Message) => void;
   isOwn: boolean;
   canModify: boolean;
+  onPressButton: (msg: Message, btn: InlineButton, key: string) => void;
+  pressingKey: string | null;
 }) {
   const [showReactions, setShowReactions] = useState(false);
   return (
@@ -471,6 +596,55 @@ function MessageRow({
               >
                 {r.emoji} {r.count}
               </button>
+            ))}
+          </div>
+        )}
+
+        {msg.replyMarkup && msg.replyMarkup.length > 0 && (
+          <div className="mt-2 space-y-1">
+            {msg.replyMarkup.map((row, ri) => (
+              <div key={ri} className="flex flex-wrap gap-1">
+                {row.map((btn, ci) => {
+                  const key = `${msg.id}:${ri}:${ci}`;
+                  const busy = pressingKey === key;
+                  const clickable =
+                    btn.kind === "callback" ||
+                    btn.kind === "url" ||
+                    btn.kind === "urlAuth" ||
+                    btn.kind === "webview";
+                  const title =
+                    btn.kind === "url" || btn.kind === "urlAuth"
+                      ? `Opens: ${(btn as any).url}`
+                      : btn.kind === "callback"
+                        ? "Callback button"
+                        : btn.kind === "webview"
+                          ? "Opens a Telegram WebApp (limited)"
+                          : `${btn.kind} button (not supported)`;
+                  return (
+                    <button
+                      key={ci}
+                      type="button"
+                      title={title}
+                      disabled={!clickable || busy}
+                      onClick={() => onPressButton(msg, btn, key)}
+                      className={cn(
+                        "inline-flex items-center gap-1 rounded-md border px-2 py-1 text-[11px]",
+                        clickable
+                          ? isOwn
+                            ? "border-primary-foreground/40 bg-primary-foreground/10 hover:bg-primary-foreground/20"
+                            : "border-primary/40 bg-primary/10 hover:bg-primary/20"
+                          : "cursor-not-allowed border-border bg-muted opacity-60",
+                      )}
+                    >
+                      {busy && <Loader2 className="h-3 w-3 animate-spin" />}
+                      {(btn.kind === "url" || btn.kind === "urlAuth") && (
+                        <ExternalLink className="h-3 w-3" />
+                      )}
+                      <span className="max-w-[16rem] truncate">{btn.text}</span>
+                    </button>
+                  );
+                })}
+              </div>
             ))}
           </div>
         )}
