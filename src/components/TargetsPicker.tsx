@@ -8,7 +8,7 @@ import { Loader2 } from "lucide-react";
 import { toast } from "sonner";
 
 type Account = { id: string; first_name?: string | null; username?: string | null; phone?: string | null };
-type Dialog = {
+type DialogItem = {
   peerKey: string;
   title: string;
   username: string | null;
@@ -16,7 +16,7 @@ type Dialog = {
   photoDataUrl?: string | null;
 };
 
-function dialogToTarget(d: Dialog): string | null {
+function dialogToTarget(d: DialogItem): string | null {
   if (d.username) return "@" + d.username;
   // peerKey formats: "u:<id>", "c:<id>" (channel/supergroup), "g:<id>" (legacy chat)
   const [prefix, id] = d.peerKey.split(":");
@@ -38,7 +38,7 @@ export function TargetsPicker({
   const [open, setOpen] = useState(false);
   const [accountId, setAccountId] = useState<string>(defaultAccountId || accounts[0]?.id || "");
   const [loading, setLoading] = useState(false);
-  const [dialogs, setDialogs] = useState<Dialog[]>([]);
+  const [dialogs, setDialogs] = useState<DialogItem[]>([]);
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [search, setSearch] = useState("");
   const [filter, setFilter] = useState<"all" | "user" | "group" | "channel">("all");
