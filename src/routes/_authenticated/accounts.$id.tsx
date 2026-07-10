@@ -211,6 +211,7 @@ function AccountViewerPage() {
       photoDataUrl: null,
       reactions: [],
       views: null,
+      replyMarkup: null,
     };
     qc.setQueryData(["tg-history", accountId, activePeer], (prev: any) => ({
       ...(prev ?? { messages: [], hasMore: false, oldestId: null }),
