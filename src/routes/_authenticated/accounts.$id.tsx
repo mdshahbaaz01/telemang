@@ -64,6 +64,7 @@ type InlineButton =
   | { kind: "webview"; text: string; url?: string }
   | { kind: "game"; text: string }
   | { kind: "buy"; text: string }
+  | { kind: "reply"; text: string }
   | { kind: "other"; text: string; className: string };
 
 const QUICK_REACTIONS = ["👍", "❤️", "🔥", "🎉", "😂", "😢", "🙏", "👎"];
@@ -275,6 +276,20 @@ function AccountViewerPage() {
       const url = (btn as any).url as string | undefined;
       if (!url) return toast.error("Button has no URL");
       setConfirmUrl(url);
+      return;
+    }
+    if (btn.kind === "reply") {
+      // Persistent reply-keyboard button — Telegram sends the label as a message.
+      setPressingKey(key);
+      try {
+        await sendMessageFn({ data: { accountId, peerKey: activePeer, text: btn.text } });
+        qc.invalidateQueries({ queryKey: ["tg-history", accountId, activePeer] });
+        qc.invalidateQueries({ queryKey: ["tg-dialogs", accountId] });
+      } catch (e) {
+        toast.error((e as Error).message);
+      } finally {
+        setPressingKey(null);
+      }
       return;
     }
     if (btn.kind !== "callback") {
@@ -612,7 +627,8 @@ function MessageRow({
                     btn.kind === "callback" ||
                     btn.kind === "url" ||
                     btn.kind === "urlAuth" ||
-                    btn.kind === "webview";
+                    btn.kind === "webview" ||
+                    btn.kind === "reply";
                   const title =
                     btn.kind === "url" || btn.kind === "urlAuth"
                       ? `Opens: ${(btn as any).url}`
@@ -620,6 +636,8 @@ function MessageRow({
                         ? "Callback button"
                         : btn.kind === "webview"
                           ? "Opens a Telegram WebApp (limited)"
+                          : btn.kind === "reply"
+                            ? `Sends: ${btn.text}`
                           : `${btn.kind} button (not supported)`;
                   return (
                     <button

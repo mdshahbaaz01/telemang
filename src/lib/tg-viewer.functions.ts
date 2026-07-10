@@ -70,6 +70,7 @@ export type SerializedInlineButton =
   | { kind: "webview"; text: string; url?: string }
   | { kind: "game"; text: string }
   | { kind: "buy"; text: string }
+  | { kind: "reply"; text: string }
   | { kind: "other"; text: string; className: string };
 
 function serializeButton(btn: any): SerializedInlineButton {
@@ -88,13 +89,16 @@ function serializeButton(btn: any): SerializedInlineButton {
     return { kind: "webview", text, url: btn?.url ? String(btn.url) : undefined };
   if (cn === "KeyboardButtonGame") return { kind: "game", text };
   if (cn === "KeyboardButtonBuy") return { kind: "buy", text };
+  if (cn === "KeyboardButton") return { kind: "reply", text };
   return { kind: "other", text, className: cn };
 }
 
 function serializeReplyMarkup(markup: any): SerializedInlineButton[][] | null {
   if (!markup) return null;
   const cn = String(markup?.className ?? "");
-  if (!cn.includes("ReplyInlineMarkup")) return null;
+  // Support both inline keyboards attached to a message and persistent
+  // reply keyboards (rendered under the composer in Telegram).
+  if (!cn.includes("ReplyInlineMarkup") && !cn.includes("ReplyKeyboardMarkup")) return null;
   const rows = Array.isArray(markup.rows) ? markup.rows : [];
   const out = rows
     .map((row: any) => (Array.isArray(row?.buttons) ? row.buttons.map(serializeButton) : []))
