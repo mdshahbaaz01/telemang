@@ -61,6 +61,47 @@ function messagePreview(msg: any): string {
   return "";
 }
 
+// ── inline-button serialization (mirrors broadcast-replies.functions) ────
+export type SerializedInlineButton =
+  | { kind: "callback"; text: string; data: string /* base64 */; requiresPassword?: boolean }
+  | { kind: "url"; text: string; url: string }
+  | { kind: "urlAuth"; text: string; url: string; buttonId?: number }
+  | { kind: "switchInline"; text: string; query: string; samePeer: boolean }
+  | { kind: "webview"; text: string; url?: string }
+  | { kind: "game"; text: string }
+  | { kind: "buy"; text: string }
+  | { kind: "other"; text: string; className: string };
+
+function serializeButton(btn: any): SerializedInlineButton {
+  const cn = String(btn?.className ?? "");
+  const text = String(btn?.text ?? "");
+  if (cn.includes("Callback")) {
+    const data = btn?.data ? Buffer.from(btn.data).toString("base64") : "";
+    return { kind: "callback", text, data, requiresPassword: !!btn?.requiresPassword };
+  }
+  if (cn === "KeyboardButtonUrl") return { kind: "url", text, url: String(btn?.url ?? "") };
+  if (cn === "KeyboardButtonUrlAuth" || cn === "InputKeyboardButtonUrlAuth")
+    return { kind: "urlAuth", text, url: String(btn?.url ?? ""), buttonId: btn?.buttonId };
+  if (cn === "KeyboardButtonSwitchInline")
+    return { kind: "switchInline", text, query: String(btn?.query ?? ""), samePeer: !!btn?.samePeer };
+  if (cn === "KeyboardButtonWebView" || cn === "KeyboardButtonSimpleWebView")
+    return { kind: "webview", text, url: btn?.url ? String(btn.url) : undefined };
+  if (cn === "KeyboardButtonGame") return { kind: "game", text };
+  if (cn === "KeyboardButtonBuy") return { kind: "buy", text };
+  return { kind: "other", text, className: cn };
+}
+
+function serializeReplyMarkup(markup: any): SerializedInlineButton[][] | null {
+  if (!markup) return null;
+  const cn = String(markup?.className ?? "");
+  if (!cn.includes("ReplyInlineMarkup")) return null;
+  const rows = Array.isArray(markup.rows) ? markup.rows : [];
+  const out = rows
+    .map((row: any) => (Array.isArray(row?.buttons) ? row.buttons.map(serializeButton) : []))
+    .filter((r: SerializedInlineButton[]) => r.length > 0);
+  return out.length ? out : null;
+}
+
 async function serializeMessage(msg: any, meId: string): Promise<any> {
   const fromRaw = msg.fromId ?? msg.peerId;
   const fromKey = normalizePeerKey(fromRaw);
@@ -94,6 +135,7 @@ async function serializeMessage(msg: any, meId: string): Promise<any> {
     photoDataUrl,
     reactions,
     views: msg.views ?? null,
+    replyMarkup: serializeReplyMarkup(msg.replyMarkup),
   };
 }
 
@@ -322,6 +364,65 @@ export const deleteMessagesAs = createServerFn({ method: "POST" })
       const peer = await resolvePeerFromKey(client, Api, data.peerKey);
       await client.deleteMessages(peer, data.ids, { revoke: data.revoke });
       return { ok: true };
+    } finally {
+      await client.disconnect().catch(() => {});
+    }
+  });
+
+// ── pressInlineButtonAs (mini viewer) ───────────────────────────────────
+export const pressInlineButtonAs = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((d: unknown) =>
+    z
+      .object({
+        accountId: z.string().uuid(),
+        peerKey: z.string().min(3),
+        msgId: z.number().int().positive(),
+        data: z.string().min(1).max(700),
+      })
+      .parse(d),
+  )
+  .handler(async ({ data, context }) => {
+    await assertAdmin(context.supabase);
+    const { data: acct } = await context.supabase
+      .from("telegram_accounts")
+      .select("paused_until")
+      .eq("id", data.accountId)
+      .maybeSingle();
+    if (acct?.paused_until && new Date(acct.paused_until).getTime() > Date.now()) {
+      throw new Error("Account is paused (FloodWait). Try again later.");
+    }
+    const { openClientForAccount } = await import("./cleanup.server");
+    const { Api } = await import("telegram");
+    const client = await openClientForAccount(context.supabase, data.accountId);
+    try {
+      const peer = await resolvePeerFromKey(client, Api, data.peerKey);
+      const buf = Buffer.from(data.data, "base64");
+      try {
+        const res: any = await client.invoke(
+          new Api.messages.GetBotCallbackAnswer({ peer, msgId: data.msgId, data: buf }),
+        );
+        return {
+          message: res?.message ? String(res.message) : "",
+          alert: !!res?.alert,
+          url: res?.url ? String(res.url) : null,
+        };
+      } catch (e) {
+        const em = (e as Error).message || String(e);
+        const m = em.match(/FLOOD_WAIT_(\d+)/i);
+        if (m) {
+          const secs = Number(m[1]);
+          await context.supabase
+            .from("telegram_accounts")
+            .update({
+              paused_until: new Date(Date.now() + secs * 1000).toISOString(),
+              last_error: `FloodWait ${secs}s`,
+            })
+            .eq("id", data.accountId);
+          throw new Error(`FloodWait ${secs}s — account paused`);
+        }
+        throw new Error(em);
+      }
     } finally {
       await client.disconnect().catch(() => {});
     }
