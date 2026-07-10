@@ -2685,6 +2685,28 @@ function BroadcastRepliesDialog({
   const [busy, setBusy] = useState<string | null>(null); // key of button being clicked
   const [confirmUrl, setConfirmUrl] = useState<string | null>(null);
   const [autoRefresh, setAutoRefresh] = useState(true);
+  // Per-pair bot response log + show/hide state
+  const [botLogs, setBotLogs] = useState<
+    Record<string, { time: number; text: string; alert: boolean }[]>
+  >({});
+  const [logsOpen, setLogsOpen] = useState<Record<string, boolean>>({});
+
+  const mergeFresh = (
+    prev: ReplyPair[],
+    accountId: string,
+    target: string,
+    fresh: ReplyMsg[],
+  ) =>
+    prev.map((row) => {
+      if (row.accountId !== accountId || row.target !== target) return row;
+      const byId = new Map<number, ReplyMsg>();
+      for (const m of row.messages) byId.set(m.id, m);
+      for (const m of fresh) byId.set(m.id, m); // fresh overrides existing (edits/new buttons)
+      return {
+        ...row,
+        messages: [...byId.values()].sort((a, b) => a.id - b.id),
+      };
+    });
 
   const load = async () => {
     setLoading(true);
@@ -2713,30 +2735,19 @@ function BroadcastRepliesDialog({
       // Refresh each pair sequentially to avoid opening many connections at once.
       for (const p of pairs) {
         try {
-          const lastId = p.messages.reduce((m, x) => Math.max(m, x.id), 0);
           const res = await refresh({
             data: {
               accountId: p.accountId,
               target: p.target,
               sinceMs: runCreatedAt - 5000,
-              sinceMsgId: lastId,
+              // sinceMsgId=0 → re-fetch latest 12 so edits + new inline buttons
+              // on existing messages get picked up.
+              sinceMsgId: 0,
             },
           });
           const fresh = res.messages as ReplyMsg[];
           if (fresh.length) {
-            setPairs((prev) =>
-              prev.map((row) =>
-                row.accountId === p.accountId && row.target === p.target
-                  ? {
-                      ...row,
-                      messages: [
-                        ...row.messages,
-                        ...fresh.filter((m) => !row.messages.some((x) => x.id === m.id)),
-                      ].sort((a, b) => a.id - b.id),
-                    }
-                  : row,
-              ),
-            );
+            setPairs((prev) => mergeFresh(prev, p.accountId, p.target, fresh));
           }
         } catch {
           /* ignore transient refresh errors */
@@ -2761,6 +2772,7 @@ function BroadcastRepliesDialog({
       return;
     }
     setBusy(key);
+    const pairKey = `${pair.accountId}:${pair.target}`;
     try {
       const res = await press({
         data: {
@@ -2771,38 +2783,39 @@ function BroadcastRepliesDialog({
         },
       });
       if (res.message) {
-        if (res.alert) toast.warning(res.message);
-        else toast.success(res.message);
+        // Log to per-pair Bot responses section and reveal it.
+        setBotLogs((prev) => ({
+          ...prev,
+          [pairKey]: [
+            ...(prev[pairKey] ?? []),
+            { time: Date.now(), text: res.message, alert: !!res.alert },
+          ],
+        }));
+        setLogsOpen((prev) => ({ ...prev, [pairKey]: true }));
       } else if (res.url) {
         setConfirmUrl(res.url);
       } else {
-        toast.success("Sent");
+        setBotLogs((prev) => ({
+          ...prev,
+          [pairKey]: [
+            ...(prev[pairKey] ?? []),
+            { time: Date.now(), text: "(no response)", alert: false },
+          ],
+        }));
+        setLogsOpen((prev) => ({ ...prev, [pairKey]: true }));
       }
-      // Pull fresh messages for this pair immediately.
-      const lastId = pair.messages.reduce((m, x) => Math.max(m, x.id), 0);
+      // Pull fresh messages for this pair immediately (re-fetch latest to catch edits).
       const rf = await refresh({
         data: {
           accountId: pair.accountId,
           target: pair.target,
           sinceMs: runCreatedAt - 5000,
-          sinceMsgId: lastId,
+          sinceMsgId: 0,
         },
       });
       const fresh = rf.messages as ReplyMsg[];
       if (fresh.length) {
-        setPairs((prev) =>
-          prev.map((row) =>
-            row.accountId === pair.accountId && row.target === pair.target
-              ? {
-                  ...row,
-                  messages: [
-                    ...row.messages,
-                    ...fresh.filter((m) => !row.messages.some((x) => x.id === m.id)),
-                  ].sort((a, b) => a.id - b.id),
-                }
-              : row,
-          ),
-        );
+        setPairs((prev) => mergeFresh(prev, pair.accountId, pair.target, fresh));
       }
     } catch (e) {
       toast.error((e as Error).message);
@@ -2864,7 +2877,54 @@ function BroadcastRepliesDialog({
                   <span className="ml-auto text-xs text-muted-foreground">
                     {p.messages.length} reply{p.messages.length === 1 ? "" : "ies"}
                   </span>
+                  {(botLogs[`${p.accountId}:${p.target}`]?.length ?? 0) > 0 && (
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      className="h-6 px-2 text-[10px]"
+                      onClick={() =>
+                        setLogsOpen((prev) => ({
+                          ...prev,
+                          [`${p.accountId}:${p.target}`]: !prev[`${p.accountId}:${p.target}`],
+                        }))
+                      }
+                    >
+                      {logsOpen[`${p.accountId}:${p.target}`] ? "Hide" : "Show"} bot responses (
+                      {botLogs[`${p.accountId}:${p.target}`]?.length ?? 0})
+                    </Button>
+                  )}
                 </div>
+                {logsOpen[`${p.accountId}:${p.target}`] &&
+                  (botLogs[`${p.accountId}:${p.target}`]?.length ?? 0) > 0 && (
+                    <div className="mb-2 rounded-md border border-dashed border-primary/30 bg-primary/5 p-2">
+                      <div className="mb-1 flex items-center justify-between">
+                        <span className="text-[10px] uppercase tracking-wide text-muted-foreground">
+                          Bot responses
+                        </span>
+                        <button
+                          className="text-[10px] text-muted-foreground hover:underline"
+                          onClick={() =>
+                            setBotLogs((prev) => ({
+                              ...prev,
+                              [`${p.accountId}:${p.target}`]: [],
+                            }))
+                          }
+                        >
+                          Clear
+                        </button>
+                      </div>
+                      <div className="space-y-1">
+                        {botLogs[`${p.accountId}:${p.target}`].map((l, i) => (
+                          <div key={i} className="flex items-start gap-2 text-xs">
+                            <span className="mt-0.5 text-[10px] text-muted-foreground">
+                              {new Date(l.time).toLocaleTimeString()}
+                            </span>
+                            <span className={l.alert ? "text-amber-600" : ""}>{l.text}</span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
                 {p.error && (
                   <p className="mb-2 text-xs text-destructive">
                     <AlertTriangle className="mr-1 inline h-3 w-3" />
