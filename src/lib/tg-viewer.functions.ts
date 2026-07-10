@@ -293,11 +293,25 @@ export const sendMessageAs = createServerFn({ method: "POST" })
     const client = await openClientForAccount(context.supabase, data.accountId);
     try {
       const peer = await resolvePeerFromKey(client, Api, data.peerKey);
-      const sent: any = await client.sendMessage(peer, {
-        message: data.text,
-        replyTo: data.replyToMsgId,
-      });
-      return { id: Number(sent.id), date: sent.date ? Number(sent.date) * 1000 : Date.now() };
+      try {
+        const sent: any = await client.sendMessage(peer, {
+          message: data.text,
+          replyTo: data.replyToMsgId,
+        });
+        return { id: Number(sent.id), date: sent.date ? Number(sent.date) * 1000 : Date.now() };
+      } catch (e: any) {
+        const msg = String(e?.errorMessage || e?.message || e);
+        if (msg.includes("CHAT_ADMIN_REQUIRED")) {
+          throw new Error("You can't send messages here — this chat requires admin rights (read-only channel or restricted group).");
+        }
+        if (msg.includes("CHAT_WRITE_FORBIDDEN") || msg.includes("USER_BANNED_IN_CHANNEL")) {
+          throw new Error("This account isn't allowed to post in this chat.");
+        }
+        if (msg.includes("SLOWMODE_WAIT")) {
+          throw new Error("Slow mode is active — wait before sending again.");
+        }
+        throw e;
+      }
     } finally {
       await client.disconnect().catch(() => {});
     }
