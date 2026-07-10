@@ -445,3 +445,95 @@ export const pressInlineButtonAs = createServerFn({ method: "POST" })
       await client.disconnect().catch(() => {});
     }
   });
+
+// ── openMiniApp — resolves a Telegram Mini App URL for iframe embed ─────
+export const openMiniApp = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((d: unknown) =>
+    z
+      .object({
+        accountId: z.string().uuid(),
+        // Chat where the message/button lives (also the bot chat when 1-1)
+        peerKey: z.string().min(3),
+        // Bot peer key. When omitted, uses peerKey (works for direct bot chats)
+        botKey: z.string().min(3).optional(),
+        // URL from the KeyboardButtonWebView / SimpleWebView. Optional for menu-button.
+        url: z.string().url().max(2048).optional(),
+        // Text label of the button (RequestWebView requires it when using inline button)
+        buttonText: z.string().max(120).optional(),
+        // If true → use RequestSimpleWebView (no peer binding); default false
+        simple: z.boolean().default(false),
+        // Theme hints forwarded as themeParams
+        themeParams: z
+          .object({
+            bg_color: z.string().optional(),
+            text_color: z.string().optional(),
+            hint_color: z.string().optional(),
+            link_color: z.string().optional(),
+            button_color: z.string().optional(),
+            button_text_color: z.string().optional(),
+          })
+          .partial()
+          .optional(),
+      })
+      .parse(d),
+  )
+  .handler(async ({ data, context }) => {
+    await assertAdmin(context.supabase);
+    const { openClientForAccount } = await import("./cleanup.server");
+    const { Api } = await import("telegram");
+    const client = await openClientForAccount(context.supabase, data.accountId);
+    try {
+      const peer = await resolvePeerFromKey(client, Api, data.peerKey);
+      const bot = data.botKey
+        ? await resolvePeerFromKey(client, Api, data.botKey)
+        : peer;
+      const themeJson = JSON.stringify(
+        data.themeParams ?? {
+          bg_color: "#ffffff",
+          text_color: "#000000",
+          hint_color: "#707579",
+          link_color: "#3390ec",
+          button_color: "#3390ec",
+          button_text_color: "#ffffff",
+        },
+      );
+      const themeParams = new Api.DataJSON({ data: themeJson });
+      try {
+        const res: any = data.simple
+          ? await client.invoke(
+              new Api.messages.RequestSimpleWebView({
+                bot,
+                url: data.url,
+                platform: "web",
+                themeParams,
+              } as any),
+            )
+          : await client.invoke(
+              new Api.messages.RequestWebView({
+                peer,
+                bot,
+                url: data.url,
+                platform: "web",
+                themeParams,
+                fromBotMenu: !data.url,
+              } as any),
+            );
+        return {
+          url: String(res?.url ?? ""),
+          queryId: res?.queryId ? String(res.queryId) : null,
+        };
+      } catch (e) {
+        const em = (e as Error).message || String(e);
+        if (em.includes("BOT_INVALID"))
+          throw new Error("This chat isn't a bot — mini apps only work with bots.");
+        if (em.includes("URL_INVALID"))
+          throw new Error("The mini app URL is invalid.");
+        if (em.includes("BOT_WEBVIEW_DISABLED"))
+          throw new Error("This bot has no mini app enabled.");
+        throw new Error(em);
+      }
+    } finally {
+      await client.disconnect().catch(() => {});
+    }
+  });
