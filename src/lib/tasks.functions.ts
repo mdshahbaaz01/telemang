@@ -540,21 +540,28 @@ export const processNextJoin = createServerFn({ method: "POST" })
         let result: { status: "joined" | "requested"; message: string; note: string | null };
 
         if (inviteHash) {
-          const invite = await client.invoke(
-            new Api.messages.CheckChatInvite({ hash: inviteHash }),
-          );
-          if (invite.className === "ChatInviteAlready") {
-            result = { status: "joined", message: `Already joined ${item.target}`, note: null };
-          } else {
-            const requestNeeded = Boolean((invite as { requestNeeded?: boolean }).requestNeeded);
+          // Always attempt ImportChatInvite; CheckChatInvite can return
+          // ChatInviteAlready even when the account isn't actually a member
+          // (stale server state / previously left). USER_ALREADY_PARTICIPANT
+          // is caught below.
+          try {
             await client.invoke(new Api.messages.ImportChatInvite({ hash: inviteHash }));
-            result = requestNeeded
-              ? {
-                  status: "requested",
-                  message: `Join request sent for ${item.target}`,
-                  note: "waiting for channel approval",
-                }
-              : { status: "joined", message: `Joined ${item.target}`, note: null };
+            result = { status: "joined", message: `Joined ${item.target}`, note: null };
+          } catch (impErr) {
+            const impMsg = (impErr as { message?: string }).message || String(impErr);
+            if (
+              impMsg.includes("INVITE_REQUEST_SENT") ||
+              impMsg.includes("INVITE_REQUEST_ALREADY_SENT") ||
+              impMsg.includes("REQUEST_SENT")
+            ) {
+              result = {
+                status: "requested",
+                message: `Join request sent for ${item.target}`,
+                note: "waiting for channel approval",
+              };
+            } else {
+              throw impErr;
+            }
           }
         } else {
           await client.invoke(new Api.channels.JoinChannel({ channel: target }));
@@ -775,21 +782,24 @@ export const processBatchJoin = createServerFn({ method: "POST" })
         let result: { status: "joined" | "requested"; message: string; note: string | null };
 
         if (inviteHash) {
-          const invite = await client.invoke(
-            new Api.messages.CheckChatInvite({ hash: inviteHash }),
-          );
-          if (invite.className === "ChatInviteAlready") {
-            result = { status: "joined", message: `Already joined ${item.target}`, note: null };
-          } else {
-            const requestNeeded = Boolean((invite as { requestNeeded?: boolean }).requestNeeded);
+          try {
             await client.invoke(new Api.messages.ImportChatInvite({ hash: inviteHash }));
-            result = requestNeeded
-              ? {
-                  status: "requested",
-                  message: `Join request sent for ${item.target}`,
-                  note: "waiting for channel approval",
-                }
-              : { status: "joined", message: `Joined ${item.target}`, note: null };
+            result = { status: "joined", message: `Joined ${item.target}`, note: null };
+          } catch (impErr) {
+            const impMsg = (impErr as { message?: string }).message || String(impErr);
+            if (
+              impMsg.includes("INVITE_REQUEST_SENT") ||
+              impMsg.includes("INVITE_REQUEST_ALREADY_SENT") ||
+              impMsg.includes("REQUEST_SENT")
+            ) {
+              result = {
+                status: "requested",
+                message: `Join request sent for ${item.target}`,
+                note: "waiting for channel approval",
+              };
+            } else {
+              throw impErr;
+            }
           }
         } else {
           await client.invoke(new Api.channels.JoinChannel({ channel: target }));
