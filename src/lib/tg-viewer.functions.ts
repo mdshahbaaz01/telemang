@@ -93,17 +93,33 @@ function serializeButton(btn: any): SerializedInlineButton {
   return { kind: "other", text, className: cn };
 }
 
-function serializeReplyMarkup(markup: any): SerializedInlineButton[][] | null {
+export type SerializedReplyMarkup =
+  | { kind: "inline"; rows: SerializedInlineButton[][] }
+  | { kind: "keyboard"; rows: SerializedInlineButton[][]; oneTime: boolean; resize: boolean; placeholder?: string }
+  | { kind: "hide" }
+  | { kind: "forceReply"; placeholder?: string };
+
+function serializeReplyMarkup(markup: any): SerializedReplyMarkup | null {
   if (!markup) return null;
   const cn = String(markup?.className ?? "");
-  // Support both inline keyboards attached to a message and persistent
-  // reply keyboards (rendered under the composer in Telegram).
-  if (!cn.includes("ReplyInlineMarkup") && !cn.includes("ReplyKeyboardMarkup")) return null;
+  if (cn.includes("ReplyKeyboardHide")) return { kind: "hide" };
+  if (cn.includes("ReplyKeyboardForceReply"))
+    return { kind: "forceReply", placeholder: markup?.placeholder ? String(markup.placeholder) : undefined };
   const rows = Array.isArray(markup.rows) ? markup.rows : [];
-  const out = rows
+  const parsed = rows
     .map((row: any) => (Array.isArray(row?.buttons) ? row.buttons.map(serializeButton) : []))
     .filter((r: SerializedInlineButton[]) => r.length > 0);
-  return out.length ? out : null;
+  if (!parsed.length) return null;
+  if (cn.includes("ReplyKeyboardMarkup"))
+    return {
+      kind: "keyboard",
+      rows: parsed,
+      oneTime: !!markup?.singleUse,
+      resize: !!markup?.resize,
+      placeholder: markup?.placeholder ? String(markup.placeholder) : undefined,
+    };
+  if (cn.includes("ReplyInlineMarkup")) return { kind: "inline", rows: parsed };
+  return null;
 }
 
 async function serializeMessage(msg: any, meId: string): Promise<any> {
