@@ -1505,6 +1505,25 @@ function ActionsPageInner() {
                         }
                         placeholder="@username&#10;@mygroup&#10;https://t.me/channel"
                       />
+                      <div className="mt-2">
+                        <TargetsPicker
+                          accounts={accountList}
+                          defaultAccountId={row.accountId || broadcastSelectedIds[0] || allAccountIds[0]}
+                          onAdd={(picked) =>
+                            setRows((rs) =>
+                              rs.map((r) => {
+                                if (r.id !== row.id) return r;
+                                const existing = r.targets
+                                  .split(/\r?\n/)
+                                  .map((s) => s.trim())
+                                  .filter(Boolean);
+                                const merged = Array.from(new Set([...existing, ...picked]));
+                                return { ...r, targets: merged.join("\n") };
+                              }),
+                            )
+                          }
+                        />
+                      </div>
                     </div>
                     <MultiAttachmentField
                       files={row.files ?? []}
