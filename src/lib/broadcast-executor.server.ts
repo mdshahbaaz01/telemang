@@ -65,6 +65,32 @@ import { formatMessage } from "./message-format";
 
 async function resolveTargetEntity(client: any, Api: any, t: string) {
   const cleaned = t.trim().replace(/^https?:\/\/(t\.me|telegram\.me)\//i, "").replace(/^@/, "");
+  // Private invite links: t.me/+HASH or t.me/joinchat/HASH
+  const inviteMatch = cleaned.match(/^(?:joinchat\/)?\+?([A-Za-z0-9_-]{16,})$/);
+  if (cleaned.startsWith("+") || cleaned.startsWith("joinchat/")) {
+    const hash = inviteMatch ? inviteMatch[1] : cleaned.replace(/^\+/, "").replace(/^joinchat\//, "");
+    try {
+      const info: any = await client.invoke(new Api.messages.CheckChatInvite({ hash }));
+      // Already joined → info.chat exists
+      if (info?.chat) return info.chat;
+      // Not joined yet → import (join)
+      const upd: any = await client.invoke(new Api.messages.ImportChatInvite({ hash }));
+      const chat = upd?.chats?.[0];
+      if (chat) return chat;
+    } catch (e: any) {
+      const msg = String(e?.errorMessage || e?.message || e);
+      if (msg.includes("INVITE_HASH_EXPIRED") || msg.includes("INVITE_HASH_INVALID")) {
+        throw new Error(`Invite link expired or invalid: ${t}`);
+      }
+      if (msg.includes("USER_ALREADY_PARTICIPANT")) {
+        // Re-check to get the entity now that we're a member.
+        const info: any = await client.invoke(new Api.messages.CheckChatInvite({ hash }));
+        if (info?.chat) return info.chat;
+      }
+      throw e;
+    }
+    throw new Error(`Could not resolve invite link: ${t}`);
+  }
   if (/^c\/\d+/.test(cleaned)) {
     const raw = cleaned.split("/")[1];
     const { default: bigInt } = await import("big-integer");
