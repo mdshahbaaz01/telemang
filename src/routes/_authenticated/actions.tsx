@@ -2502,6 +2502,25 @@ function EditRunDialog({
                         setBRows((rs) => rs.map((r) => (r.id === row.id ? { ...r, targets: e.target.value } : r)))
                       }
                     />
+                    <div className="mt-2">
+                      <TargetsPicker
+                        accounts={accountList}
+                        defaultAccountId={row.accountId || undefined}
+                        onAdd={(picked) =>
+                          setBRows((rs) =>
+                            rs.map((r) => {
+                              if (r.id !== row.id) return r;
+                              const existing = r.targets
+                                .split(/\r?\n/)
+                                .map((s) => s.trim())
+                                .filter(Boolean);
+                              const merged = Array.from(new Set([...existing, ...picked]));
+                              return { ...r, targets: merged.join("\n") };
+                            }),
+                          )
+                        }
+                      />
+                    </div>
                   </div>
                 </div>
               ))}
