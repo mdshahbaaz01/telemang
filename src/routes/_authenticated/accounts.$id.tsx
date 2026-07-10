@@ -12,11 +12,13 @@ import {
   sendReactionAs,
   deleteMessagesAs,
   pressInlineButtonAs,
+  openMiniApp,
 } from "@/lib/tg-viewer.functions";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { ArrowLeft, Loader2, Send, Search, Reply, Trash2, Smile, RefreshCw, X, ExternalLink } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { MiniAppDrawer, type MiniAppRequest } from "@/components/MiniAppDrawer";
 
 const searchSchema = z.object({ peer: z.string().optional() });
 
@@ -269,11 +271,39 @@ function AccountViewerPage() {
   const [logsOpen, setLogsOpen] = useState<Record<string, boolean>>({});
   const [confirmUrl, setConfirmUrl] = useState<string | null>(null);
   const [pressingKey, setPressingKey] = useState<string | null>(null);
+  const [miniApp, setMiniApp] = useState<MiniAppRequest | null>(null);
+  const openMiniAppFn = useServerFn(openMiniApp);
+  const resolveMiniApp = useMemo(
+    () => (r: MiniAppRequest) =>
+      openMiniAppFn({
+        data: {
+          accountId: r.accountId,
+          peerKey: r.peerKey,
+          botKey: r.botKey,
+          url: r.url,
+          buttonText: r.buttonText,
+          simple: r.simple ?? false,
+        },
+      }),
+    [openMiniAppFn],
+  );
 
   const pressButton = async (msg: Message, btn: InlineButton, key: string) => {
     if (!activePeer) return;
     if (btn.kind === "url" || btn.kind === "urlAuth" || btn.kind === "webview") {
       const url = (btn as any).url as string | undefined;
+      if (btn.kind === "webview") {
+        setMiniApp({
+          accountId,
+          peerKey: activePeer,
+          botKey: msg.fromKey ?? activePeer,
+          url,
+          buttonText: btn.text,
+          simple: false,
+          title: btn.text,
+        });
+        return;
+      }
       if (!url) return toast.error("Button has no URL");
       setConfirmUrl(url);
       return;
@@ -557,6 +587,13 @@ function AccountViewerPage() {
           </div>
         </div>
       )}
+
+      <MiniAppDrawer
+        open={!!miniApp}
+        request={miniApp}
+        onClose={() => setMiniApp(null)}
+        resolver={resolveMiniApp}
+      />
     </div>
   );
 }
