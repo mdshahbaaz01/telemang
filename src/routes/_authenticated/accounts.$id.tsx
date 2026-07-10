@@ -587,6 +587,13 @@ function AccountViewerPage() {
           </div>
         </div>
       )}
+
+      <MiniAppDrawer
+        open={!!miniApp}
+        request={miniApp}
+        onClose={() => setMiniApp(null)}
+        resolver={resolveMiniApp}
+      />
     </div>
   );
 }
