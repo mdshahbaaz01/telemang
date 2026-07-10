@@ -99,7 +99,12 @@ async function fetchRepliesForPair(
   meId: string,
 ) {
   const peer = await resolveTargetEntity(client, Api, target);
-  const raw = await client.getMessages(peer, { limit: 12, minId: sinceMsgId || 0 });
+  // When sinceMsgId=0 we re-fetch the latest 12 so edits + newly-added inline
+  // buttons on existing messages show up. When >0 we only pull strictly newer.
+  const raw = await client.getMessages(peer, {
+    limit: 12,
+    ...(sinceMsgId ? { minId: sinceMsgId } : {}),
+  });
   const chronological = [...raw].reverse();
   const filtered = chronological.filter((m: any) => {
     const dateMs = Number(m?.date ?? 0) * 1000;
@@ -115,6 +120,7 @@ async function fetchRepliesForPair(
   return filtered.map((m: any) => ({
     id: Number(m.id),
     date: m.date ? Number(m.date) * 1000 : Date.now(),
+    editDate: m.editDate ? Number(m.editDate) * 1000 : null,
     senderId: m.fromId?.userId ? String(m.fromId.userId) : null,
     text: typeof m.message === "string" ? m.message : "",
     mediaKind: serializeMediaKind(m),
