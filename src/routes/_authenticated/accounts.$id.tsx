@@ -11,10 +11,11 @@ import {
   markRead,
   sendReactionAs,
   deleteMessagesAs,
+  pressInlineButtonAs,
 } from "@/lib/tg-viewer.functions";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { ArrowLeft, Loader2, Send, Search, Reply, Trash2, Smile, RefreshCw, X } from "lucide-react";
+import { ArrowLeft, Loader2, Send, Search, Reply, Trash2, Smile, RefreshCw, X, ExternalLink } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 const searchSchema = z.object({ peer: z.string().optional() });
@@ -52,7 +53,18 @@ type Message = {
   photoDataUrl: string | null;
   reactions: { emoji: string; count: number; chosen: boolean }[];
   views: number | null;
+  replyMarkup?: InlineButton[][] | null;
 };
+
+type InlineButton =
+  | { kind: "callback"; text: string; data: string; requiresPassword?: boolean }
+  | { kind: "url"; text: string; url: string }
+  | { kind: "urlAuth"; text: string; url: string; buttonId?: number }
+  | { kind: "switchInline"; text: string; query: string; samePeer: boolean }
+  | { kind: "webview"; text: string; url?: string }
+  | { kind: "game"; text: string }
+  | { kind: "buy"; text: string }
+  | { kind: "other"; text: string; className: string };
 
 const QUICK_REACTIONS = ["👍", "❤️", "🔥", "🎉", "😂", "😢", "🙏", "👎"];
 
