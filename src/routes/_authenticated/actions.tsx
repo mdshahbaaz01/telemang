@@ -31,6 +31,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/u
 import { useQueryClient } from "@tanstack/react-query";
 import { ChatIdChip } from "@/components/chat/ChatIdChip";
 import { MessagePreview } from "@/components/MessagePreview";
+import { TargetsPicker } from "@/components/TargetsPicker";
 
 export const Route = createFileRoute("/_authenticated/actions")({
   validateSearch: (s: Record<string, unknown>) =>
@@ -1504,6 +1505,25 @@ function ActionsPageInner() {
                         }
                         placeholder="@username&#10;@mygroup&#10;https://t.me/channel"
                       />
+                      <div className="mt-2">
+                        <TargetsPicker
+                          accounts={accountList}
+                          defaultAccountId={row.accountId || broadcastSelectedIds[0] || allAccountIds[0]}
+                          onAdd={(picked) =>
+                            setRows((rs) =>
+                              rs.map((r) => {
+                                if (r.id !== row.id) return r;
+                                const existing = r.targets
+                                  .split(/\r?\n/)
+                                  .map((s) => s.trim())
+                                  .filter(Boolean);
+                                const merged = Array.from(new Set([...existing, ...picked]));
+                                return { ...r, targets: merged.join("\n") };
+                              }),
+                            )
+                          }
+                        />
+                      </div>
                     </div>
                     <MultiAttachmentField
                       files={row.files ?? []}
@@ -2482,6 +2502,25 @@ function EditRunDialog({
                         setBRows((rs) => rs.map((r) => (r.id === row.id ? { ...r, targets: e.target.value } : r)))
                       }
                     />
+                    <div className="mt-2">
+                      <TargetsPicker
+                        accounts={accountList}
+                        defaultAccountId={row.accountId || undefined}
+                        onAdd={(picked) =>
+                          setBRows((rs) =>
+                            rs.map((r) => {
+                              if (r.id !== row.id) return r;
+                              const existing = r.targets
+                                .split(/\r?\n/)
+                                .map((s) => s.trim())
+                                .filter(Boolean);
+                              const merged = Array.from(new Set([...existing, ...picked]));
+                              return { ...r, targets: merged.join("\n") };
+                            }),
+                          )
+                        }
+                      />
+                    </div>
                   </div>
                 </div>
               ))}
