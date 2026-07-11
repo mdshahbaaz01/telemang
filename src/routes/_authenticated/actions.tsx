@@ -628,6 +628,7 @@ function ActionsPageInner() {
           accountIds: runAccountIds,
           minDelay,
           maxDelay,
+          concurrency,
           op,
         }),
         signal: ac.signal,
