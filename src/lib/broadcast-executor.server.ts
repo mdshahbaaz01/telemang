@@ -322,8 +322,10 @@ export async function executeReply(
   let fail = 0;
   const targetLabel = `${input.source.chat}/${input.source.msgId}`;
 
-  await Promise.all(
-    Array.from(byAccount.entries()).map(async ([accountId, rows]) => {
+  const meta = await loadAccountMeta(supabase, Array.from(byAccount.keys()));
+  const concurrency = Math.max(1, Math.min(20, input.concurrency ?? 5));
+
+  await runWithLimit(Array.from(byAccount.entries()), concurrency, async ([accountId, rows]) => {
       let client;
       try {
         client = await openClientForAccount(supabase, accountId);
@@ -350,6 +352,8 @@ export async function executeReply(
           topMsgId = dt.msgId;
           await ensureJoined(client, Api, replyPeer);
         }
+        const am = meta.get(accountId) ?? { signature: null, name: "" };
+        let idx = 0;
         for (const row of rows) {
           try {
             const rowAtts = (row.attachments && row.attachments.length > 0
@@ -358,8 +362,9 @@ export async function executeReply(
                 ? [row.attachment]
                 : []) as Attachment[];
             const attDatas = rowAtts.length ? await Promise.all(rowAtts.map((a) => loadAttachment(a))) : [];
+            const vars = varsFromEntity(replyPeer, idx, am.name);
             if (attDatas.length > 1) {
-              const formatted = formatMessage(row.message, row.format);
+              const formatted = formatMessage(row.message, row.format, { vars, signature: am.signature });
               await client.sendFile(replyPeer, {
                 file: attDatas.map((a) => new CustomFile(a.filename, a.buf.length, a.filename, a.buf)),
                 caption: formatted.message || undefined,
@@ -369,7 +374,7 @@ export async function executeReply(
               });
             } else if (attDatas.length === 1) {
               const attData = attDatas[0];
-              const formatted = formatMessage(row.message, row.format);
+              const formatted = formatMessage(row.message, row.format, { vars, signature: am.signature });
               await client.sendFile(replyPeer, {
                 file: new CustomFile(attData.filename, attData.buf.length, attData.filename, attData.buf),
                 caption: formatted.message || undefined,
@@ -380,7 +385,7 @@ export async function executeReply(
               });
             } else {
               await client.sendMessage(replyPeer, {
-                ...formatMessage(row.message, row.format),
+                ...formatMessage(row.message, row.format, { vars, signature: am.signature }),
                 replyTo: replyToId,
                 ...(topMsgId ? { topMsgId } : {}),
               });
@@ -392,6 +397,7 @@ export async function executeReply(
             push({ accountId, target: targetLabel, level: "error", message: errorText(e) });
           }
           await new Promise((r) => setTimeout(r, jitter(input.minDelay, input.maxDelay)));
+          idx++;
         }
       } catch (e) {
         fail += rows.length;
@@ -399,8 +405,7 @@ export async function executeReply(
       } finally {
         await client.disconnect().catch(() => {});
       }
-    }),
-  );
+  });
 
   return { ok, fail, logs };
 }
@@ -422,8 +427,8 @@ export async function executeForward(
   let ok = 0;
   let fail = 0;
 
-  await Promise.all(
-    input.accountIds.map(async (accountId) => {
+  const concurrency = Math.max(1, Math.min(20, input.concurrency ?? 5));
+  await runWithLimit(input.accountIds, concurrency, async (accountId) => {
       let client;
       try {
         client = await openClientForAccount(supabase, accountId);
@@ -460,8 +465,7 @@ export async function executeForward(
       } finally {
         await client.disconnect().catch(() => {});
       }
-    }),
-  );
+  });
 
   return { ok, fail, logs };
 }
