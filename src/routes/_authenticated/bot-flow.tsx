@@ -12,7 +12,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { toast } from "sonner";
-import { Play, Square, ArrowLeft, ExternalLink, Loader2, RefreshCw, X, MessageSquare } from "lucide-react";
+import { Play, Square, ArrowLeft, Loader2, RefreshCw, X, MessageSquare } from "lucide-react";
 import { AccountIdPaste } from "@/components/AccountIdPaste";
 
 export const Route = createFileRoute("/_authenticated/bot-flow")({
@@ -362,15 +362,6 @@ function BotFlowPage() {
                               @{parsed.username}
                             </div>
                           </div>
-                          <a
-                            href={src}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="rounded p-1 hover:bg-muted"
-                            title="Open in new tab"
-                          >
-                            <ExternalLink className="h-3.5 w-3.5" />
-                          </a>
                           <button
                             type="button"
                             className="rounded p-1 hover:bg-muted"
@@ -476,17 +467,6 @@ function BotFlowPage() {
                                 : ""}
                         </div>
                       </div>
-                      {r.url && (
-                        <a
-                          href={r.url}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="rounded p-1 hover:bg-muted"
-                          title="Open in new tab"
-                        >
-                          <ExternalLink className="h-3.5 w-3.5" />
-                        </a>
-                      )}
                       <button
                         type="button"
                         className="inline-flex items-center gap-1 rounded border border-border px-2 py-1 text-[11px] hover:bg-muted disabled:opacity-50"
@@ -602,7 +582,7 @@ function MiniAppFrame({ url, title, accountId }: { url: string; title: string; a
         {...({ credentialless: "true" } as any)}
         className="h-full w-full border-0"
         allow="clipboard-read; clipboard-write; camera; microphone; geolocation; payment"
-        sandbox="allow-scripts allow-same-origin allow-forms allow-popups allow-popups-to-escape-sandbox allow-modals allow-storage-access-by-user-activation"
+        sandbox="allow-scripts allow-same-origin allow-forms allow-modals allow-storage-access-by-user-activation"
         referrerPolicy="no-referrer"
       />
       {overlay && (

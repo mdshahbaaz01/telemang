@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { X, ExternalLink, Loader2, RefreshCw } from "lucide-react";
+import { X, Loader2, RefreshCw } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useTelegramWebviewBridge } from "@/lib/telegram-webview-bridge";
 import { proxifyMiniAppUrl } from "@/lib/miniapp-proxy-url";
@@ -83,17 +83,6 @@ export function MiniAppDrawer({
             </div>
           </div>
           {resolvedUrl && (
-            <a
-              href={resolvedUrl}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="rounded p-1 hover:bg-muted"
-              title="Open in new tab"
-            >
-              <ExternalLink className="h-4 w-4" />
-            </a>
-          )}
-          {resolvedUrl && (
             <Button
               type="button"
               variant="outline"
@@ -133,7 +122,7 @@ export function MiniAppDrawer({
               {...({ credentialless: "true" } as any)}
               className="h-full w-full border-0"
               allow="clipboard-read; clipboard-write; camera; microphone; geolocation; payment"
-              sandbox="allow-scripts allow-same-origin allow-forms allow-popups allow-popups-to-escape-sandbox allow-modals allow-storage-access-by-user-activation"
+              sandbox="allow-scripts allow-same-origin allow-forms allow-modals allow-storage-access-by-user-activation"
               referrerPolicy="no-referrer"
               onError={() =>
                 setError(
