@@ -401,6 +401,14 @@ function ActionsPageInner() {
   const loadPollFn = useServerFn(loadPoll);
   const [minDelay, setMinDelay] = useState(1);
   const [maxDelay, setMaxDelay] = useState(2);
+  const [concurrency, setConcurrency] = useState<number>(() => {
+    if (typeof window === "undefined") return 5;
+    const v = Number(window.localStorage.getItem("tmpro:concurrency") || 5);
+    return Number.isFinite(v) && v >= 1 && v <= 50 ? v : 5;
+  });
+  useEffect(() => {
+    try { window.localStorage.setItem("tmpro:concurrency", String(concurrency)); } catch {}
+  }, [concurrency]);
   const [rows, setRows] = useState<BroadcastRow[]>([
     { id: "broadcast-row-1", message: "", targets: "" },
   ]);
