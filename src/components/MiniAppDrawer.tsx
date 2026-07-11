@@ -1,6 +1,7 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { X, ExternalLink, Loader2, AlertTriangle } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { useTelegramWebviewBridge } from "@/lib/telegram-webview-bridge";
 
 export type MiniAppRequest = {
   accountId: string;
@@ -26,6 +27,8 @@ export function MiniAppDrawer({
   const [loading, setLoading] = useState(false);
   const [resolvedUrl, setResolvedUrl] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const iframeRef = useRef<HTMLIFrameElement | null>(null);
+  useTelegramWebviewBridge(iframeRef);
 
   useEffect(() => {
     if (!open || !request) {
@@ -105,6 +108,7 @@ export function MiniAppDrawer({
           {resolvedUrl && !error && (
             <iframe
               key={resolvedUrl}
+              ref={iframeRef}
               src={resolvedUrl}
               title={request?.buttonText || "Telegram Mini App"}
               className="h-full w-full border-0"
