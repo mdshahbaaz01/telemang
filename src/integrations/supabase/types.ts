@@ -278,6 +278,39 @@ export type Database = {
         }
         Relationships: []
       }
+      message_templates: {
+        Row: {
+          attachments: Json
+          body: string
+          created_at: string
+          format: string
+          id: string
+          name: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          attachments?: Json
+          body?: string
+          created_at?: string
+          format?: string
+          id?: string
+          name: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          attachments?: Json
+          body?: string
+          created_at?: string
+          format?: string
+          id?: string
+          name?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       notification_logs: {
         Row: {
           body: string
@@ -528,6 +561,7 @@ export type Database = {
           paused_until: string | null
           phone: string
           session_enc: string | null
+          signature: string | null
           status: string
           telegram_user_id: number | null
           updated_at: string
@@ -545,6 +579,7 @@ export type Database = {
           paused_until?: string | null
           phone: string
           session_enc?: string | null
+          signature?: string | null
           status?: string
           telegram_user_id?: number | null
           updated_at?: string
@@ -562,6 +597,7 @@ export type Database = {
           paused_until?: string | null
           phone?: string
           session_enc?: string | null
+          signature?: string | null
           status?: string
           telegram_user_id?: number | null
           updated_at?: string
