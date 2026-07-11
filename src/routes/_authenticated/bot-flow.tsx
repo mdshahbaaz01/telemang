@@ -226,6 +226,29 @@ function BotFlowPage() {
     setMiniRuns((prev) => prev.filter((r) => r.accountId !== accountId));
   const clearMini = () => setMiniRuns([]);
 
+  // ─── Direct verification link runner ───────────────────────────────
+  const [verifyLink, setVerifyLink] = useState("");
+  const [verifyAccountId, setVerifyAccountId] = useState("");
+  const [verifyNonce, setVerifyNonce] = useState(0);
+
+  const normalizedVerifyLink = useMemo(() => {
+    const raw = verifyLink.trim();
+    if (!raw) return "";
+    if (/^https?:\/\//i.test(raw)) return raw;
+    return `https://${raw}`;
+  }, [verifyLink]);
+
+  const openVerification = () => {
+    if (!normalizedVerifyLink) return toast.error("Paste the verification link");
+    if (!verifyAccountId) return toast.error("Select one account");
+    try {
+      new URL(normalizedVerifyLink);
+      setVerifyNonce((n) => n + 1);
+    } catch {
+      toast.error("Invalid verification URL");
+    }
+  };
+
   // ─── Per-account inline chat boxes for the refer bot ──────────────
   const [chatOpen, setChatOpen] = useState<string[]>([]);
   const openChats = () => {
@@ -502,6 +525,85 @@ function BotFlowPage() {
                   </div>
                 );
               })}
+            </div>
+          )}
+        </section>
+
+        <section className="rounded-lg border border-border bg-card p-4 space-y-4">
+          <h2 className="text-lg font-medium">Verification Link Runner</h2>
+          <p className="text-xs text-muted-foreground">
+            Paste the direct mini-app verification URL and open it with one account identity.
+          </p>
+
+          <div className="grid gap-3 md:grid-cols-[1fr_260px]">
+            <div>
+              <Label>Verification URL</Label>
+              <Input
+                value={verifyLink}
+                onChange={(e) => setVerifyLink(e.target.value)}
+                placeholder="https://bots.princewallet.in/verify/Shadow_pointbot#tgWebAppData=..."
+              />
+            </div>
+            <div>
+              <Label>Account</Label>
+              <select
+                value={verifyAccountId}
+                onChange={(e) => setVerifyAccountId(e.target.value)}
+                className="h-10 w-full rounded-md border border-input bg-background px-3 text-sm"
+              >
+                <option value="">Select account</option>
+                {accountList.map((a) => (
+                  <option key={a.id} value={a.id}>
+                    {a.first_name || a.username || a.phone || a.id.slice(0, 8)}
+                  </option>
+                ))}
+              </select>
+            </div>
+          </div>
+
+          <div className="flex gap-2">
+            <Button onClick={openVerification} disabled={!normalizedVerifyLink || !verifyAccountId}>
+              <Play className="mr-1 h-4 w-4" /> Open verification
+            </Button>
+            {verifyNonce > 0 && (
+              <Button variant="outline" onClick={() => setVerifyNonce((n) => n + 1)}>
+                <RefreshCw className="mr-1 h-4 w-4" /> Refresh
+              </Button>
+            )}
+          </div>
+
+          {verifyNonce > 0 && verifyAccountId && normalizedVerifyLink && (
+            <div className="flex h-[680px] flex-col overflow-hidden rounded-md border border-border bg-background">
+              <div className="flex items-center gap-2 border-b px-2 py-1.5">
+                <div className="min-w-0 flex-1 text-xs">
+                  <div className="truncate font-semibold">
+                    {accountList.find((a) => a.id === verifyAccountId)?.first_name ||
+                      accountList.find((a) => a.id === verifyAccountId)?.username ||
+                      accountList.find((a) => a.id === verifyAccountId)?.phone ||
+                      verifyAccountId.slice(0, 8)}
+                  </div>
+                  <div className="truncate text-[10px] text-muted-foreground">
+                    {new URL(normalizedVerifyLink).host}
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  className="rounded p-1 hover:bg-muted"
+                  title="Close"
+                  onClick={() => setVerifyNonce(0)}
+                >
+                  <X className="h-3.5 w-3.5" />
+                </button>
+              </div>
+              <iframe
+                key={`${verifyAccountId}-${verifyNonce}`}
+                src={proxifyMiniAppUrl(normalizedVerifyLink, verifyAccountId)}
+                title="Verification runner"
+                className="h-full w-full flex-1 border-0"
+                allow="clipboard-read; clipboard-write; camera; microphone; geolocation; payment"
+                sandbox="allow-scripts allow-same-origin allow-forms allow-modals allow-storage-access-by-user-activation"
+                referrerPolicy="no-referrer"
+              />
             </div>
           )}
         </section>
