@@ -11,7 +11,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { toast } from "sonner";
-import { Play, Square, ArrowLeft, ExternalLink, Loader2, RefreshCw, X } from "lucide-react";
+import { Play, Square, ArrowLeft, ExternalLink, Loader2, RefreshCw, X, MessageSquare } from "lucide-react";
 import { AccountIdPaste } from "@/components/AccountIdPaste";
 
 export const Route = createFileRoute("/_authenticated/bot-flow")({
@@ -310,6 +310,38 @@ function BotFlowPage() {
               </div>
             )}
           </div>
+
+          {parsed?.username && (selectedIds.length > 0 || totals) && (
+            <div className="space-y-2 rounded-md border border-border bg-muted/20 p-3">
+              <div className="flex items-center gap-2 text-sm font-medium">
+                <MessageSquare className="h-4 w-4" />
+                Open <span className="font-mono">@{parsed.username}</span> chat per account
+              </div>
+              <p className="text-[11px] text-muted-foreground">
+                Opens the bot's chat for that account in the mini-Telegram viewer — tap
+                inline buttons, reply to messages, or launch its mini app there.
+              </p>
+              <div className="grid grid-cols-2 gap-1.5 sm:grid-cols-3 lg:grid-cols-4">
+                {(selectedIds.length ? selectedIds : allIds).map((id) => {
+                  const a = accountList.find((x) => x.id === id);
+                  const who = a?.first_name || a?.username || a?.phone || id.slice(0, 8);
+                  return (
+                    <Link
+                      key={id}
+                      to="/accounts/$id"
+                      params={{ id }}
+                      search={{ peer: `@${parsed.username}` }}
+                      target="_blank"
+                      className="flex items-center gap-1.5 truncate rounded border border-border bg-background px-2 py-1.5 text-xs hover:bg-muted"
+                    >
+                      <MessageSquare className="h-3 w-3 shrink-0 text-muted-foreground" />
+                      <span className="truncate">{who}</span>
+                    </Link>
+                  );
+                })}
+              </div>
+            </div>
+          )}
         </section>
 
         {/* ── Mini App launcher ─────────────────────────────────────── */}
