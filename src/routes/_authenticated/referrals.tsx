@@ -11,8 +11,20 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Checkbox } from "@/components/ui/checkbox";
 import { AdminGate } from "@/components/AdminGate";
-import { ArrowLeft, Plus, Trash2, Play, RefreshCw } from "lucide-react";
+import { ArrowLeft, Plus, Trash2, Play, RefreshCw, Download } from "lucide-react";
 import { toast } from "sonner";
+
+function downloadCsv(filename: string, rows: (string | number | null | undefined)[][]) {
+  const esc = (v: any) => {
+    const s = v == null ? "" : String(v);
+    return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
+  };
+  const csv = rows.map((r) => r.map(esc).join(",")).join("\n");
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(new Blob([csv], { type: "text/csv" }));
+  a.download = filename;
+  a.click();
+}
 
 export const Route = createFileRoute("/_authenticated/referrals")({
   component: () => <AdminGate><Page /></AdminGate>,
@@ -129,6 +141,13 @@ function JoinsPanel({ linkId }: { linkId: string }) {
   };
   const joinedIds = new Set((joins.data ?? []).map((j: any) => j.account_id));
   const unjoined = (accs.data ?? []).filter((a: any) => !joinedIds.has(a.id));
+  const exportCsv = () => {
+    if (!joins.data?.length) return;
+    downloadCsv(`referral-joins-${linkId.slice(0, 8)}.csv`, [
+      ["account", "account_id", "status", "joined_at", "last_balance_numeric", "last_balance_text", "last_checked_at", "last_error"],
+      ...joins.data.map((j: any) => [nameFor(j.account_id), j.account_id, j.status, j.joined_at, j.last_balance_numeric, j.last_balance_text, j.last_checked_at, j.last_error]),
+    ]);
+  };
 
   return (
     <div className="space-y-3">
@@ -153,7 +172,12 @@ function JoinsPanel({ linkId }: { linkId: string }) {
       </div>
 
       <div className="rounded-lg border border-border bg-card">
-        <div className="border-b border-border p-3 font-semibold">Joins ({joins.data?.length ?? 0})</div>
+        <div className="flex items-center justify-between border-b border-border p-3">
+          <span className="font-semibold">Joins ({joins.data?.length ?? 0})</span>
+          <Button size="sm" variant="outline" onClick={exportCsv} disabled={!joins.data?.length}>
+            <Download className="mr-1 h-4 w-4" />CSV
+          </Button>
+        </div>
         <table className="w-full text-xs">
           <thead className="bg-muted/30 text-left"><tr>
             <th className="p-2">Account</th><th className="p-2">Status</th><th className="p-2">Joined</th><th className="p-2">Balance</th><th className="p-2">Last checked</th><th className="p-2">Error</th>
