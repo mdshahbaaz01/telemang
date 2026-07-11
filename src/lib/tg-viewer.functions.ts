@@ -186,7 +186,7 @@ async function downloadEntityAvatar(client: any, entity: any): Promise<string | 
 // ── listDialogs ─────────────────────────────────────────────────────────
 export const listDialogs = createServerFn({ method: "GET" })
   .middleware([requireSupabaseAuth])
-  .inputValidator((d: unknown) => z.object({ accountId: z.string().uuid(), limit: z.number().int().min(1).max(200).default(80) }).parse(d))
+  .inputValidator((d: unknown) => z.object({ accountId: z.string().uuid(), limit: z.number().int().min(1).max(5000).default(1000) }).parse(d))
   .handler(async ({ data, context }) => {
     await assertAdmin(context.supabase);
     const { openClientForAccount } = await import("./cleanup.server");
