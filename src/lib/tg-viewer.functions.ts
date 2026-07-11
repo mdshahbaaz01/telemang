@@ -553,3 +553,93 @@ export const openMiniApp = createServerFn({ method: "POST" })
       await client.disconnect().catch(() => {});
     }
   });
+
+// ── openStartAppLink — resolves a t.me/{bot}?startapp=CODE main mini app URL
+export const openStartAppLink = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((d: unknown) =>
+    z
+      .object({
+        accountId: z.string().uuid(),
+        botUsername: z.string().min(1).max(64),
+        startParam: z.string().max(256).optional(),
+        themeParams: z
+          .object({
+            bg_color: z.string().optional(),
+            text_color: z.string().optional(),
+            hint_color: z.string().optional(),
+            link_color: z.string().optional(),
+            button_color: z.string().optional(),
+            button_text_color: z.string().optional(),
+          })
+          .partial()
+          .optional(),
+      })
+      .parse(d),
+  )
+  .handler(async ({ data, context }) => {
+    await assertAdmin(context.supabase);
+    const { openClientForAccount } = await import("./cleanup.server");
+    const { Api } = await import("telegram");
+    const client = await openClientForAccount(context.supabase, data.accountId);
+    try {
+      const bot: any = await client.getEntity(data.botUsername.replace(/^@/, ""));
+      const themeJson = JSON.stringify(
+        data.themeParams ?? {
+          bg_color: "#ffffff",
+          text_color: "#000000",
+          hint_color: "#707579",
+          link_color: "#3390ec",
+          button_color: "#3390ec",
+          button_text_color: "#ffffff",
+        },
+      );
+      const themeParams = new Api.DataJSON({ data: themeJson });
+      const tryInvoke = async () => {
+        // Prefer RequestMainWebView (t.me/bot?startapp handler) when available
+        const MainWebView = (Api as any)?.messages?.RequestMainWebView;
+        if (MainWebView) {
+          try {
+            return await client.invoke(
+              new MainWebView({
+                peer: bot,
+                bot,
+                startParam: data.startParam,
+                platform: "web",
+                themeParams,
+              } as any),
+            );
+          } catch (e) {
+            // fall through to SimpleWebView
+          }
+        }
+        return await client.invoke(
+          new Api.messages.RequestSimpleWebView({
+            bot,
+            platform: "web",
+            themeParams,
+            startParam: data.startParam,
+            fromSwitchWebview: false,
+          } as any),
+        );
+      };
+      try {
+        const res: any = await tryInvoke();
+        return {
+          url: String(res?.url ?? ""),
+          queryId: res?.queryId ? String(res.queryId) : null,
+        };
+      } catch (e) {
+        const em = (e as Error).message || String(e);
+        if (em.includes("BOT_INVALID"))
+          throw new Error("Not a bot username.");
+        if (em.includes("BOT_WEBVIEW_DISABLED"))
+          throw new Error("This bot has no mini app enabled.");
+        if (em.includes("USERNAME_INVALID") || em.includes("USERNAME_NOT_OCCUPIED"))
+          throw new Error("Unknown bot username.");
+        throw new Error(em);
+      }
+    } finally {
+      await client.disconnect().catch(() => {});
+    }
+  });
