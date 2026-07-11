@@ -20,7 +20,10 @@ import { ArrowLeft, Loader2, Send, Search, Reply, Trash2, Smile, RefreshCw, X, E
 import { cn } from "@/lib/utils";
 import { MiniAppDrawer, type MiniAppRequest } from "@/components/MiniAppDrawer";
 
-const searchSchema = z.object({ peer: z.string().optional() });
+const searchSchema = z.object({
+  peer: z.string().optional(),
+  solo: z.union([z.literal("1"), z.literal("0"), z.boolean()]).optional(),
+});
 
 export const Route = createFileRoute("/_authenticated/accounts/$id")({
   validateSearch: (s) => searchSchema.parse(s),
