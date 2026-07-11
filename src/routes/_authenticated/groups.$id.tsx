@@ -338,6 +338,7 @@ function TaskColumn({
   registerStart,
   registerStop,
   onStats,
+  fleet,
 }: {
   taskId: string;
   accountLabel: string;
@@ -347,6 +348,7 @@ function TaskColumn({
     taskId: string,
     stats: { total: number; done: number },
   ) => void;
+  fleet: FleetCtx;
 }) {
   const qc = useQueryClient();
   const getT = useServerFn(getTask);
@@ -361,12 +363,24 @@ function TaskColumn({
   const [running, setRunning] = useState(false);
   const cancelRef = useRef(false);
   const runningRef = useRef(false);
+  const resumeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const [waitingSlot, setWaitingSlot] = useState(false);
+  const [floodUntil, setFloodUntil] = useState<number | null>(null);
 
   const loop = async () => {
     if (runningRef.current) return;
     runningRef.current = true;
     cancelRef.current = false;
     setRunning(true);
+    setWaitingSlot(true);
+    const release = await fleet.acquire();
+    setWaitingSlot(false);
+    if (cancelRef.current) {
+      release();
+      runningRef.current = false;
+      setRunning(false);
+      return;
+    }
     await setStatus({ data: { id: taskId, status: "running" } }).catch(() => {});
     try {
       while (!cancelRef.current) {
@@ -377,7 +391,24 @@ function TaskColumn({
           break;
         }
         if (r.paused) {
-          toast.warning(`${accountLabel}: ${r.message ?? "paused"}`);
+          const secs = (r as { seconds?: number }).seconds;
+          const untilIso = (r as { pausedUntil?: string }).pausedUntil;
+          const target = (r as { target?: string }).target;
+          if (fleet.autoResume && secs && secs > 0) {
+            const untilTs = untilIso ? new Date(untilIso).getTime() : Date.now() + secs * 1000;
+            setFloodUntil(untilTs);
+            toast.warning(
+              `${accountLabel}: FloodWait ${secs}s${target ? ` on @${target}` : ""} — auto-resume scheduled`,
+            );
+            const delay = Math.max(1000, untilTs - Date.now() + 500);
+            resumeTimerRef.current = setTimeout(() => {
+              resumeTimerRef.current = null;
+              setFloodUntil(null);
+              loop();
+            }, delay);
+          } else {
+            toast.warning(`${accountLabel}: ${r.message ?? "paused"}`);
+          }
           break;
         }
         const min = taskQ.data?.task?.min_delay ?? 1;
@@ -388,6 +419,7 @@ function TaskColumn({
     } catch (err) {
       toast.error(`${accountLabel}: ${(err as Error).message}`);
     } finally {
+      release();
       runningRef.current = false;
       setRunning(false);
       await setStatus({ data: { id: taskId, status: "paused" } }).catch(() => {});
@@ -396,6 +428,11 @@ function TaskColumn({
   };
   const stop = () => {
     cancelRef.current = true;
+    if (resumeTimerRef.current) {
+      clearTimeout(resumeTimerRef.current);
+      resumeTimerRef.current = null;
+      setFloodUntil(null);
+    }
   };
 
   useEffect(() => {
@@ -407,6 +444,15 @@ function TaskColumn({
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [taskId]);
+
+  // Live countdown when parked for FloodWait auto-resume.
+  const [now, setNow] = useState(Date.now());
+  useEffect(() => {
+    if (!floodUntil) return;
+    const t = setInterval(() => setNow(Date.now()), 1000);
+    return () => clearInterval(t);
+  }, [floodUntil]);
+  const secsLeft = floodUntil ? Math.max(0, Math.ceil((floodUntil - now) / 1000)) : 0;
 
   useEffect(() => {
     const ch = supabase
@@ -461,6 +507,14 @@ function TaskColumn({
           ) : null}
         </div>
       </header>
+      {waitingSlot ? (
+        <div className="mb-2 text-xs text-muted-foreground">Waiting for a free slot…</div>
+      ) : null}
+      {floodUntil ? (
+        <div className="mb-2 text-xs text-yellow-500">
+          FloodWait — auto-resume in {secsLeft}s
+        </div>
+      ) : null}
       <div className="mb-2 text-sm text-muted-foreground">
         {done}/{total} processed
         {failed > 0 ? (
