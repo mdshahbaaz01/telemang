@@ -2,6 +2,7 @@ import { createFileRoute, Link } from "@tanstack/react-router";
 import { useServerFn } from "@tanstack/react-start";
 import { useQuery } from "@tanstack/react-query";
 import { useMemo, useRef, useState } from "react";
+import { useTelegramWebviewBridge } from "@/lib/telegram-webview-bridge";
 import { supabase } from "@/integrations/supabase/client";
 import { listAccounts } from "@/lib/accounts.functions";
 import { openStartAppLink } from "@/lib/tg-viewer.functions";
@@ -431,15 +432,7 @@ function BotFlowPage() {
                         <div className="p-3 text-xs text-destructive">{r.error}</div>
                       )}
                       {r.status === "ready" && r.url && (
-                        <iframe
-                          key={r.url}
-                          src={r.url}
-                          title={who}
-                          className="h-full w-full border-0"
-                          allow="clipboard-read; clipboard-write; camera; microphone; geolocation; payment"
-                          sandbox="allow-scripts allow-same-origin allow-forms allow-popups allow-popups-to-escape-sandbox allow-modals allow-storage-access-by-user-activation"
-                          referrerPolicy="no-referrer"
-                        />
+                        <MiniAppFrame url={r.url} title={who} />
                       )}
                     </div>
                   </div>
@@ -477,5 +470,22 @@ function BotFlowPage() {
         </section>
       </div>
     </main>
+  );
+}
+
+function MiniAppFrame({ url, title }: { url: string; title: string }) {
+  const ref = useRef<HTMLIFrameElement | null>(null);
+  useTelegramWebviewBridge(ref);
+  return (
+    <iframe
+      key={url}
+      ref={ref}
+      src={url}
+      title={title}
+      className="h-full w-full border-0"
+      allow="clipboard-read; clipboard-write; camera; microphone; geolocation; payment"
+      sandbox="allow-scripts allow-same-origin allow-forms allow-popups allow-popups-to-escape-sandbox allow-modals allow-storage-access-by-user-activation"
+      referrerPolicy="no-referrer"
+    />
   );
 }
