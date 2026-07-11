@@ -1168,6 +1168,9 @@ function ActionsPageInner() {
                     onChange={(e) => setTargets(e.target.value)}
                     placeholder="@mychannel&#10;@friend_username&#10;https://t.me/other"
                   />
+                  <p className="text-xs text-muted-foreground mt-1">
+                    Accepts @username, t.me/… link, invite link, or numeric ID (e.g. <code>123456789</code>). Numeric IDs only work from accounts that have interacted with that user/chat before.
+                  </p>
                   <div className="mt-2">
                     <TargetsPicker
                       accounts={accountList}
@@ -1607,6 +1610,9 @@ function ActionsPageInner() {
                         }
                         placeholder="@username&#10;@mygroup&#10;https://t.me/channel"
                       />
+                      <p className="text-xs text-muted-foreground mt-1">
+                        Accepts @username, t.me/… link, invite link, or numeric ID (e.g. <code>123456789</code>). Numeric IDs need prior interaction from the sending account.
+                      </p>
                       <div className="mt-2">
                         <TargetsPicker
                           accounts={accountList}
