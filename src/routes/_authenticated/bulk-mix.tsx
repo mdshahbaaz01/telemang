@@ -1,5 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { useMemo, useState } from "react";
+import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
 import { toast } from "sonner";
@@ -361,6 +361,3 @@ function ViewBoost({ accounts }: { accounts: Account[] }) {
     </div>
   );
 }
-
-// Silence unused-import warning for useMemo (kept for future use)
-void useMemo;
