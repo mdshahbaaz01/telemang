@@ -68,13 +68,26 @@ async function resolveSourcePeer(client: any, Api: any, src: SourceRef) {
   if (src.chat.startsWith("c/")) {
     const raw = src.chat.slice(2);
     const { default: bigInt } = await import("big-integer");
+    const tryResolve = async () => {
+      try {
+        return await client.getEntity(new Api.PeerChannel({ channelId: bigInt(raw) }));
+      } catch {
+        return await client.getEntity(`https://t.me/c/${raw}/${src.msgId}`);
+      }
+    };
     try {
-      return await client.getEntity(new Api.PeerChannel({ channelId: bigInt(raw) }));
+      return await tryResolve();
     } catch {
-      return await client.getEntity(`https://t.me/c/${raw}/${src.msgId}`);
+      try { await client.getDialogs({ limit: 1000 }); } catch {}
+      return await tryResolve();
     }
   }
-  return await client.getEntity(src.chat.replace(/^@/, ""));
+  try {
+    return await client.getEntity(src.chat.replace(/^@/, ""));
+  } catch {
+    try { await client.getDialogs({ limit: 1000 }); } catch {}
+    return await client.getEntity(src.chat.replace(/^@/, ""));
+  }
 }
 
 function pickDiscussionTarget(disc: any) {
