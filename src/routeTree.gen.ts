@@ -27,6 +27,7 @@ import { Route as AuthenticatedAnalyticsRouteImport } from './routes/_authentica
 import { Route as AuthenticatedAlertsRouteImport } from './routes/_authenticated/alerts'
 import { Route as AuthenticatedActionsRouteImport } from './routes/_authenticated/actions'
 import { Route as ApiPublicCleanupStreamRouteImport } from './routes/api/public/cleanup-stream'
+import { Route as ApiPublicBulkStreamRouteImport } from './routes/api/public/bulk-stream'
 import { Route as ApiPublicActionsStreamRouteImport } from './routes/api/public/actions-stream'
 import { Route as AuthenticatedTasksNewRouteImport } from './routes/_authenticated/tasks.new'
 import { Route as AuthenticatedTasksIdRouteImport } from './routes/_authenticated/tasks.$id'
@@ -127,6 +128,11 @@ const ApiPublicCleanupStreamRoute = ApiPublicCleanupStreamRouteImport.update({
   path: '/api/public/cleanup-stream',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ApiPublicBulkStreamRoute = ApiPublicBulkStreamRouteImport.update({
+  id: '/api/public/bulk-stream',
+  path: '/api/public/bulk-stream',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const ApiPublicActionsStreamRoute = ApiPublicActionsStreamRouteImport.update({
   id: '/api/public/actions-stream',
   path: '/api/public/actions-stream',
@@ -198,6 +204,7 @@ export interface FileRoutesByFullPath {
   '/tasks/$id': typeof AuthenticatedTasksIdRoute
   '/tasks/new': typeof AuthenticatedTasksNewRoute
   '/api/public/actions-stream': typeof ApiPublicActionsStreamRoute
+  '/api/public/bulk-stream': typeof ApiPublicBulkStreamRoute
   '/api/public/cleanup-stream': typeof ApiPublicCleanupStreamRoute
   '/api/public/hooks/auto-leave': typeof ApiPublicHooksAutoLeaveRoute
   '/api/public/hooks/daily-summary': typeof ApiPublicHooksDailySummaryRoute
@@ -226,6 +233,7 @@ export interface FileRoutesByTo {
   '/tasks/$id': typeof AuthenticatedTasksIdRoute
   '/tasks/new': typeof AuthenticatedTasksNewRoute
   '/api/public/actions-stream': typeof ApiPublicActionsStreamRoute
+  '/api/public/bulk-stream': typeof ApiPublicBulkStreamRoute
   '/api/public/cleanup-stream': typeof ApiPublicCleanupStreamRoute
   '/api/public/hooks/auto-leave': typeof ApiPublicHooksAutoLeaveRoute
   '/api/public/hooks/daily-summary': typeof ApiPublicHooksDailySummaryRoute
@@ -256,6 +264,7 @@ export interface FileRoutesById {
   '/_authenticated/tasks/$id': typeof AuthenticatedTasksIdRoute
   '/_authenticated/tasks/new': typeof AuthenticatedTasksNewRoute
   '/api/public/actions-stream': typeof ApiPublicActionsStreamRoute
+  '/api/public/bulk-stream': typeof ApiPublicBulkStreamRoute
   '/api/public/cleanup-stream': typeof ApiPublicCleanupStreamRoute
   '/api/public/hooks/auto-leave': typeof ApiPublicHooksAutoLeaveRoute
   '/api/public/hooks/daily-summary': typeof ApiPublicHooksDailySummaryRoute
@@ -286,6 +295,7 @@ export interface FileRouteTypes {
     | '/tasks/$id'
     | '/tasks/new'
     | '/api/public/actions-stream'
+    | '/api/public/bulk-stream'
     | '/api/public/cleanup-stream'
     | '/api/public/hooks/auto-leave'
     | '/api/public/hooks/daily-summary'
@@ -314,6 +324,7 @@ export interface FileRouteTypes {
     | '/tasks/$id'
     | '/tasks/new'
     | '/api/public/actions-stream'
+    | '/api/public/bulk-stream'
     | '/api/public/cleanup-stream'
     | '/api/public/hooks/auto-leave'
     | '/api/public/hooks/daily-summary'
@@ -343,6 +354,7 @@ export interface FileRouteTypes {
     | '/_authenticated/tasks/$id'
     | '/_authenticated/tasks/new'
     | '/api/public/actions-stream'
+    | '/api/public/bulk-stream'
     | '/api/public/cleanup-stream'
     | '/api/public/hooks/auto-leave'
     | '/api/public/hooks/daily-summary'
@@ -355,6 +367,7 @@ export interface RootRouteChildren {
   AuthenticatedRouteRoute: typeof AuthenticatedRouteRouteWithChildren
   AuthRoute: typeof AuthRoute
   ApiPublicActionsStreamRoute: typeof ApiPublicActionsStreamRoute
+  ApiPublicBulkStreamRoute: typeof ApiPublicBulkStreamRoute
   ApiPublicCleanupStreamRoute: typeof ApiPublicCleanupStreamRoute
   ApiPublicHooksAutoLeaveRoute: typeof ApiPublicHooksAutoLeaveRoute
   ApiPublicHooksDailySummaryRoute: typeof ApiPublicHooksDailySummaryRoute
@@ -490,6 +503,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiPublicCleanupStreamRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/api/public/bulk-stream': {
+      id: '/api/public/bulk-stream'
+      path: '/api/public/bulk-stream'
+      fullPath: '/api/public/bulk-stream'
+      preLoaderRoute: typeof ApiPublicBulkStreamRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/api/public/actions-stream': {
       id: '/api/public/actions-stream'
       path: '/api/public/actions-stream'
@@ -606,6 +626,7 @@ const rootRouteChildren: RootRouteChildren = {
   AuthenticatedRouteRoute: AuthenticatedRouteRouteWithChildren,
   AuthRoute: AuthRoute,
   ApiPublicActionsStreamRoute: ApiPublicActionsStreamRoute,
+  ApiPublicBulkStreamRoute: ApiPublicBulkStreamRoute,
   ApiPublicCleanupStreamRoute: ApiPublicCleanupStreamRoute,
   ApiPublicHooksAutoLeaveRoute: ApiPublicHooksAutoLeaveRoute,
   ApiPublicHooksDailySummaryRoute: ApiPublicHooksDailySummaryRoute,
