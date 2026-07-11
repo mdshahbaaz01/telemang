@@ -246,6 +246,8 @@ function buildOverrideScript(accountId: string) {
     try {
       window.name = 'acct-' + fp.hashKey;
       const ns = 'tgmini:' + fp.hashKey + ':' + (upstreamOrigin || 'unknown') + ':';
+      const realLocalStorage = window.localStorage;
+      const realSessionStorage = window.sessionStorage;
       const wrapStorage = (store) => ({
         get length() {
           let n = 0;
@@ -277,8 +279,8 @@ function buildOverrideScript(accountId: string) {
           keys.forEach((k) => store.removeItem(k));
         },
       });
-      Object.defineProperty(window, 'localStorage', { configurable: true, get: () => wrapStorage(localStorage) });
-      Object.defineProperty(window, 'sessionStorage', { configurable: true, get: () => wrapStorage(sessionStorage) });
+      Object.defineProperty(window, 'localStorage', { configurable: true, get: () => wrapStorage(realLocalStorage) });
+      Object.defineProperty(window, 'sessionStorage', { configurable: true, get: () => wrapStorage(realSessionStorage) });
     } catch (e) {}
   } catch (err) { console.warn('[fingerprint override failed]', err); }
 })();`;

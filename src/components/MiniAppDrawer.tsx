@@ -125,7 +125,7 @@ export function MiniAppDrawer({
               referrerPolicy="no-referrer"
               onError={() =>
                 setError(
-                  "The mini app refused to load (X-Frame-Options / CSP). Use 'Open in new tab' above.",
+                  "The mini app refused to load in the embedded viewer.",
                 )
               }
             />
