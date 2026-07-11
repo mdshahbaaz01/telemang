@@ -22,6 +22,7 @@ import { toast } from "sonner";
 import { AdminGate } from "@/components/AdminGate";
 import { ArrowLeft, RefreshCw, Square, Play } from "lucide-react";
 import { AccountIdPaste } from "@/components/AccountIdPaste";
+import { Textarea } from "@/components/ui/textarea";
 
 export const Route = createFileRoute("/_authenticated/cleanup")({
   component: () => (
@@ -73,12 +74,16 @@ function Cleanup() {
           <TabsList>
             <TabsTrigger value="chats">Chats, Groups & Bots</TabsTrigger>
             <TabsTrigger value="personal">Personal Chats</TabsTrigger>
+            <TabsTrigger value="links">Leave by link</TabsTrigger>
           </TabsList>
           <TabsContent value="chats" className="mt-4">
             <CleanupPanel mode="chats" />
           </TabsContent>
           <TabsContent value="personal" className="mt-4">
             <CleanupPanel mode="personal" />
+          </TabsContent>
+          <TabsContent value="links" className="mt-4">
+            <LeaveByLinksPanel />
           </TabsContent>
         </Tabs>
       </div>
