@@ -162,7 +162,9 @@ export const Route = createFileRoute("/api/public/bulk-stream")({
               const send = (event: string, data: unknown) => { try { controller.enqueue(sseEncode(event, data)); } catch {} };
               const close = () => { if (!closed) { closed = true; try { controller.close(); } catch {} } };
               const logDb = async (accountId: string | null, target: string | null, level: "info"|"success"|"warn"|"error", message: string) => {
-                await supabase.from("action_logs").insert({ run_id: runId, account_id: accountId, target, level, message }).catch(() => {});
+                try {
+                  await supabase.from("action_logs").insert({ run_id: runId, account_id: accountId, target, level, message });
+                } catch { /* swallow */ }
               };
 
               let stopRequested = false;
@@ -654,15 +656,11 @@ export const Route = createFileRoute("/api/public/bulk-stream")({
                 const totals = results.reduce((acc, r) => ({ ok: acc.ok + (r?.ok ?? 0), fail: acc.fail + (r?.fail ?? 0) }), { ok: 0, fail: 0 });
                 await supabase.from("action_runs").update({
                   status: stopRequested ? "stopped" : "done",
-                  ok_count: totals.ok, fail_count: totals.fail,
-                  finished_at: new Date().toISOString(),
+                  totals: totals as any,
                 }).eq("id", runId);
                 send("summary", { runId, ...totals });
               } catch (e) {
-                await supabase.from("action_runs").update({
-                  status: "failed",
-                  finished_at: new Date().toISOString(),
-                }).eq("id", runId);
+                await supabase.from("action_runs").update({ status: "failed" }).eq("id", runId);
                 send("error", { message: errText(e) });
               } finally {
                 clearInterval(stopPoll);
