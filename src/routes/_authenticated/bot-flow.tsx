@@ -225,6 +225,18 @@ function BotFlowPage() {
     setMiniRuns((prev) => prev.filter((r) => r.accountId !== accountId));
   const clearMini = () => setMiniRuns([]);
 
+  // ─── Per-account inline chat boxes for the refer bot ──────────────
+  const [chatOpen, setChatOpen] = useState<string[]>([]);
+  const openChats = () => {
+    if (!parsed?.username) return toast.error("Paste a bot referral link first");
+    const ids = selectedIds.length ? selectedIds : allIds;
+    if (!ids.length) return toast.error("Select at least one account");
+    setChatOpen(ids);
+  };
+  const closeChat = (id: string) =>
+    setChatOpen((prev) => prev.filter((x) => x !== id));
+  const clearChats = () => setChatOpen([]);
+
   return (
     <main className="min-h-screen bg-background">
       <div className="mx-auto max-w-5xl space-y-6 px-4 py-6 md:px-8">
