@@ -92,11 +92,11 @@ const LANGS = [
 
 function deriveFingerprint(key: string, h: number) {
   const tpl = UA_TEMPLATES[h % UA_TEMPLATES.length];
-  const uaVer = (h >> 3) & 0xff;
-  const tz = TIMEZONES[(h >> 7) % TIMEZONES.length];
-  const langs = LANGS[(h >> 11) % LANGS.length];
-  const cores = [2, 4, 6, 8, 12][(h >> 13) % 5];
-  const memory = [2, 4, 6, 8][(h >> 15) % 4];
+  const uaVer = (h >>> 3) & 0xff;
+  const tz = TIMEZONES[(h >>> 7) % TIMEZONES.length];
+  const langs = LANGS[(h >>> 11) % LANGS.length];
+  const cores = [2, 4, 6, 8, 12][(h >>> 13) % 5];
+  const memory = [2, 4, 6, 8][(h >>> 15) % 4];
   const canvasSeed = ((h * 2654435761) >>> 0) / 0xffffffff;
   return {
     userAgent: tpl.ua(uaVer),
