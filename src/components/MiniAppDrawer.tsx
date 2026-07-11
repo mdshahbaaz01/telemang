@@ -119,7 +119,6 @@ export function MiniAppDrawer({
               src={iframeUrl}
               title={request?.buttonText || "Telegram Mini App"}
               name={`tgminiapp-${request?.accountId ?? "drawer"}`}
-              {...({ credentialless: "true" } as any)}
               className="h-full w-full border-0"
               allow="clipboard-read; clipboard-write; camera; microphone; geolocation; payment"
               sandbox="allow-scripts allow-same-origin allow-forms allow-modals allow-storage-access-by-user-activation"
