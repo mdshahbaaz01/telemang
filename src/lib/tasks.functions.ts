@@ -884,16 +884,17 @@ export const processBatchJoin = createServerFn({ method: "POST" })
         } else if (msg.includes("FLOOD_WAIT") || err.seconds) {
           const match = msg.match(/FLOOD_WAIT_?(\d+)/i);
           const seconds = err.seconds ?? (match ? Number(match[1]) : 60);
-          floodPaused = { seconds };
+          floodPaused = { seconds, target: item.target, reason: msg.trim() };
           statusUpdate = {
             status: "pending",
             error: `FloodWait ${seconds}s`,
             processed_at: new Date().toISOString(),
           };
+          const acctLabel = acct.phone ?? acct.id.slice(0, 8);
           await log(
             task.id,
             "warn",
-            `FloodWait ${seconds}s — Telegram rate limited this account`,
+            `FloodWait ${seconds}s on @${item.target} — account [${acctLabel}] rate limited. Reason: ${msg.trim()}. Will auto-resume.`,
           );
         } else {
           statusUpdate = {
