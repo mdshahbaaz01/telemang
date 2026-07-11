@@ -1,0 +1,171 @@
+import { createServerFn } from "@tanstack/react-start";
+import { z } from "zod";
+import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
+import { runWithLimit } from "./p-limit";
+
+function parseRefLink(link: string): { botUsername: string; startParam: string | null } | null {
+  try {
+    const u = new URL(link);
+    if (!/^t\.me$/i.test(u.hostname) && !/telegram\.me$/i.test(u.hostname)) return null;
+    const path = u.pathname.replace(/^\//, "");
+    if (!path) return null;
+    const bot = path.split("/")[0];
+    const start = u.searchParams.get("start") || u.searchParams.get("startapp") || null;
+    return { botUsername: bot, startParam: start };
+  } catch { return null; }
+}
+
+export const listReferralLinks = createServerFn({ method: "GET" })
+  .middleware([requireSupabaseAuth])
+  .handler(async ({ context }) => {
+    const { data, error } = await context.supabase
+      .from("referral_links").select("*").order("created_at", { ascending: false });
+    if (error) throw error;
+    return data ?? [];
+  });
+
+export const upsertReferralLink = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((d: unknown) =>
+    z.object({
+      id: z.string().uuid().optional(),
+      link: z.string().url().max(500),
+      note: z.string().max(200).optional().nullable(),
+      balance_field: z.string().max(64).optional().nullable(),
+    }).parse(d),
+  )
+  .handler(async ({ data, context }) => {
+    const parsed = parseRefLink(data.link);
+    if (!parsed) throw new Error("Invalid t.me link");
+    const payload = {
+      user_id: context.userId,
+      bot_username: parsed.botUsername,
+      base_link: data.link,
+      my_ref_code: parsed.startParam,
+      note: data.note ?? null,
+      balance_field: data.balance_field ?? null,
+    };
+    const q = data.id
+      ? context.supabase.from("referral_links").update(payload).eq("id", data.id).select().single()
+      : context.supabase.from("referral_links").insert(payload).select().single();
+    const { data: row, error } = await q;
+    if (error) throw error;
+    return row;
+  });
+
+export const deleteReferralLink = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((d: unknown) => z.object({ id: z.string().uuid() }).parse(d))
+  .handler(async ({ data, context }) => {
+    const { error } = await context.supabase.from("referral_links").delete().eq("id", data.id);
+    if (error) throw error;
+    return { ok: true };
+  });
+
+export const listReferralJoins = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((d: unknown) => z.object({ referral_link_id: z.string().uuid() }).parse(d))
+  .handler(async ({ data, context }) => {
+    const { data: rows, error } = await context.supabase
+      .from("referral_joins").select("*").eq("referral_link_id", data.referral_link_id)
+      .order("updated_at", { ascending: false });
+    if (error) throw error;
+    return rows ?? [];
+  });
+
+// Run /start with the ref code from N accounts, storing status per account.
+export const joinReferralFromAccounts = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((d: unknown) =>
+    z.object({
+      referral_link_id: z.string().uuid(),
+      accountIds: z.array(z.string().uuid()).min(1).max(100),
+      concurrency: z.number().int().min(1).max(10).default(3),
+    }).parse(d),
+  )
+  .handler(async ({ data, context }) => {
+    const { openClientForAccount } = await import("./cleanup.server");
+    const { Api } = await import("telegram");
+    const { default: bigInt } = await import("big-integer");
+
+    const { data: link, error: lErr } = await context.supabase
+      .from("referral_links").select("*").eq("id", data.referral_link_id).single();
+    if (lErr || !link) throw new Error("Referral link not found");
+
+    const results: Array<{ accountId: string; ok: boolean; message: string }> = [];
+
+    await runWithLimit(data.accountIds, data.concurrency, async (accountId) => {
+      let client;
+      try { client = await openClientForAccount(context.supabase, accountId, { requireOwnerId: context.userId }); }
+      catch (e) {
+        results.push({ accountId, ok: false, message: `Connect: ${(e as Error).message}` });
+        await context.supabase.from("referral_joins").upsert({
+          user_id: context.userId, referral_link_id: link.id, account_id: accountId,
+          status: "error", last_error: `Connect: ${(e as Error).message}`,
+        }, { onConflict: "referral_link_id,account_id" });
+        return;
+      }
+      try {
+        const bot: any = await client.getEntity(link.bot_username);
+        if (link.my_ref_code) {
+          await client.invoke(new Api.messages.StartBot({
+            bot, peer: bot, startParam: link.my_ref_code,
+            randomId: bigInt(Math.floor(Math.random() * 1e18)),
+          }));
+        } else {
+          await client.sendMessage(bot, { message: "/start" });
+        }
+        await context.supabase.from("referral_joins").upsert({
+          user_id: context.userId, referral_link_id: link.id, account_id: accountId,
+          joined_at: new Date().toISOString(), status: "joined", last_error: null,
+        }, { onConflict: "referral_link_id,account_id" });
+        results.push({ accountId, ok: true, message: "Joined" });
+      } catch (e) {
+        const em = (e as Error).message;
+        await context.supabase.from("referral_joins").upsert({
+          user_id: context.userId, referral_link_id: link.id, account_id: accountId,
+          status: "error", last_error: em,
+        }, { onConflict: "referral_link_id,account_id" });
+        results.push({ accountId, ok: false, message: em });
+      } finally { await client.disconnect().catch(() => {}); }
+    });
+
+    return { results };
+  });
+
+// Pull latest balance for each joined account by reading the newest matching
+// bot_parse_results row for this link's balance_field.
+export const refreshReferralBalances = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((d: unknown) => z.object({ referral_link_id: z.string().uuid() }).parse(d))
+  .handler(async ({ data, context }) => {
+    const { data: link } = await context.supabase
+      .from("referral_links").select("*").eq("id", data.referral_link_id).single();
+    if (!link) throw new Error("Referral link not found");
+    if (!link.balance_field) return { updated: 0, note: "No balance_field set on this link — set one and run Bot Parser scan first." };
+
+    const { data: joins } = await context.supabase
+      .from("referral_joins").select("id, account_id").eq("referral_link_id", link.id);
+    if (!joins?.length) return { updated: 0 };
+
+    let updated = 0;
+    for (const j of joins) {
+      const { data: latest } = await context.supabase
+        .from("bot_parse_results")
+        .select("value_numeric, value_text, captured_at")
+        .eq("account_id", j.account_id)
+        .eq("field_name", link.balance_field)
+        .order("captured_at", { ascending: false })
+        .limit(1)
+        .maybeSingle();
+      if (latest) {
+        await context.supabase.from("referral_joins").update({
+          last_balance_numeric: latest.value_numeric,
+          last_balance_text: latest.value_text,
+          last_checked_at: new Date().toISOString(),
+        }).eq("id", j.id);
+        updated++;
+      }
+    }
+    return { updated };
+  });
