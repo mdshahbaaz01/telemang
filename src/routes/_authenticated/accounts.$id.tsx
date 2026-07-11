@@ -20,7 +20,10 @@ import { ArrowLeft, Loader2, Send, Search, Reply, Trash2, Smile, RefreshCw, X, E
 import { cn } from "@/lib/utils";
 import { MiniAppDrawer, type MiniAppRequest } from "@/components/MiniAppDrawer";
 
-const searchSchema = z.object({ peer: z.string().optional() });
+const searchSchema = z.object({
+  peer: z.string().optional(),
+  solo: z.union([z.literal("1"), z.literal("0"), z.boolean()]).optional(),
+});
 
 export const Route = createFileRoute("/_authenticated/accounts/$id")({
   validateSearch: (s) => searchSchema.parse(s),
@@ -129,7 +132,8 @@ function fmtDialogTime(ms: number | null) {
 
 function AccountViewerPage() {
   const { id: accountId } = Route.useParams();
-  const { peer: activePeer } = Route.useSearch();
+  const { peer: activePeer, solo: soloRaw } = Route.useSearch();
+  const solo = soloRaw === "1" || soloRaw === true;
   const navigate = Route.useNavigate();
 
   const listDialogsFn = useServerFn(listDialogs);
@@ -357,7 +361,8 @@ function AccountViewerPage() {
   };
 
   return (
-    <div className="flex h-[calc(100vh-3.5rem)] flex-col">
+    <div className={cn("flex flex-col", solo ? "h-screen" : "h-[calc(100vh-3.5rem)]") }>
+      {!solo && (
       <div className="flex items-center gap-2 border-b px-3 py-2">
         <Link to="/owner"><Button variant="ghost" size="icon"><ArrowLeft className="h-4 w-4" /></Button></Link>
         <Avatar
@@ -378,9 +383,11 @@ function AccountViewerPage() {
           </Button>
         </div>
       </div>
+      )}
 
-      <div className="grid min-h-0 flex-1 grid-cols-[320px_1fr]">
+      <div className={cn("grid min-h-0 flex-1", solo ? "grid-cols-1" : "grid-cols-[320px_1fr]")}>
         {/* Dialogs pane */}
+        {!solo && (
         <aside className="flex min-h-0 flex-col border-r bg-muted/20">
           <div className="p-2">
             <div className="relative">
@@ -431,6 +438,7 @@ function AccountViewerPage() {
             ))}
           </div>
         </aside>
+        )}
 
         {/* Chat pane */}
         <section className="flex min-h-0 flex-col">
