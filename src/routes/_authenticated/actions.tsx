@@ -34,6 +34,70 @@ import { ChatIdChip } from "@/components/chat/ChatIdChip";
 import { MessagePreview } from "@/components/MessagePreview";
 import { TargetsPicker } from "@/components/TargetsPicker";
 
+function RangeApply({
+  label,
+  accountsCount,
+  onApply,
+}: {
+  label: string;
+  accountsCount: number;
+  onApply: (start: number, end: number, template: string, appendNumbers: boolean) => void;
+}) {
+  const [range, setRange] = useState("");
+  const [template, setTemplate] = useState("");
+  const [appendNumbers, setAppendNumbers] = useState(true);
+  const parsed = (() => {
+    const m = range.trim().match(/^(\d+)\s*[-,\s]\s*(\d+)$/);
+    if (!m) return null;
+    const a = Math.max(1, parseInt(m[1], 10));
+    const b = Math.max(a, parseInt(m[2], 10));
+    return { start: a, end: Math.min(b, accountsCount) };
+  })();
+  return (
+    <div className="rounded-md border border-dashed border-border p-3 space-y-2 bg-muted/20">
+      <div className="flex items-center gap-2">
+        <Label className="text-xs">Range auto-fill (optional)</Label>
+        <span className="text-[10px] text-muted-foreground ml-auto">{accountsCount} account(s) available</span>
+      </div>
+      <div className="flex flex-wrap items-center gap-2">
+        <Input
+          className="w-28"
+          placeholder="e.g. 1-6"
+          value={range}
+          onChange={(e) => setRange(e.target.value)}
+        />
+        <Input
+          className="flex-1 min-w-[180px]"
+          placeholder='Message template (use "{n}" for the number, or leave blank)'
+          value={template}
+          onChange={(e) => setTemplate(e.target.value)}
+        />
+        <label className="flex items-center gap-1 text-xs text-muted-foreground">
+          <input
+            type="checkbox"
+            checked={appendNumbers}
+            onChange={(e) => setAppendNumbers(e.target.checked)}
+          />
+          Append number
+        </label>
+        <Button
+          type="button"
+          size="sm"
+          variant="secondary"
+          disabled={!parsed}
+          onClick={() => parsed && onApply(parsed.start, parsed.end, template, appendNumbers)}
+        >
+          Apply
+        </Button>
+      </div>
+      <p className="text-[11px] text-muted-foreground">
+        {label}. Example: <code>1-6</code> picks accounts #1..#6 and creates 6 rows. If the template contains <code>{"{n}"}</code> it is replaced with the account number; otherwise the number is appended (e.g. "Hi 1", "Hi 2", …).
+        {parsed && ` — will create ${parsed.end - parsed.start + 1} row(s) (accounts #${parsed.start}..#${parsed.end}). Replaces current rows.`}
+      </p>
+    </div>
+  );
+}
+
 export const Route = createFileRoute("/_authenticated/actions")({
   validateSearch: (s: Record<string, unknown>) =>
     z
