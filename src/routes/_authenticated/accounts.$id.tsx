@@ -361,7 +361,8 @@ function AccountViewerPage() {
   };
 
   return (
-    <div className="flex h-[calc(100vh-3.5rem)] flex-col">
+    <div className={cn("flex flex-col", solo ? "h-screen" : "h-[calc(100vh-3.5rem)]") }>
+      {!solo && (
       <div className="flex items-center gap-2 border-b px-3 py-2">
         <Link to="/owner"><Button variant="ghost" size="icon"><ArrowLeft className="h-4 w-4" /></Button></Link>
         <Avatar
@@ -382,9 +383,11 @@ function AccountViewerPage() {
           </Button>
         </div>
       </div>
+      )}
 
-      <div className="grid min-h-0 flex-1 grid-cols-[320px_1fr]">
+      <div className={cn("grid min-h-0 flex-1", solo ? "grid-cols-1" : "grid-cols-[320px_1fr]")}>
         {/* Dialogs pane */}
+        {!solo && (
         <aside className="flex min-h-0 flex-col border-r bg-muted/20">
           <div className="p-2">
             <div className="relative">
