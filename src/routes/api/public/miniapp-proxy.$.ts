@@ -226,7 +226,7 @@ function buildOverrideScript(accountId: string, upstreamUrl: string) {
         if (abs.protocol !== 'http:' && abs.protocol !== 'https:') return s;
         // Already proxied? leave alone.
         if (abs.origin === location.origin && abs.pathname.startsWith(PROXY_PREFIX)) return s;
-        // If it points at our origin (mini-app used location.href/fetch with a path), rewrite to upstream host.
+        // Rewrite both same-preview paths and absolute upstream calls through the proxy.
         const target = (abs.origin === location.origin && upstreamOrigin)
           ? upstreamOrigin + abs.pathname + abs.search + abs.hash
           : abs.toString();
