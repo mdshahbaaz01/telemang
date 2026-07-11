@@ -1030,6 +1030,21 @@ function ActionsPageInner() {
       <header className="border-b border-border bg-card">
         <div className="mx-auto flex max-w-7xl items-center gap-3 px-4 py-3 md:px-8">
           <h1 className="mr-auto text-xl font-semibold">Actions</h1>
+          <div className="flex items-center gap-2 rounded-md border border-border px-2 py-1 text-xs">
+            <span className="text-muted-foreground">Parallel</span>
+            <Input
+              type="number"
+              min={1}
+              max={50}
+              value={concurrency}
+              onChange={(e) => {
+                const v = Number(e.target.value);
+                setConcurrency(Number.isFinite(v) ? Math.max(1, Math.min(50, v)) : 5);
+              }}
+              className="h-7 w-14"
+            />
+            <span className="text-muted-foreground">accts</span>
+          </div>
           <Button variant="outline" size="sm" onClick={toggleAccounts}>
             {showAccounts ? (
               <>
