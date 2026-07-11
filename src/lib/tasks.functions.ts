@@ -937,6 +937,9 @@ export const processBatchJoin = createServerFn({ method: "POST" })
         paused: true,
         processed: items.length,
         message: `FloodWait ${floodPaused.seconds}s`,
+        seconds: floodPaused.seconds,
+        pausedUntil,
+        target: floodPaused.target,
       };
     }
 
