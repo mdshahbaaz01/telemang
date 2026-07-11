@@ -31,6 +31,43 @@ type LogEntry = {
   ts: number;
 };
 
+type VerifyLinkSession = {
+  hasInitData: boolean;
+  userId?: string;
+  userLabel?: string;
+  error?: string;
+};
+
+function parseVerifyLinkSession(rawUrl: string): VerifyLinkSession {
+  if (!rawUrl) return { hasInitData: false };
+  try {
+    const url = new URL(rawUrl);
+    const launchParams = new URLSearchParams(String(url.hash || "").replace(/^#/, ""));
+    const initData = launchParams.get("tgWebAppData") || url.searchParams.get("tgWebAppData");
+    if (!initData) return { hasInitData: false };
+
+    const initParams = new URLSearchParams(initData);
+    const userRaw = initParams.get("user");
+    if (!userRaw) return { hasInitData: true, error: "No user found in Telegram session data" };
+
+    const user = JSON.parse(userRaw) as {
+      id?: string | number;
+      first_name?: string;
+      last_name?: string;
+      username?: string;
+    };
+    const userId = user.id != null ? String(user.id) : undefined;
+    const displayName = [user.first_name, user.last_name].filter(Boolean).join(" ").trim();
+    return {
+      hasInitData: true,
+      userId,
+      userLabel: user.username ? `@${user.username}` : displayName || undefined,
+    };
+  } catch (e) {
+    return { hasInitData: false, error: (e as Error).message };
+  }
+}
+
 function BotFlowPage() {
   const listAcc = useServerFn(listAccounts);
   const accountsQ = useQuery({ queryKey: ["accounts"], queryFn: () => listAcc() });
@@ -238,11 +275,32 @@ function BotFlowPage() {
     return `https://${raw}`;
   }, [verifyLink]);
 
+  const selectedVerifyAccount = useMemo(
+    () => accountList.find((a) => a.id === verifyAccountId) ?? null,
+    [accountList, verifyAccountId],
+  );
+  const verifySession = useMemo(
+    () => parseVerifyLinkSession(normalizedVerifyLink),
+    [normalizedVerifyLink],
+  );
+  const verifyAccountTelegramId =
+    selectedVerifyAccount?.telegram_user_id != null
+      ? String(selectedVerifyAccount.telegram_user_id)
+      : "";
+  const verifyLinkAccountMismatch = Boolean(
+    verifySession.userId && verifyAccountTelegramId && verifySession.userId !== verifyAccountTelegramId,
+  );
+
   const openVerification = () => {
     if (!normalizedVerifyLink) return toast.error("Paste the verification link");
     if (!verifyAccountId) return toast.error("Select one account");
     try {
       new URL(normalizedVerifyLink);
+      if (verifyLinkAccountMismatch) {
+        return toast.error(
+          "This verification URL is already signed for a different Telegram account. Use the original t.me mini-app link for this account.",
+        );
+      }
       setVerifyNonce((n) => n + 1);
     } catch {
       toast.error("Invalid verification URL");
@@ -561,8 +619,35 @@ function BotFlowPage() {
             </div>
           </div>
 
+          {verifySession.hasInitData && (
+            <div
+              className={`rounded-md border p-3 text-xs ${
+                verifyLinkAccountMismatch
+                  ? "border-destructive/40 bg-destructive/10 text-destructive"
+                  : "border-yellow-500/40 bg-yellow-500/10 text-yellow-700 dark:text-yellow-300"
+              }`}
+            >
+              <div className="font-medium">
+                This direct verification URL is already signed for Telegram user{" "}
+                <span className="font-mono">
+                  {verifySession.userLabel ? `${verifySession.userLabel} ` : ""}
+                  {verifySession.userId ? `#${verifySession.userId}` : "unknown"}
+                </span>
+                .
+              </div>
+              <div className="mt-1">
+                Selecting another website account will not change that signed Telegram session, so the bot can show “Same Device Detected”. For different accounts, use the original <code>t.me/...?...startapp=</code> link in “Open Mini App on many accounts”.
+              </div>
+              {verifyLinkAccountMismatch && (
+                <div className="mt-1 font-medium">
+                  Selected account ID #{verifyAccountTelegramId} does not match this verification URL.
+                </div>
+              )}
+            </div>
+          )}
+
           <div className="flex gap-2">
-            <Button onClick={openVerification} disabled={!normalizedVerifyLink || !verifyAccountId}>
+            <Button onClick={openVerification} disabled={!normalizedVerifyLink || !verifyAccountId || verifyLinkAccountMismatch}>
               <Play className="mr-1 h-4 w-4" /> Open verification
             </Button>
             {verifyNonce > 0 && (
