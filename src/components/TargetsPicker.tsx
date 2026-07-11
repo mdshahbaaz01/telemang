@@ -191,6 +191,35 @@ export function TargetsPicker({
                 {selected.size} selected
               </div>
               <div className="flex gap-2">
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="ghost"
+                  onClick={() =>
+                    setSelected((s) => {
+                      const keys = filtered.map((d) => d.peerKey);
+                      const allOn = keys.every((k) => s.has(k));
+                      const n = new Set(s);
+                      if (allOn) keys.forEach((k) => n.delete(k));
+                      else keys.forEach((k) => n.add(k));
+                      return n;
+                    })
+                  }
+                  disabled={!filtered.length}
+                >
+                  {filtered.length > 0 && filtered.every((d) => selected.has(d.peerKey))
+                    ? "Deselect all"
+                    : "Select all"}
+                </Button>
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="ghost"
+                  onClick={() => setSelected(new Set())}
+                  disabled={!selected.size}
+                >
+                  Clear
+                </Button>
                 <Button type="button" variant="ghost" onClick={() => setOpen(false)}>
                   Cancel
                 </Button>
