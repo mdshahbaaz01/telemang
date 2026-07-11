@@ -27,6 +27,44 @@ function parseTargets(raw: string): string[] {
 }
 export { parseTargets };
 
+// Case-insensitive dedupe preserving first-seen order.
+function dedupeTargets(list: string[]): string[] {
+  const seen = new Set<string>();
+  const out: string[] = [];
+  for (const t of list) {
+    const k = t.toLowerCase();
+    if (seen.has(k)) continue;
+    seen.add(k);
+    out.push(t);
+  }
+  return out;
+}
+export { dedupeTargets };
+
+// Deterministic per-seed shuffle so each account processes the same targets
+// in a different order — avoids every account hammering the same channel
+// simultaneously (which triggers FloodWait on all of them at once).
+function shuffledOrder(len: number, seed: string): number[] {
+  const idx = Array.from({ length: len }, (_, i) => i);
+  let h = 2166136261 >>> 0;
+  for (let i = 0; i < seed.length; i++) {
+    h ^= seed.charCodeAt(i);
+    h = Math.imul(h, 16777619) >>> 0;
+  }
+  // xorshift32
+  const rand = () => {
+    h ^= h << 13; h >>>= 0;
+    h ^= h >>> 17;
+    h ^= h << 5;  h >>>= 0;
+    return (h >>> 0) / 0xffffffff;
+  };
+  for (let i = len - 1; i > 0; i--) {
+    const j = Math.floor(rand() * (i + 1));
+    [idx[i], idx[j]] = [idx[j], idx[i]];
+  }
+  return idx;
+}
+
 export const createJoinTask = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .inputValidator((d: unknown) => createTaskSchema.parse(d))
@@ -45,11 +83,13 @@ export const createJoinTask = createServerFn({ method: "POST" })
       .select("id")
       .single();
     if (error) throw new Error(error.message);
-    const items = data.targets.map((t, i) => ({
+    const targets = dedupeTargets(data.targets);
+    const order = shuffledOrder(targets.length, task.id);
+    const items = targets.map((t, i) => ({
       task_id: task.id,
       user_id: context.userId,
       target: t,
-      position: i,
+      position: order[i],
     }));
     const { error: ierr } = await context.supabase
       .from("join_task_items")
@@ -226,6 +266,8 @@ export const updateGroup = createServerFn({ method: "POST" })
       .parse(d),
   )
   .handler(async ({ data, context }) => {
+    // Dedupe target list up-front so every account gets the same clean set.
+    data.targets = dedupeTargets(data.targets);
     const { data: tasks, error } = await context.supabase
       .from("join_tasks")
       .select("id, account_id")
@@ -329,11 +371,13 @@ export const updateGroup = createServerFn({ method: "POST" })
         .single();
       if (cErr || !newTask) continue;
       if (data.targets.length) {
-        const rows = data.targets.map((t, i) => ({
+        const targets = dedupeTargets(data.targets);
+        const order = shuffledOrder(targets.length, newTask.id);
+        const rows = targets.map((t, i) => ({
           task_id: newTask.id,
           user_id: context.userId,
           target: t,
-          position: i,
+          position: order[i],
         }));
         await context.supabase.from("join_task_items").insert(rows);
       }
@@ -1065,11 +1109,15 @@ export const addAccountsToGroup = createServerFn({ method: "POST" })
         .single();
       if (crErr || !newTask) continue;
       if (templateItems?.length) {
-        const rows = templateItems.map((it: { target: string; position: number }) => ({
+        const uniq = dedupeTargets(
+          templateItems.map((it: { target: string }) => it.target),
+        );
+        const order = shuffledOrder(uniq.length, newTask.id);
+        const rows = uniq.map((target, i) => ({
           task_id: newTask.id,
           user_id: context.userId,
-          target: it.target,
-          position: it.position,
+          target,
+          position: order[i],
         }));
         await context.supabase.from("join_task_items").insert(rows);
       }
