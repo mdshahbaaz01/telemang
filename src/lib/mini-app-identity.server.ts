@@ -3,7 +3,7 @@
 // per account gives each account a distinct "device" fingerprint for bots
 // that rely on platform + theme + colour scheme in initData.
 
-const PLATFORMS = ["android", "ios", "tdesktop", "macos", "weba", "web"] as const;
+const PLATFORMS = ["android", "ios"] as const;
 
 type Theme = {
   bg_color: string;
@@ -76,9 +76,6 @@ const UA_TEMPLATES = [
   // iOS Safari
   { platform: "iPhone", ua: (v: number) => `Mozilla/5.0 (iPhone; CPU iPhone OS 17_${v % 6} like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.${v % 5} Mobile/15E148 Safari/604.1`, w: 390, h: 844, dpr: 3, mobile: true },
   { platform: "iPhone", ua: (v: number) => `Mozilla/5.0 (iPhone; CPU iPhone OS 16_${v % 7} like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/16.${v % 6} Mobile/15E148 Safari/604.1`, w: 375, h: 812, dpr: 3, mobile: true },
-  // Desktop
-  { platform: "Win32", ua: (v: number) => `Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/${118 + (v % 8)}.0.0.0 Safari/537.36`, w: 1536, h: 864, dpr: 1.25, mobile: false },
-  { platform: "MacIntel", ua: (v: number) => `Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.${v % 4} Safari/605.1.15`, w: 1440, h: 900, dpr: 2, mobile: false },
 ];
 
 const TIMEZONES = [

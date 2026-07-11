@@ -496,7 +496,7 @@ function BotFlowPage() {
                         <div className="p-3 text-xs text-destructive">{r.error}</div>
                       )}
                        {r.status === "ready" && r.url && (
-                        <MiniAppFrame url={r.url} title={who} accountId={r.accountId} />
+                         <MiniAppFrame url={r.url} title={who} accountId={r.accountId} botUsername={miniParsed?.username ?? ""} />
                       )}
                     </div>
                   </div>
@@ -537,7 +537,7 @@ function BotFlowPage() {
   );
 }
 
-function MiniAppFrame({ url, title, accountId }: { url: string; title: string; accountId: string }) {
+function MiniAppFrame({ url, title, accountId, botUsername }: { url: string; title: string; accountId: string; botUsername: string }) {
   const ref = useRef<HTMLIFrameElement | null>(null);
   const joinFn = useServerFn(joinFromLink);
   const [nonce, setNonce] = useState(0);
@@ -548,6 +548,17 @@ function MiniAppFrame({ url, title, accountId }: { url: string; title: string; a
     | null
   >(null);
   useTelegramWebviewBridge(ref, {
+    onClose: () => {
+      if (!botUsername) return false;
+      setOverlay({
+        status: "ready",
+        url,
+        peerKey: `@${botUsername.replace(/^@/, "")}`,
+        title: `@${botUsername.replace(/^@/, "")}`,
+        note: "Bot chat",
+      });
+      return true;
+    },
     onOpenTgLink: (link) => {
       // Intercept: resolve+join via THIS account, then show chat in same tile.
       setOverlay({ status: "loading", url: link });

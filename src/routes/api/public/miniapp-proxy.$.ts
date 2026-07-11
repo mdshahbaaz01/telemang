@@ -142,7 +142,7 @@ function buildOverrideScript(accountId: string, upstreamUrl: string) {
           isVerticalSwipesEnabled: true,
           ready() { hostPost('web_app_ready', {}); },
           expand() { this.isExpanded = true; hostPost('web_app_expand', {}); },
-          close() { hostPost('web_app_close', {}); },
+          close() { hostPost('web_app_close', { reason: 'close' }); },
           sendData(data) { hostPost('web_app_data_send', { data: String(data || '') }); },
           openLink(url) { hostPost('web_app_open_link', { url: String(url || '') }); },
           openTelegramLink(url) { hostPost('web_app_open_tg_link', { url: String(url || '') }); },
@@ -224,8 +224,12 @@ function buildOverrideScript(accountId: string, upstreamUrl: string) {
         // Resolve against upstream base so /foo → upstream/foo, not our origin.
         const abs = new URL(s, UPSTREAM);
         if (abs.protocol !== 'http:' && abs.protocol !== 'https:') return s;
-        // Already proxied? leave alone.
-        if (abs.origin === location.origin && abs.pathname.startsWith(PROXY_PREFIX)) return s;
+        // Already proxied? keep it proxied, but make sure the per-account
+        // identity survives hardcoded JS URLs rewritten by the server.
+        if (abs.origin === location.origin && abs.pathname.startsWith(PROXY_PREFIX)) {
+          if (!abs.searchParams.get('a')) abs.searchParams.set('a', ACCT);
+          return abs.toString();
+        }
         // Rewrite both same-preview paths and absolute upstream calls through the proxy.
         const target = (abs.origin === location.origin && upstreamOrigin)
           ? upstreamOrigin + abs.pathname + abs.search + abs.hash
@@ -353,7 +357,8 @@ function buildOverrideScript(accountId: string, upstreamUrl: string) {
     const set = (obj, key, val) => {
       try { Object.defineProperty(obj, key, { get: () => val, configurable: true }); } catch (e) {}
     };
-    const platformName = fp.platform.includes('iPhone') ? 'iOS' : fp.platform.includes('Mac') ? 'macOS' : fp.platform.includes('Win') ? 'Windows' : fp.mobile ? 'Android' : 'Linux';
+    const platformName = fp.platform.includes('iPhone') ? 'iOS' : fp.mobile ? 'Android' : 'Linux';
+    const isIOS = platformName === 'iOS';
     const chromeVersion = (fp.userAgent.split('Chrome/')[1] || '').split('.')[0] || '120';
     const mobileModel = (() => {
       try {
@@ -367,7 +372,7 @@ function buildOverrideScript(accountId: string, upstreamUrl: string) {
       { brand: 'Google Chrome', version: chromeVersion },
       { brand: 'Not:A-Brand', version: '99' },
     ]);
-    const uaData = {
+    const uaData = isIOS ? undefined : {
       brands,
       mobile: fp.mobile,
       platform: platformName,
@@ -379,7 +384,7 @@ function buildOverrideScript(accountId: string, upstreamUrl: string) {
           architecture: fp.mobile ? '' : (fp.platform.includes('Win') ? 'x86' : 'arm'),
           bitness: fp.mobile ? '' : '64',
           model: fp.mobile ? mobileModel : '',
-          platformVersion: fp.mobile ? '14.0.0' : fp.platform.includes('Win') ? '15.0.0' : '14.0.0',
+          platformVersion: fp.userAgent.includes('Android 13') ? '13.0.0' : fp.userAgent.includes('Android 12') ? '12.0.0' : '14.0.0',
           uaFullVersion: chromeVersion + '.0.0.0',
           fullVersionList: brands.map((b) => ({ brand: b.brand, version: b.brand === 'Not:A-Brand' ? '99.0.0.0' : chromeVersion + '.0.0.0' })),
           wow64: false,
@@ -399,7 +404,7 @@ function buildOverrideScript(accountId: string, upstreamUrl: string) {
         : key === 'hardwareConcurrency' ? fp.hardwareConcurrency
         : key === 'deviceMemory' ? fp.deviceMemory
         : key === 'maxTouchPoints' ? (fp.mobile ? 5 : 0)
-        : key === 'vendor' ? (fp.platform === 'iPhone' || fp.platform === 'MacIntel' ? 'Apple Computer, Inc.' : 'Google Inc.')
+        : key === 'vendor' ? (isIOS ? 'Apple Computer, Inc.' : 'Google Inc.')
         : key === 'webdriver' ? undefined
         : uaData;
       set(nav, key, val);
@@ -577,12 +582,17 @@ async function handle(request: Request, params: { _splat?: string }) {
 
   const upstreamHeaders = new Headers();
   const fp = deriveMiniAppIdentity(accountId).fingerprint;
+  const targetUrl = new URL(target);
   upstreamHeaders.set("user-agent", fp.userAgent);
   upstreamHeaders.set("accept-language", fp.languages.join(","));
+  upstreamHeaders.set("origin", targetUrl.origin);
+  upstreamHeaders.set("referer", `${targetUrl.origin}/`);
   const accept = request.headers.get("accept");
   if (accept) upstreamHeaders.set("accept", accept);
-  const referer = request.headers.get("referer");
-  if (referer) upstreamHeaders.set("referer", target);
+  const contentType = request.headers.get("content-type");
+  if (contentType) upstreamHeaders.set("content-type", contentType);
+  const requestedWith = request.headers.get("x-requested-with");
+  if (requestedWith) upstreamHeaders.set("x-requested-with", requestedWith);
 
   let upstream: Response;
   try {
