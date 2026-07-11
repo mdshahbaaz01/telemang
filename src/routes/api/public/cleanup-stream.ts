@@ -299,7 +299,7 @@ export const Route = createFileRoute("/api/public/cleanup-stream")({
             };
 
             try {
-              await Promise.all(body.jobs.map((j) => runOne(j.accountId, j.targets)));
+              await Promise.all(body.jobs.map((j) => runOne(j.accountId, j.targets, j.links)));
               send("end", { aborted: abortSignal.aborted });
             } catch (e) {
               send("log", { kind: "error", message: (e as Error).message });
