@@ -27,6 +27,7 @@ import { Route as AuthenticatedTasksNewRouteImport } from './routes/_authenticat
 import { Route as AuthenticatedTasksIdRouteImport } from './routes/_authenticated/tasks.$id'
 import { Route as AuthenticatedGroupsIdRouteImport } from './routes/_authenticated/groups.$id'
 import { Route as AuthenticatedAccountsIdRouteImport } from './routes/_authenticated/accounts.$id'
+import { Route as ApiPublicMiniappProxySplatRouteImport } from './routes/api/public/miniapp-proxy.$'
 import { Route as ApiPublicHooksRunScheduledBroadcastsRouteImport } from './routes/api/public/hooks/run-scheduled-broadcasts'
 import { Route as ApiPublicHooksDailySummaryRouteImport } from './routes/api/public/hooks/daily-summary'
 import { Route as ApiPublicHooksAutoLeaveRouteImport } from './routes/api/public/hooks/auto-leave'
@@ -121,6 +122,12 @@ const AuthenticatedAccountsIdRoute = AuthenticatedAccountsIdRouteImport.update({
   path: '/accounts/$id',
   getParentRoute: () => AuthenticatedRouteRoute,
 } as any)
+const ApiPublicMiniappProxySplatRoute =
+  ApiPublicMiniappProxySplatRouteImport.update({
+    id: '/api/public/miniapp-proxy/$',
+    path: '/api/public/miniapp-proxy/$',
+    getParentRoute: () => rootRouteImport,
+  } as any)
 const ApiPublicHooksRunScheduledBroadcastsRoute =
   ApiPublicHooksRunScheduledBroadcastsRouteImport.update({
     id: '/api/public/hooks/run-scheduled-broadcasts',
@@ -160,6 +167,7 @@ export interface FileRoutesByFullPath {
   '/api/public/hooks/auto-leave': typeof ApiPublicHooksAutoLeaveRoute
   '/api/public/hooks/daily-summary': typeof ApiPublicHooksDailySummaryRoute
   '/api/public/hooks/run-scheduled-broadcasts': typeof ApiPublicHooksRunScheduledBroadcastsRoute
+  '/api/public/miniapp-proxy/$': typeof ApiPublicMiniappProxySplatRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
@@ -182,6 +190,7 @@ export interface FileRoutesByTo {
   '/api/public/hooks/auto-leave': typeof ApiPublicHooksAutoLeaveRoute
   '/api/public/hooks/daily-summary': typeof ApiPublicHooksDailySummaryRoute
   '/api/public/hooks/run-scheduled-broadcasts': typeof ApiPublicHooksRunScheduledBroadcastsRoute
+  '/api/public/miniapp-proxy/$': typeof ApiPublicMiniappProxySplatRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
@@ -206,6 +215,7 @@ export interface FileRoutesById {
   '/api/public/hooks/auto-leave': typeof ApiPublicHooksAutoLeaveRoute
   '/api/public/hooks/daily-summary': typeof ApiPublicHooksDailySummaryRoute
   '/api/public/hooks/run-scheduled-broadcasts': typeof ApiPublicHooksRunScheduledBroadcastsRoute
+  '/api/public/miniapp-proxy/$': typeof ApiPublicMiniappProxySplatRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
@@ -230,6 +240,7 @@ export interface FileRouteTypes {
     | '/api/public/hooks/auto-leave'
     | '/api/public/hooks/daily-summary'
     | '/api/public/hooks/run-scheduled-broadcasts'
+    | '/api/public/miniapp-proxy/$'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
@@ -252,6 +263,7 @@ export interface FileRouteTypes {
     | '/api/public/hooks/auto-leave'
     | '/api/public/hooks/daily-summary'
     | '/api/public/hooks/run-scheduled-broadcasts'
+    | '/api/public/miniapp-proxy/$'
   id:
     | '__root__'
     | '/'
@@ -275,6 +287,7 @@ export interface FileRouteTypes {
     | '/api/public/hooks/auto-leave'
     | '/api/public/hooks/daily-summary'
     | '/api/public/hooks/run-scheduled-broadcasts'
+    | '/api/public/miniapp-proxy/$'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -286,6 +299,7 @@ export interface RootRouteChildren {
   ApiPublicHooksAutoLeaveRoute: typeof ApiPublicHooksAutoLeaveRoute
   ApiPublicHooksDailySummaryRoute: typeof ApiPublicHooksDailySummaryRoute
   ApiPublicHooksRunScheduledBroadcastsRoute: typeof ApiPublicHooksRunScheduledBroadcastsRoute
+  ApiPublicMiniappProxySplatRoute: typeof ApiPublicMiniappProxySplatRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -416,6 +430,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedAccountsIdRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
+    '/api/public/miniapp-proxy/$': {
+      id: '/api/public/miniapp-proxy/$'
+      path: '/api/public/miniapp-proxy/$'
+      fullPath: '/api/public/miniapp-proxy/$'
+      preLoaderRoute: typeof ApiPublicMiniappProxySplatRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/api/public/hooks/run-scheduled-broadcasts': {
       id: '/api/public/hooks/run-scheduled-broadcasts'
       path: '/api/public/hooks/run-scheduled-broadcasts'
@@ -485,6 +506,7 @@ const rootRouteChildren: RootRouteChildren = {
   ApiPublicHooksDailySummaryRoute: ApiPublicHooksDailySummaryRoute,
   ApiPublicHooksRunScheduledBroadcastsRoute:
     ApiPublicHooksRunScheduledBroadcastsRoute,
+  ApiPublicMiniappProxySplatRoute: ApiPublicMiniappProxySplatRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
