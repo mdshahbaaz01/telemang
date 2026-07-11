@@ -352,6 +352,9 @@ function ActionsPageInner() {
   const [voiceMode, setVoiceMode] = useState(false);
   const [editText, setEditText] = useState("");
   const [deleteIds, setDeleteIds] = useState("");
+  const [deleteMode, setDeleteMode] = useState<"list" | "range">("list");
+  const [deleteRangeStart, setDeleteRangeStart] = useState("");
+  const [deleteRangeEnd, setDeleteRangeEnd] = useState("");
 
   const [logs, setLogs] = useState<LogEntry[]>([]);
   const [running, setRunning] = useState(false);
@@ -446,7 +449,20 @@ function ActionsPageInner() {
   };
 
   const run = async (mode: "apply" | "clear" = "apply") => {
-    const src = parseMessageLink(source);
+    let src = parseMessageLink(source);
+    if (tab === "deleteMessages" && deleteMode === "range") {
+      const a = parseMessageLink(deleteRangeStart);
+      const b = parseMessageLink(deleteRangeEnd);
+      if (!a || !b) {
+        toast.error("Enter valid start and end message links");
+        return;
+      }
+      if (a.chat !== b.chat) {
+        toast.error("Start and end links must be from the same chat");
+        return;
+      }
+      src = a;
+    }
     if (!src) {
       toast.error("Enter a valid message link (https://t.me/<chat>/<id>)");
       return;
@@ -491,11 +507,25 @@ function ActionsPageInner() {
       if (!editText.trim()) return toast.error("Enter replacement text");
       op = { kind: "edit", source: src, message: editText.trim(), format: textFormat };
     } else if (tab === "deleteMessages") {
-      const ids = deleteIds
-        .split(/[\s,]+/)
-        .map((s) => Number(s.trim()))
-        .filter((n) => Number.isInteger(n) && n > 0);
-      const messageIds = ids.length ? ids : [src.msgId];
+      let messageIds: number[];
+      if (deleteMode === "range") {
+        const a = parseMessageLink(deleteRangeStart)!;
+        const b = parseMessageLink(deleteRangeEnd)!;
+        const lo = Math.min(a.msgId, b.msgId);
+        const hi = Math.max(a.msgId, b.msgId);
+        const span = hi - lo + 1;
+        if (span > 2000) {
+          toast.error(`Range too large (${span}). Max 2000 messages per run.`);
+          return;
+        }
+        messageIds = Array.from({ length: span }, (_, i) => lo + i);
+      } else {
+        const ids = deleteIds
+          .split(/[\s,]+/)
+          .map((s) => Number(s.trim()))
+          .filter((n) => Number.isInteger(n) && n > 0);
+        messageIds = ids.length ? ids : [src.msgId];
+      }
       op = { kind: "deleteMessages", chat: src.chat, messageIds, revoke: true };
     } else {
       // handled below in runBroadcast
@@ -1204,15 +1234,67 @@ function ActionsPageInner() {
 
             {tab === "deleteMessages" && (
               <div className="space-y-3">
-                <div>
-                  <Label>Message IDs to delete</Label>
-                  <Textarea
-                    rows={3}
-                    value={deleteIds}
-                    onChange={(e) => setDeleteIds(e.target.value)}
-                    placeholder="Leave empty to delete the linked message, or enter IDs: 1201, 1202, 1203"
-                  />
+                <div className="flex gap-2">
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant={deleteMode === "list" ? "default" : "outline"}
+                    onClick={() => setDeleteMode("list")}
+                  >
+                    IDs / single
+                  </Button>
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant={deleteMode === "range" ? "default" : "outline"}
+                    onClick={() => setDeleteMode("range")}
+                  >
+                    Link range
+                  </Button>
                 </div>
+                {deleteMode === "list" ? (
+                  <div>
+                    <Label>Message IDs to delete</Label>
+                    <Textarea
+                      rows={3}
+                      value={deleteIds}
+                      onChange={(e) => setDeleteIds(e.target.value)}
+                      placeholder="Leave empty to delete the linked message, or enter IDs: 1201, 1202, 1203"
+                    />
+                  </div>
+                ) : (
+                  <div className="space-y-2">
+                    <div>
+                      <Label>Start message link</Label>
+                      <Input
+                        value={deleteRangeStart}
+                        onChange={(e) => setDeleteRangeStart(e.target.value)}
+                        placeholder="https://t.me/<chat>/1200"
+                      />
+                    </div>
+                    <div>
+                      <Label>End message link</Label>
+                      <Input
+                        value={deleteRangeEnd}
+                        onChange={(e) => setDeleteRangeEnd(e.target.value)}
+                        placeholder="https://t.me/<chat>/1350"
+                      />
+                    </div>
+                    {(() => {
+                      const a = parseMessageLink(deleteRangeStart);
+                      const b = parseMessageLink(deleteRangeEnd);
+                      if (!a || !b) return null;
+                      if (a.chat !== b.chat)
+                        return <p className="text-xs text-destructive">Both links must be from the same chat.</p>;
+                      const span = Math.abs(b.msgId - a.msgId) + 1;
+                      return (
+                        <p className="text-xs text-muted-foreground">
+                          Will delete {span} message{span === 1 ? "" : "s"} (IDs {Math.min(a.msgId, b.msgId)}–{Math.max(a.msgId, b.msgId)}).
+                        </p>
+                      );
+                    })()}
+                  </div>
+                )}
                 <DelayFields minDelay={minDelay} maxDelay={maxDelay} setMin={setMinDelay} setMax={setMaxDelay} />
                 <AccountMultiPicker
                   accountList={accountList}
