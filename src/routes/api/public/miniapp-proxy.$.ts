@@ -109,6 +109,52 @@ function buildOverrideScript(accountId: string) {
 })();`;
 }
 
+function proxyUrl(target: string, accountId: string) {
+  return `/api/public/miniapp-proxy/${encodeURIComponent(target)}?a=${encodeURIComponent(accountId)}`;
+}
+
+function rewriteHtmlUrls(html: string, baseUrl: string, accountId: string) {
+  const base = new URL(baseUrl);
+  const toProxy = (raw: string) => {
+    if (!raw || raw.startsWith("#") || raw.startsWith("data:") || raw.startsWith("blob:") || raw.startsWith("mailto:") || raw.startsWith("tel:")) {
+      return raw;
+    }
+    try {
+      const absolute = new URL(raw, base).toString();
+      if (!/^https?:\/\//i.test(absolute)) return raw;
+      return proxyUrl(absolute, accountId);
+    } catch {
+      return raw;
+    }
+  };
+
+  return html
+    .replace(/\b(src|href|action)=(['"])(.*?)\2/gi, (_m, attr, quote, value) => `${attr}=${quote}${toProxy(value)}${quote}`)
+    .replace(/\bsrcset=(['"])(.*?)\1/gi, (_m, quote, value) => {
+      const rewritten = String(value)
+        .split(",")
+        .map((part) => {
+          const trimmed = part.trim();
+          const [urlPart, ...rest] = trimmed.split(/\s+/);
+          return [toProxy(urlPart), ...rest].join(" ");
+        })
+        .join(", ");
+      return `srcset=${quote}${rewritten}${quote}`;
+    });
+}
+
+function rewriteCssUrls(css: string, baseUrl: string, accountId: string) {
+  const base = new URL(baseUrl);
+  return css.replace(/url\((['"]?)(.*?)\1\)/gi, (_m, quote, value) => {
+    if (!value || value.startsWith("data:") || value.startsWith("blob:")) return `url(${quote}${value}${quote})`;
+    try {
+      return `url(${quote}${proxyUrl(new URL(value, base).toString(), accountId)}${quote})`;
+    } catch {
+      return `url(${quote}${value}${quote})`;
+    }
+  });
+}
+
 async function handle(request: Request, params: { _splat?: string }) {
   const target = params._splat ? decodeURIComponent(params._splat) : "";
   if (!target || !/^https?:\/\//.test(target)) {
@@ -147,9 +193,11 @@ async function handle(request: Request, params: { _splat?: string }) {
   const ctype = upstream.headers.get("content-type") || "";
   if (ctype.includes("text/html")) {
     let html = await upstream.text();
-    const upstreamOrigin = new URL(upstream.url || target).origin;
+    const finalUrl = upstream.url || target;
+    const upstreamDir = new URL(".", finalUrl).toString();
     const script = `<script>${buildOverrideScript(accountId)}</script>`;
-    const base = `<base href="${upstreamOrigin}/">`;
+    const base = `<base href="${upstreamDir}">`;
+    html = rewriteHtmlUrls(html, finalUrl, accountId);
     if (/<head[^>]*>/i.test(html)) {
       html = html.replace(/<head([^>]*)>/i, `<head$1>${base}${script}`);
     } else {
@@ -157,6 +205,11 @@ async function handle(request: Request, params: { _splat?: string }) {
     }
     outHeaders.set("content-type", "text/html; charset=utf-8");
     return new Response(html, { status: upstream.status, headers: outHeaders });
+  }
+  if (ctype.includes("text/css")) {
+    const css = rewriteCssUrls(await upstream.text(), upstream.url || target, accountId);
+    outHeaders.set("content-type", "text/css; charset=utf-8");
+    return new Response(css, { status: upstream.status, headers: outHeaders });
   }
   return new Response(upstream.body, { status: upstream.status, headers: outHeaders });
 }
