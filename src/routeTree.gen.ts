@@ -20,6 +20,7 @@ import { Route as AuthenticatedOwnerRouteImport } from './routes/_authenticated/
 import { Route as AuthenticatedDashboardRouteImport } from './routes/_authenticated/dashboard'
 import { Route as AuthenticatedCleanupRouteImport } from './routes/_authenticated/cleanup'
 import { Route as AuthenticatedButtonsRouteImport } from './routes/_authenticated/buttons'
+import { Route as AuthenticatedBulkPlusRouteImport } from './routes/_authenticated/bulk-plus'
 import { Route as AuthenticatedBulkMixRouteImport } from './routes/_authenticated/bulk-mix'
 import { Route as AuthenticatedBotParserRouteImport } from './routes/_authenticated/bot-parser'
 import { Route as AuthenticatedBotFlowRouteImport } from './routes/_authenticated/bot-flow'
@@ -91,6 +92,11 @@ const AuthenticatedCleanupRoute = AuthenticatedCleanupRouteImport.update({
 const AuthenticatedButtonsRoute = AuthenticatedButtonsRouteImport.update({
   id: '/buttons',
   path: '/buttons',
+  getParentRoute: () => AuthenticatedRouteRoute,
+} as any)
+const AuthenticatedBulkPlusRoute = AuthenticatedBulkPlusRouteImport.update({
+  id: '/bulk-plus',
+  path: '/bulk-plus',
   getParentRoute: () => AuthenticatedRouteRoute,
 } as any)
 const AuthenticatedBulkMixRoute = AuthenticatedBulkMixRouteImport.update({
@@ -191,6 +197,7 @@ export interface FileRoutesByFullPath {
   '/bot-flow': typeof AuthenticatedBotFlowRoute
   '/bot-parser': typeof AuthenticatedBotParserRoute
   '/bulk-mix': typeof AuthenticatedBulkMixRoute
+  '/bulk-plus': typeof AuthenticatedBulkPlusRoute
   '/buttons': typeof AuthenticatedButtonsRoute
   '/cleanup': typeof AuthenticatedCleanupRoute
   '/dashboard': typeof AuthenticatedDashboardRoute
@@ -220,6 +227,7 @@ export interface FileRoutesByTo {
   '/bot-flow': typeof AuthenticatedBotFlowRoute
   '/bot-parser': typeof AuthenticatedBotParserRoute
   '/bulk-mix': typeof AuthenticatedBulkMixRoute
+  '/bulk-plus': typeof AuthenticatedBulkPlusRoute
   '/buttons': typeof AuthenticatedButtonsRoute
   '/cleanup': typeof AuthenticatedCleanupRoute
   '/dashboard': typeof AuthenticatedDashboardRoute
@@ -251,6 +259,7 @@ export interface FileRoutesById {
   '/_authenticated/bot-flow': typeof AuthenticatedBotFlowRoute
   '/_authenticated/bot-parser': typeof AuthenticatedBotParserRoute
   '/_authenticated/bulk-mix': typeof AuthenticatedBulkMixRoute
+  '/_authenticated/bulk-plus': typeof AuthenticatedBulkPlusRoute
   '/_authenticated/buttons': typeof AuthenticatedButtonsRoute
   '/_authenticated/cleanup': typeof AuthenticatedCleanupRoute
   '/_authenticated/dashboard': typeof AuthenticatedDashboardRoute
@@ -282,6 +291,7 @@ export interface FileRouteTypes {
     | '/bot-flow'
     | '/bot-parser'
     | '/bulk-mix'
+    | '/bulk-plus'
     | '/buttons'
     | '/cleanup'
     | '/dashboard'
@@ -311,6 +321,7 @@ export interface FileRouteTypes {
     | '/bot-flow'
     | '/bot-parser'
     | '/bulk-mix'
+    | '/bulk-plus'
     | '/buttons'
     | '/cleanup'
     | '/dashboard'
@@ -341,6 +352,7 @@ export interface FileRouteTypes {
     | '/_authenticated/bot-flow'
     | '/_authenticated/bot-parser'
     | '/_authenticated/bulk-mix'
+    | '/_authenticated/bulk-plus'
     | '/_authenticated/buttons'
     | '/_authenticated/cleanup'
     | '/_authenticated/dashboard'
@@ -452,6 +464,13 @@ declare module '@tanstack/react-router' {
       path: '/buttons'
       fullPath: '/buttons'
       preLoaderRoute: typeof AuthenticatedButtonsRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
+    '/_authenticated/bulk-plus': {
+      id: '/_authenticated/bulk-plus'
+      path: '/bulk-plus'
+      fullPath: '/bulk-plus'
+      preLoaderRoute: typeof AuthenticatedBulkPlusRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
     '/_authenticated/bulk-mix': {
@@ -583,6 +602,7 @@ interface AuthenticatedRouteRouteChildren {
   AuthenticatedBotFlowRoute: typeof AuthenticatedBotFlowRoute
   AuthenticatedBotParserRoute: typeof AuthenticatedBotParserRoute
   AuthenticatedBulkMixRoute: typeof AuthenticatedBulkMixRoute
+  AuthenticatedBulkPlusRoute: typeof AuthenticatedBulkPlusRoute
   AuthenticatedButtonsRoute: typeof AuthenticatedButtonsRoute
   AuthenticatedCleanupRoute: typeof AuthenticatedCleanupRoute
   AuthenticatedDashboardRoute: typeof AuthenticatedDashboardRoute
@@ -604,6 +624,7 @@ const AuthenticatedRouteRouteChildren: AuthenticatedRouteRouteChildren = {
   AuthenticatedBotFlowRoute: AuthenticatedBotFlowRoute,
   AuthenticatedBotParserRoute: AuthenticatedBotParserRoute,
   AuthenticatedBulkMixRoute: AuthenticatedBulkMixRoute,
+  AuthenticatedBulkPlusRoute: AuthenticatedBulkPlusRoute,
   AuthenticatedButtonsRoute: AuthenticatedButtonsRoute,
   AuthenticatedCleanupRoute: AuthenticatedCleanupRoute,
   AuthenticatedDashboardRoute: AuthenticatedDashboardRoute,
