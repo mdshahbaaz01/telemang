@@ -1,6 +1,8 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Database } from "@/integrations/supabase/types";
 import { resolveTargetEntity } from "./telegram-target-resolver.server";
+import { runWithLimit } from "./p-limit";
+import type { SpintaxVars } from "./spintax";
 
 export type Attachment = { path: string; filename: string; mimeType?: string; isVoice?: boolean };
 
@@ -17,6 +19,7 @@ export type BroadcastExecInput = {
   rows: BroadcastRowInput[];
   minDelay: number;
   maxDelay: number;
+  concurrency?: number;
 };
 
 export type BroadcastExecResult = {
@@ -41,6 +44,7 @@ export type ReplyExecInput = {
   rows: ReplyRowInput[];
   minDelay: number;
   maxDelay: number;
+  concurrency?: number;
 };
 
 export type ForwardExecInput = {
@@ -49,6 +53,7 @@ export type ForwardExecInput = {
   targets: string[];
   minDelay: number;
   maxDelay: number;
+  concurrency?: number;
 };
 
 function jitter(min: number, max: number) {
@@ -63,6 +68,33 @@ function errorText(error: unknown) {
 }
 
 import { formatMessage } from "./message-format";
+
+function varsFromEntity(e: any, index: number, accountName?: string): SpintaxVars {
+  return {
+    first_name: e?.firstName ?? e?.title ?? "",
+    last_name: e?.lastName ?? "",
+    username: e?.username ?? "",
+    n: index + 1,
+    account_index: index + 1,
+    account_name: accountName ?? "",
+  };
+}
+
+async function loadAccountMeta(supabase: SupabaseClient<Database>, ids: string[]) {
+  if (!ids.length) return new Map<string, { signature: string | null; name: string }>();
+  const { data } = await supabase
+    .from("telegram_accounts")
+    .select("id, signature, first_name, username, phone")
+    .in("id", ids);
+  const m = new Map<string, { signature: string | null; name: string }>();
+  for (const a of (data ?? []) as any[]) {
+    m.set(a.id, {
+      signature: a.signature ?? null,
+      name: a.first_name || a.username || a.phone || String(a.id).slice(0, 6),
+    });
+  }
+  return m;
+}
 
 async function resolveSourcePeer(client: any, Api: any, src: SourceRef) {
   if (src.chat.startsWith("c/")) {
