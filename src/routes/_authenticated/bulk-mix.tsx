@@ -137,8 +137,7 @@ function BulkMix() {
 
 function ReactionsMix({ accounts }: { accounts: any[] }) {
   const runFn = useServerFn(runReactionsLive);
-  const [chat, setChat] = useState("");
-  const [msgId, setMsgId] = useState("");
+  const [links, setLinks] = useState("");
   const [emojis, setEmojis] = useState<Emoji[]>([{ emoji: "👍", weight: 7 }, { emoji: "❤️", weight: 3 }]);
   const [spread, setSpread] = useState(30);
   const [big, setBig] = useState(false);
@@ -147,27 +146,43 @@ function ReactionsMix({ accounts }: { accounts: any[] }) {
   const [busy, setBusy] = useState(false);
   const [logs, setLogs] = useState<LogRow[]>([]);
 
-  const canRun = useMemo(
-    () => chat.trim() && Number(msgId) > 0 && selected.size > 0 && emojis.every((e) => e.emoji && e.weight > 0),
-    [chat, msgId, selected, emojis],
-  );
+  const posts = useMemo(() => parsePostLinks(links), [links]);
+  const canRun = posts.length > 0 && selected.size > 0 && emojis.every((e) => e.emoji && e.weight > 0);
 
   const run = async () => {
     setBusy(true);
     setLogs([]);
+    let totalOk = 0;
+    let totalFail = 0;
+    const allLogs: LogRow[] = [];
     try {
-      const res = await runFn({
-        data: {
-          source: { chat: chat.trim(), msgId: Number(msgId) },
-          accountIds: Array.from(selected),
-          emojis,
-          spreadSeconds: spread,
-          randomizeOrder: randomize,
-          big,
-        },
-      });
-      setLogs(res.logs);
-      toast.success(`Reacted: ok ${res.ok}, fail ${res.fail}`);
+      await Promise.all(
+        posts.map(async (p) => {
+          try {
+            const res = await runFn({
+              data: {
+                source: { chat: p.chat, msgId: p.msgId },
+                accountIds: Array.from(selected),
+                emojis,
+                spreadSeconds: spread,
+                randomizeOrder: randomize,
+                big,
+              },
+            });
+            totalOk += res.ok;
+            totalFail += res.fail;
+            allLogs.push(
+              { accountId: null, target: p.raw, level: "info", message: `▶ ${p.raw} — ok ${res.ok} / fail ${res.fail}` },
+              ...res.logs,
+            );
+          } catch (e) {
+            totalFail += selected.size;
+            allLogs.push({ accountId: null, target: p.raw, level: "error", message: `${p.raw}: ${(e as Error).message}` });
+          }
+          setLogs([...allLogs]);
+        }),
+      );
+      toast.success(`Reacted across ${posts.length} post(s): ok ${totalOk}, fail ${totalFail}`);
     } catch (e) {
       toast.error((e as Error).message);
     } finally {
@@ -180,9 +195,18 @@ function ReactionsMix({ accounts }: { accounts: any[] }) {
       <Card>
         <CardHeader><CardTitle className="text-base">Target & Mix</CardTitle></CardHeader>
         <CardContent className="space-y-3">
-          <div className="grid grid-cols-3 gap-2">
-            <div className="col-span-2"><Label>Chat</Label><Input value={chat} onChange={(e) => setChat(e.target.value)} placeholder="@channel or c/123456" /></div>
-            <div><Label>Msg ID</Label><Input value={msgId} onChange={(e) => setMsgId(e.target.value.replace(/\D/g, ""))} /></div>
+          <div>
+            <Label>Post links (one per line, or comma/space separated)</Label>
+            <Textarea
+              rows={4}
+              value={links}
+              onChange={(e) => setLinks(e.target.value)}
+              placeholder={"https://t.me/channel/123\nhttps://t.me/c/1234567890/45\n@channel/678"}
+            />
+            <p className="mt-1 text-xs text-muted-foreground">
+              Parsed: {posts.length} post{posts.length === 1 ? "" : "s"}
+              {posts.length > 0 && ` — ${posts.slice(0, 3).map((p) => `${p.chat}/${p.msgId}`).join(", ")}${posts.length > 3 ? "…" : ""}`}
+            </p>
           </div>
           <div>
             <Label>Weighted emoji mix</Label>
@@ -214,7 +238,7 @@ function ReactionsMix({ accounts }: { accounts: any[] }) {
           </div>
           <Button onClick={run} disabled={!canRun || busy}>
             {busy ? <Loader2 className="mr-1 h-4 w-4 animate-spin" /> : <Smile className="mr-1 h-4 w-4" />}
-            React from {selected.size} account{selected.size === 1 ? "" : "s"}
+            React from {selected.size} account{selected.size === 1 ? "" : "s"} × {posts.length} post{posts.length === 1 ? "" : "s"}
           </Button>
         </CardContent>
       </Card>
@@ -228,32 +252,56 @@ function ReactionsMix({ accounts }: { accounts: any[] }) {
 
 function ViewBoost({ accounts }: { accounts: any[] }) {
   const runFn = useServerFn(runViewBoostLive);
-  const [chat, setChat] = useState("");
-  const [ids, setIds] = useState("");
+  const [links, setLinks] = useState("");
   const [spread, setSpread] = useState(60);
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [busy, setBusy] = useState(false);
   const [logs, setLogs] = useState<LogRow[]>([]);
 
-  const msgIds = useMemo(
-    () => ids.split(/[\s,]+/).map((s) => Number(s)).filter((n) => Number.isInteger(n) && n > 0).slice(0, 20),
-    [ids],
-  );
-  const canRun = chat.trim() && msgIds.length && selected.size > 0;
+  // Group parsed links by chat so we can pass msgIds[] per chat in one call.
+  const grouped = useMemo(() => {
+    const map = new Map<string, number[]>();
+    for (const p of parsePostLinks(links)) {
+      const arr = map.get(p.chat) ?? [];
+      if (!arr.includes(p.msgId) && arr.length < 20) arr.push(p.msgId);
+      map.set(p.chat, arr);
+    }
+    return Array.from(map.entries()).map(([chat, msgIds]) => ({ chat, msgIds }));
+  }, [links]);
+  const totalPosts = grouped.reduce((n, g) => n + g.msgIds.length, 0);
+  const canRun = grouped.length > 0 && selected.size > 0;
 
   const run = async () => {
     setBusy(true);
     setLogs([]);
+    let totalOk = 0;
+    let totalFail = 0;
+    const allLogs: LogRow[] = [];
     try {
-      const res = await runFn({
-        data: {
-          source: { chat: chat.trim(), msgIds },
-          accountIds: Array.from(selected),
-          spreadSeconds: spread,
-        },
-      });
-      setLogs(res.logs);
-      toast.success(`Views: ok ${res.ok}, fail ${res.fail}`);
+      await Promise.all(
+        grouped.map(async (g) => {
+          try {
+            const res = await runFn({
+              data: {
+                source: { chat: g.chat, msgIds: g.msgIds },
+                accountIds: Array.from(selected),
+                spreadSeconds: spread,
+              },
+            });
+            totalOk += res.ok;
+            totalFail += res.fail;
+            allLogs.push(
+              { accountId: null, target: `${g.chat}/${g.msgIds.join(",")}`, level: "info", message: `▶ ${g.chat} [${g.msgIds.join(",")}] — ok ${res.ok} / fail ${res.fail}` },
+              ...res.logs,
+            );
+          } catch (e) {
+            totalFail += selected.size;
+            allLogs.push({ accountId: null, target: g.chat, level: "error", message: `${g.chat}: ${(e as Error).message}` });
+          }
+          setLogs([...allLogs]);
+        }),
+      );
+      toast.success(`Views on ${totalPosts} post(s): ok ${totalOk}, fail ${totalFail}`);
     } catch (e) {
       toast.error((e as Error).message);
     } finally {
@@ -266,16 +314,23 @@ function ViewBoost({ accounts }: { accounts: any[] }) {
       <Card>
         <CardHeader><CardTitle className="text-base">Target</CardTitle></CardHeader>
         <CardContent className="space-y-3">
-          <div><Label>Chat</Label><Input value={chat} onChange={(e) => setChat(e.target.value)} placeholder="@channel" /></div>
           <div>
-            <Label>Message IDs (comma or space separated, up to 20)</Label>
-            <Input value={ids} onChange={(e) => setIds(e.target.value)} placeholder="123, 124, 125" />
-            <p className="mt-1 text-xs text-muted-foreground">Parsed: {msgIds.join(", ") || "—"}</p>
+            <Label>Post links (one per line — mix any channels)</Label>
+            <Textarea
+              rows={5}
+              value={links}
+              onChange={(e) => setLinks(e.target.value)}
+              placeholder={"https://t.me/channel/123\nhttps://t.me/channel/124\nhttps://t.me/c/1234567890/45"}
+            />
+            <p className="mt-1 text-xs text-muted-foreground">
+              Parsed: {totalPosts} post{totalPosts === 1 ? "" : "s"} across {grouped.length} chat{grouped.length === 1 ? "" : "s"}
+              {grouped.length > 0 && ` — ${grouped.slice(0, 2).map((g) => `${g.chat} [${g.msgIds.join(",")}]`).join("; ")}${grouped.length > 2 ? "…" : ""}`}
+            </p>
           </div>
           <div><Label>Spread (sec)</Label><Input type="number" min={0} max={3600} value={spread} onChange={(e) => setSpread(Number(e.target.value) || 0)} /></div>
           <Button onClick={run} disabled={!canRun || busy}>
             {busy ? <Loader2 className="mr-1 h-4 w-4 animate-spin" /> : <Eye className="mr-1 h-4 w-4" />}
-            Boost views from {selected.size} account{selected.size === 1 ? "" : "s"}
+            Boost views from {selected.size} account{selected.size === 1 ? "" : "s"} × {totalPosts} post{totalPosts === 1 ? "" : "s"}
           </Button>
         </CardContent>
       </Card>
