@@ -18,6 +18,10 @@ function normalizePeerKey(peerAny: any): string | null {
 }
 
 async function resolvePeerFromKey(client: any, Api: any, key: string) {
+  // Allow @username as a peer key — resolve to entity directly.
+  if (key.startsWith("@")) {
+    return await client.getEntity(key.slice(1));
+  }
   const [kind, raw] = key.split(":");
   const { default: bigInt } = await import("big-integer");
   const id = bigInt(raw);
