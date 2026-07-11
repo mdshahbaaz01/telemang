@@ -53,6 +53,26 @@ function buildOverrideScript(accountId: string) {
         return PROXY_PREFIX + encodeURIComponent(bare) + '?a=' + encodeURIComponent(ACCT) + hash;
       } catch { return s; }
     };
+    const isTgLink = (raw) => {
+      try {
+        const s = String(raw || '');
+        return /^tg:\/\//i.test(s) || /^https?:\/\/(t\.me|telegram\.me|telegram\.dog)\//i.test(s);
+      } catch { return false; }
+    };
+    const openInsideHost = (raw) => {
+      if (!raw) return false;
+      const s = String(raw);
+      if (isTgLink(s)) {
+        try {
+          window.parent && window.parent.postMessage(JSON.stringify({ eventType: 'web_app_open_tg_link', eventData: { url: s } }), '*');
+        } catch {}
+        return true;
+      }
+      try {
+        window.location.href = proxify(s);
+        return true;
+      } catch { return false; }
+    };
 
     // Patch fetch
     try {
@@ -118,10 +138,10 @@ function buildOverrideScript(accountId: string) {
       history.replaceState = function(s, t, u) { return origRepl(s, t, u ? proxify(u) : u); };
     } catch {}
 
-    // Patch window.open
+    // Patch window.open — never create a browser tab from inside a mini-app tile.
+    // Telegram links are handed to the parent tile; normal links navigate the iframe.
     try {
-      const origOpen = window.open.bind(window);
-      window.open = function(u, ...rest) { return origOpen(u ? proxify(u) : u, ...rest); };
+      window.open = function(u) { openInsideHost(u); return null; };
     } catch {}
 
     // Intercept anchor clicks & form submits (catches links added dynamically)
@@ -131,14 +151,16 @@ function buildOverrideScript(accountId: string) {
         if (!a) return;
         const href = a.getAttribute('href');
         if (!href) return;
-        const proxied = proxify(href);
-        if (proxied !== href) a.setAttribute('href', proxied);
+        e.preventDefault();
+        e.stopPropagation();
+        openInsideHost(href);
       }, true);
       document.addEventListener('submit', (e) => {
         const f = e.target;
         if (!f || !f.getAttribute) return;
         const action = f.getAttribute('action');
         if (!action) return;
+        f.setAttribute('target', '_self');
         const proxied = proxify(action);
         if (proxied !== action) f.setAttribute('action', proxied);
       }, true);
