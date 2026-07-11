@@ -438,6 +438,7 @@ function AccountViewerPage() {
             ))}
           </div>
         </aside>
+        )}
 
         {/* Chat pane */}
         <section className="flex min-h-0 flex-col">
