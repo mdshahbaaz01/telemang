@@ -559,7 +559,7 @@ function rewriteCssUrls(css: string, baseUrl: string, accountId: string, proxyOr
 function rewriteJsUrls(js: string, baseUrl: string, accountId: string, proxyOrigin: string) {
   try {
     const upstream = new URL(baseUrl);
-    const proxyBase = `${proxyOrigin}/api/public/miniapp-proxy/${encodeURIComponent(upstream.origin)}?a=${encodeURIComponent(accountId)}&u=`;
+    const proxyBase = `${proxyOrigin}/api/public/miniapp-proxy/${encodeURIComponent(upstream.origin)}`;
     return js.replaceAll(upstream.origin, proxyBase);
   } catch {
     return js;
