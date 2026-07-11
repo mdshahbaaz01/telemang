@@ -224,8 +224,12 @@ function buildOverrideScript(accountId: string, upstreamUrl: string) {
         // Resolve against upstream base so /foo → upstream/foo, not our origin.
         const abs = new URL(s, UPSTREAM);
         if (abs.protocol !== 'http:' && abs.protocol !== 'https:') return s;
-        // Already proxied? leave alone.
-        if (abs.origin === location.origin && abs.pathname.startsWith(PROXY_PREFIX)) return s;
+        // Already proxied? keep it proxied, but make sure the per-account
+        // identity survives hardcoded JS URLs rewritten by the server.
+        if (abs.origin === location.origin && abs.pathname.startsWith(PROXY_PREFIX)) {
+          if (!abs.searchParams.get('a')) abs.searchParams.set('a', ACCT);
+          return abs.toString();
+        }
         // Rewrite both same-preview paths and absolute upstream calls through the proxy.
         const target = (abs.origin === location.origin && upstreamOrigin)
           ? upstreamOrigin + abs.pathname + abs.search + abs.hash
