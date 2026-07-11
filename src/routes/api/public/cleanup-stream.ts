@@ -18,12 +18,13 @@ const targetSchema = z.object({
 });
 
 const bodySchema = z.object({
-  action: z.enum(["leave", "block", "deleteHistory", "deletePersonal"]),
+  action: z.enum(["leave", "block", "deleteHistory", "deletePersonal", "leaveByLinks"]),
   jobs: z
     .array(
       z.object({
         accountId: z.string().uuid(),
-        targets: z.array(targetSchema).min(1).max(1000),
+        targets: z.array(targetSchema).max(1000).default([]),
+        links: z.array(z.string().min(1)).max(500).optional(),
       }),
     )
     .min(1)
