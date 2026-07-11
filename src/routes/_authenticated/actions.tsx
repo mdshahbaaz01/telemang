@@ -7,6 +7,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { listAccounts } from "@/lib/accounts.functions";
 import { loadPoll, listActionRuns, deleteActionRun, clearActionRuns } from "@/lib/actions.functions";
+import { precheckBroadcastTargets, type PrecheckResult } from "@/lib/precheck-targets.functions";
 import {
   getBroadcastReplies,
   refreshReplyThread,
