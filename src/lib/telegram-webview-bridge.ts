@@ -122,7 +122,7 @@ export function useTelegramWebviewBridge(
               } catch {}
             }
             try {
-              window.open(url, "_blank", "noopener,noreferrer");
+              if (!isTgLink) iframe.src = url;
             } catch {}
           }
           break;
