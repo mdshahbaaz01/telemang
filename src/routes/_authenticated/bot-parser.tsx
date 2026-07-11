@@ -12,8 +12,20 @@ import { Input } from "@/components/ui/input";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { AdminGate } from "@/components/AdminGate";
-import { ArrowLeft, Play, Trash2, Plus } from "lucide-react";
+import { ArrowLeft, Play, Trash2, Plus, Download } from "lucide-react";
 import { toast } from "sonner";
+
+function downloadCsv(filename: string, rows: (string | number | null | undefined)[][]) {
+  const esc = (v: any) => {
+    const s = v == null ? "" : String(v);
+    return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
+  };
+  const csv = rows.map((r) => r.map(esc).join(",")).join("\n");
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(new Blob([csv], { type: "text/csv" }));
+  a.download = filename;
+  a.click();
+}
 
 export const Route = createFileRoute("/_authenticated/bot-parser")({
   component: () => <AdminGate><Page /></AdminGate>,
@@ -178,9 +190,21 @@ function ResultsPanel() {
     const a = accs.data?.find((x: any) => x.id === id);
     return a ? (a.first_name || a.username || a.phone) : id.slice(0, 6);
   };
+  const exportCsv = () => {
+    if (!q.data?.length) return;
+    downloadCsv("bot-parse-results.csv", [
+      ["captured_at", "account", "account_id", "bot_username", "field_name", "value_numeric", "value_text", "raw_text"],
+      ...q.data.map((r: any) => [r.captured_at, nameFor(r.account_id), r.account_id, r.bot_username, r.field_name, r.value_numeric, r.value_text, r.raw_text]),
+    ]);
+  };
   return (
     <div className="rounded-lg border border-border bg-card">
-      <div className="border-b border-border p-3 font-semibold">Captured values (latest 500)</div>
+      <div className="flex items-center justify-between border-b border-border p-3">
+        <span className="font-semibold">Captured values (latest 500)</span>
+        <Button size="sm" variant="outline" onClick={exportCsv} disabled={!q.data?.length}>
+          <Download className="mr-1 h-4 w-4" />CSV
+        </Button>
+      </div>
       <div className="overflow-x-auto">
         <table className="w-full text-xs">
           <thead className="bg-muted/30 text-left"><tr>
