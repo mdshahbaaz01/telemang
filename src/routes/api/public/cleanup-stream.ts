@@ -18,7 +18,19 @@ const targetSchema = z.object({
 });
 
 const bodySchema = z.object({
-  action: z.enum(["leave", "block", "deleteHistory", "deletePersonal", "leaveByLinks"]),
+  action: z.enum([
+    "leave",
+    "block",
+    "deleteHistory",
+    "deletePersonal",
+    "leaveByLinks",
+    "mute",
+    "unmute",
+    "archive",
+    "unarchive",
+    "pin",
+    "unpin",
+  ]),
   jobs: z
     .array(
       z.object({
@@ -276,6 +288,33 @@ export const Route = createFileRoute("/api/public/cleanup-stream")({
                           maxId: 0,
                           justClear: false,
                           revoke: true,
+                        }),
+                      );
+                    } else if (body.action === "mute" || body.action === "unmute") {
+                      const muteUntil = body.action === "mute" ? 2147483647 : 0;
+                      await client.invoke(
+                        new Api.account.UpdateNotifySettings({
+                          peer: new Api.InputNotifyPeer({ peer }),
+                          settings: new Api.InputPeerNotifySettings({
+                            showPreviews: true,
+                            silent: body.action === "mute",
+                            muteUntil,
+                          }),
+                        }),
+                      );
+                    } else if (body.action === "archive" || body.action === "unarchive") {
+                      await client.invoke(
+                        new Api.folders.EditPeerFolders({
+                          folderPeers: [
+                            new Api.InputFolderPeer({ peer, folderId: body.action === "archive" ? 1 : 0 }),
+                          ],
+                        }),
+                      );
+                    } else if (body.action === "pin" || body.action === "unpin") {
+                      await client.invoke(
+                        new Api.messages.ToggleDialogPin({
+                          peer: new Api.InputDialogPeer({ peer }),
+                          pinned: body.action === "pin",
                         }),
                       );
                     }
