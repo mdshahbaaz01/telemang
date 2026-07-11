@@ -1163,18 +1163,15 @@ function ActionsPageInner() {
 
             {tab === "forward" && (
               <>
+                <AccountMultiPicker
+                  accountList={accountList}
+                  selectedIds={actionSelectedIds}
+                  setSelectedIds={setActionSelectedIds}
+                  allAccountIds={allAccountIds}
+                />
                 <div>
-                  <Label>Destinations (one per line or comma-separated)</Label>
-                  <Textarea
-                    rows={5}
-                    value={targets}
-                    onChange={(e) => setTargets(e.target.value)}
-                    placeholder="@mychannel&#10;@friend_username&#10;https://t.me/other"
-                  />
-                  <p className="text-xs text-muted-foreground mt-1">
-                    Accepts @username, t.me/… link, invite link, or numeric ID (e.g. <code>123456789</code>). Numeric IDs only work from accounts that have interacted with that user/chat before.
-                  </p>
-                  <div className="mt-2">
+                  <div className="flex items-center justify-between">
+                    <Label>Destinations</Label>
                     <TargetsPicker
                       accounts={accountList}
                       defaultAccountId={actionSelectedIds[0] || allAccountIds[0]}
@@ -1188,6 +1185,15 @@ function ActionsPageInner() {
                       }}
                     />
                   </div>
+                  <Textarea
+                    rows={5}
+                    value={targets}
+                    onChange={(e) => setTargets(e.target.value)}
+                    placeholder="@mychannel&#10;@friend_username&#10;https://t.me/other"
+                  />
+                  <p className="text-xs text-muted-foreground mt-1">
+                    Pick chats/groups/channels from the selected account above, or paste @username, t.me/… link, invite link, or numeric ID manually (one per line). Numeric IDs only work from accounts that have interacted with that user/chat before.
+                  </p>
                 </div>
                 <div className="grid grid-cols-2 gap-3">
                   <div>
@@ -1207,12 +1213,6 @@ function ActionsPageInner() {
                     />
                   </div>
                 </div>
-                <AccountMultiPicker
-                  accountList={accountList}
-                  selectedIds={actionSelectedIds}
-                  setSelectedIds={setActionSelectedIds}
-                  allAccountIds={allAccountIds}
-                />
               </>
             )}
 
