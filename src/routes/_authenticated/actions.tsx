@@ -1616,7 +1616,7 @@ function ActionsPageInner() {
                       </button>
                     </div>
                     <div className="max-h-48 overflow-auto grid grid-cols-1 sm:grid-cols-2 gap-1">
-                      {accountList.map((a) => {
+                      {accountList.map((a, i) => {
                         const checked = broadcastSelectedIds.includes(a.id);
                         return (
                           <label key={a.id} className="flex items-center gap-2 text-sm rounded px-2 py-1 hover:bg-muted/40">
@@ -1629,7 +1629,7 @@ function ActionsPageInner() {
                                 )
                               }
                             />
-                            <span className="truncate">{a.first_name || a.username || a.phone}</span>
+                            <span className="truncate"><span className="text-muted-foreground mr-1">#{i + 1}</span>{a.first_name || a.username || a.phone}</span>
                           </label>
                         );
                       })}
@@ -1926,7 +1926,7 @@ function ActionsPageInner() {
                       </button>
                     </div>
                     <div className="max-h-48 overflow-auto grid grid-cols-1 sm:grid-cols-2 gap-1">
-                      {accountList.map((a) => {
+                      {accountList.map((a, i) => {
                         const checked = replySelectedIds.includes(a.id);
                         return (
                           <label key={a.id} className="flex items-center gap-2 text-sm rounded px-2 py-1 hover:bg-muted/40">
@@ -1939,7 +1939,7 @@ function ActionsPageInner() {
                                 )
                               }
                             />
-                            <span className="truncate">{a.first_name || a.username || a.phone}</span>
+                            <span className="truncate"><span className="text-muted-foreground mr-1">#{i + 1}</span>{a.first_name || a.username || a.phone}</span>
                           </label>
                         );
                       })}
