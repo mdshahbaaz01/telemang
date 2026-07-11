@@ -22,7 +22,15 @@ import { MiniAppDrawer, type MiniAppRequest } from "@/components/MiniAppDrawer";
 
 const searchSchema = z.object({
   peer: z.string().optional(),
-  solo: z.union([z.literal("1"), z.literal("0"), z.boolean()]).optional(),
+  solo: z
+    .union([
+      z.literal("1"),
+      z.literal("0"),
+      z.literal(1),
+      z.literal(0),
+      z.boolean(),
+    ])
+    .optional(),
 });
 
 export const Route = createFileRoute("/_authenticated/accounts/$id")({
