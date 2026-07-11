@@ -24,15 +24,198 @@ const STRIP_HEADERS = new Set([
   "connection",
 ]);
 
-function buildOverrideScript(accountId: string) {
+function buildOverrideScript(accountId: string, upstreamUrl: string) {
   const fp = deriveMiniAppIdentity(accountId).fingerprint;
   return `(() => {
   try {
     const fp = ${JSON.stringify(fp)};
     const ACCT = ${JSON.stringify(accountId)};
+    const UPSTREAM = ${JSON.stringify(upstreamUrl)};
     const PROXY_PREFIX = '/api/public/miniapp-proxy/';
-    const UPSTREAM = (document.querySelector('base') && document.querySelector('base').href) || location.href;
     const upstreamOrigin = (() => { try { return new URL(UPSTREAM).origin; } catch { return null; } })();
+    try {
+      const u = new URL(UPSTREAM);
+      if (location.pathname.startsWith(PROXY_PREFIX)) {
+        history.replaceState(history.state, '', u.pathname + u.search + location.hash);
+      }
+    } catch {}
+    const hostPost = (eventType, eventData) => {
+      try {
+        window.parent && window.parent.postMessage(JSON.stringify({ eventType, eventData: eventData || {} }), '*');
+      } catch {}
+    };
+    const parseMaybeJson = (value) => {
+      if (typeof value !== 'string') return value;
+      try { return JSON.parse(value); } catch { return value; }
+    };
+    const parseInitDataUnsafe = (initData) => {
+      const out = {};
+      try {
+        const p = new URLSearchParams(initData || '');
+        p.forEach((value, key) => { out[key] = parseMaybeJson(value); });
+      } catch {}
+      return out;
+    };
+    const toWebAppEvent = (eventType) => ({
+      theme_changed: 'themeChanged',
+      viewport_changed: 'viewportChanged',
+      safe_area_changed: 'safeAreaChanged',
+      content_safe_area_changed: 'contentSafeAreaChanged',
+      main_button_pressed: 'mainButtonClicked',
+      secondary_button_pressed: 'secondaryButtonClicked',
+      back_button_pressed: 'backButtonClicked',
+      settings_button_pressed: 'settingsButtonClicked',
+      invoice_closed: 'invoiceClosed',
+      popup_closed: 'popupClosed',
+      qr_text_received: 'qrTextReceived',
+      clipboard_text_received: 'clipboardTextReceived',
+      write_access_requested: 'writeAccessRequested',
+      contact_requested: 'contactRequested',
+      phone_requested: 'phoneRequested',
+      biometry_info_received: 'biometryInfoReceived',
+      biometry_auth_requested: 'biometryAuthRequested',
+      home_screen_checked: 'homeScreenChecked',
+      home_screen_added: 'homeScreenAdded',
+    })[eventType] || eventType;
+    const installTelegramShim = () => {
+      try {
+        const hashParams = new URLSearchParams(String(location.hash || '').replace(/^#/, ''));
+        const initData = hashParams.get('tgWebAppData') || '';
+        const themeRaw = hashParams.get('tgWebAppThemeParams') || '';
+        const themeParams = themeRaw ? (parseMaybeJson(themeRaw) || {}) : {};
+        const callbacks = {};
+        const emit = (eventType, eventData) => {
+          const names = [eventType, toWebAppEvent(eventType)];
+          names.forEach((name) => (callbacks[name] || []).slice().forEach((cb) => {
+            try { cb(eventData || {}); } catch {}
+          }));
+        };
+        window.addEventListener('message', (ev) => {
+          let payload = ev.data;
+          if (typeof payload === 'string') {
+            try { payload = JSON.parse(payload); } catch { return; }
+          }
+          if (!payload || typeof payload !== 'object' || !payload.eventType) return;
+          emit(payload.eventType, payload.eventData || {});
+        });
+        const buttonApi = (name) => ({
+          isVisible: false,
+          isActive: true,
+          isProgressVisible: false,
+          text: '',
+          color: themeParams.button_color || '#3390ec',
+          textColor: themeParams.button_text_color || '#ffffff',
+          show() { this.isVisible = true; hostPost('web_app_setup_' + name + '_button', this); return this; },
+          hide() { this.isVisible = false; hostPost('web_app_setup_' + name + '_button', this); return this; },
+          enable() { this.isActive = true; return this; },
+          disable() { this.isActive = false; return this; },
+          showProgress() { this.isProgressVisible = true; return this; },
+          hideProgress() { this.isProgressVisible = false; return this; },
+          setText(text) { this.text = String(text || ''); return this; },
+          setParams(params) { Object.assign(this, params || {}); hostPost('web_app_setup_' + name + '_button', this); return this; },
+          onClick(cb) { WebApp.onEvent(name === 'main' ? 'mainButtonClicked' : 'secondaryButtonClicked', cb); return this; },
+          offClick(cb) { WebApp.offEvent(name === 'main' ? 'mainButtonClicked' : 'secondaryButtonClicked', cb); return this; },
+        });
+        const simpleButtonApi = (eventName, setupName) => ({
+          isVisible: false,
+          show() { this.isVisible = true; hostPost('web_app_setup_' + setupName + '_button', { is_visible: true }); return this; },
+          hide() { this.isVisible = false; hostPost('web_app_setup_' + setupName + '_button', { is_visible: false }); return this; },
+          onClick(cb) { WebApp.onEvent(eventName, cb); return this; },
+          offClick(cb) { WebApp.offEvent(eventName, cb); return this; },
+        });
+        const WebApp = {
+          initData,
+          initDataUnsafe: parseInitDataUnsafe(initData),
+          version: hashParams.get('tgWebAppVersion') || '8.0',
+          platform: hashParams.get('tgWebAppPlatform') || 'web',
+          colorScheme: Object.keys(themeParams).length && String(themeParams.bg_color || '').toLowerCase() !== '#ffffff' ? 'dark' : 'light',
+          themeParams,
+          isExpanded: true,
+          viewportHeight: window.innerHeight,
+          viewportStableHeight: window.innerHeight,
+          safeAreaInset: { top: 0, bottom: 0, left: 0, right: 0 },
+          contentSafeAreaInset: { top: 0, bottom: 0, left: 0, right: 0 },
+          headerColor: themeParams.header_bg_color || themeParams.bg_color || '#ffffff',
+          backgroundColor: themeParams.bg_color || '#ffffff',
+          bottomBarColor: themeParams.secondary_bg_color || themeParams.bg_color || '#ffffff',
+          isClosingConfirmationEnabled: false,
+          isVerticalSwipesEnabled: true,
+          ready() { hostPost('web_app_ready', {}); },
+          expand() { this.isExpanded = true; hostPost('web_app_expand', {}); },
+          close() { hostPost('web_app_close', {}); },
+          sendData(data) { hostPost('web_app_data_send', { data: String(data || '') }); },
+          openLink(url) { hostPost('web_app_open_link', { url: String(url || '') }); },
+          openTelegramLink(url) { hostPost('web_app_open_tg_link', { url: String(url || '') }); },
+          openInvoice(url) { hostPost('web_app_open_invoice', { slug: String(url || '') }); },
+          showPopup(params, cb) { if (cb) setTimeout(() => cb('ok'), 0); return hostPost('web_app_open_popup', params || {}); },
+          showAlert(message, cb) { if (cb) setTimeout(cb, 0); return hostPost('web_app_open_popup', { message: String(message || '') }); },
+          showConfirm(message, cb) { if (cb) setTimeout(() => cb(true), 0); return hostPost('web_app_open_popup', { message: String(message || '') }); },
+          onEvent(eventType, cb) {
+            if (typeof cb !== 'function') return this;
+            (callbacks[eventType] || (callbacks[eventType] = [])).push(cb);
+            return this;
+          },
+          offEvent(eventType, cb) {
+            callbacks[eventType] = (callbacks[eventType] || []).filter((x) => x !== cb);
+            return this;
+          },
+          requestTheme() { hostPost('web_app_request_theme', {}); },
+          requestViewport() { hostPost('web_app_request_viewport', {}); },
+          requestWriteAccess(cb) { if (cb) setTimeout(() => cb(true), 0); hostPost('web_app_request_write_access', {}); },
+          requestContact(cb) { if (cb) setTimeout(() => cb(false), 0); hostPost('web_app_request_phone', {}); },
+          setHeaderColor(color) { this.headerColor = color; hostPost('web_app_set_header_color', { color }); },
+          setBackgroundColor(color) { this.backgroundColor = color; hostPost('web_app_set_background_color', { color }); },
+          setBottomBarColor(color) { this.bottomBarColor = color; hostPost('web_app_set_bottom_bar_color', { color }); },
+          enableClosingConfirmation() { this.isClosingConfirmationEnabled = true; },
+          disableClosingConfirmation() { this.isClosingConfirmationEnabled = false; },
+          enableVerticalSwipes() { this.isVerticalSwipesEnabled = true; },
+          disableVerticalSwipes() { this.isVerticalSwipesEnabled = false; },
+          MainButton: null,
+          SecondaryButton: null,
+          BackButton: null,
+          SettingsButton: null,
+          HapticFeedback: {
+            impactOccurred() {}, notificationOccurred() {}, selectionChanged() {},
+          },
+          CloudStorage: {
+            getItem(_k, cb) { if (cb) cb(null, null); },
+            setItem(_k, _v, cb) { if (cb) cb(null, true); },
+            removeItem(_k, cb) { if (cb) cb(null, true); },
+            getItems(_k, cb) { if (cb) cb(null, {}); },
+            removeItems(_k, cb) { if (cb) cb(null, true); },
+            getKeys(cb) { if (cb) cb(null, []); },
+          },
+          BiometricManager: { isInited: true, isBiometricAvailable: false, init(cb) { if (cb) cb(); }, authenticate(_p, cb) { if (cb) cb(false); } },
+        };
+        WebApp.MainButton = buttonApi('main');
+        WebApp.SecondaryButton = buttonApi('secondary');
+        WebApp.BackButton = simpleButtonApi('backButtonClicked', 'back');
+        WebApp.SettingsButton = simpleButtonApi('settingsButtonClicked', 'settings');
+        window.Telegram = Object.assign(window.Telegram || {}, { WebApp });
+        window.TelegramGameProxy = window.TelegramGameProxy || { receiveEvent: emit };
+        window.TelegramWebviewProxy = window.TelegramWebviewProxy || {
+          postEvent(eventType, eventData) {
+            let data = eventData;
+            if (typeof data === 'string') { try { data = JSON.parse(data); } catch {} }
+            hostPost(eventType, data || {});
+          },
+        };
+        try {
+          window.external = window.external || {};
+          window.external.notify = (raw) => {
+            try {
+              const msg = JSON.parse(raw);
+              if (msg && msg.eventType) hostPost(msg.eventType, msg.eventData || {});
+            } catch {}
+          };
+        } catch {}
+        setTimeout(() => {
+          emit('theme_changed', { theme_params: themeParams });
+          emit('viewport_changed', { height: window.innerHeight, width: window.innerWidth, is_state_stable: true, is_expanded: true });
+        }, 0);
+      } catch (e) { console.warn('[telegram webapp shim failed]', e); }
+    };
+    installTelegramShim();
     const proxify = (raw) => {
       if (!raw) return raw;
       const s = String(raw);
@@ -306,6 +489,8 @@ function rewriteHtmlUrls(html: string, baseUrl: string, accountId: string) {
   };
 
   return html
+    .replace(/<meta\s+[^>]*http-equiv=(['"])content-security-policy\1[^>]*>/gi, "")
+    .replace(/\s(?:integrity|nonce)=(['"])[\s\S]*?\1/gi, "")
     .replace(/\b(src|href|action)=(['"])(.*?)\2/gi, (_m, attr, quote, value) => `${attr}=${quote}${toProxy(value)}${quote}`)
     .replace(/\bsrcset=(['"])(.*?)\1/gi, (_m, quote, value) => {
       const rewritten = String(value)
@@ -372,7 +557,7 @@ async function handle(request: Request, params: { _splat?: string }) {
     let html = await upstream.text();
     const finalUrl = upstream.url || target;
     const upstreamDir = new URL(".", finalUrl).toString();
-    const script = `<script>${buildOverrideScript(accountId)}</script>`;
+    const script = `<script>${buildOverrideScript(accountId, finalUrl)}</script>`;
     const base = `<base href="${upstreamDir}">`;
     html = rewriteHtmlUrls(html, finalUrl, accountId);
     if (/<head[^>]*>/i.test(html)) {
