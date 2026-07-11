@@ -24,15 +24,21 @@ const STRIP_HEADERS = new Set([
   "connection",
 ]);
 
-function buildOverrideScript(accountId: string) {
+function buildOverrideScript(accountId: string, upstreamUrl: string) {
   const fp = deriveMiniAppIdentity(accountId).fingerprint;
   return `(() => {
   try {
     const fp = ${JSON.stringify(fp)};
     const ACCT = ${JSON.stringify(accountId)};
+    const UPSTREAM = ${JSON.stringify(upstreamUrl)};
     const PROXY_PREFIX = '/api/public/miniapp-proxy/';
-    const UPSTREAM = (document.querySelector('base') && document.querySelector('base').href) || location.href;
     const upstreamOrigin = (() => { try { return new URL(UPSTREAM).origin; } catch { return null; } })();
+    try {
+      const u = new URL(UPSTREAM);
+      if (location.pathname.startsWith(PROXY_PREFIX)) {
+        history.replaceState(history.state, '', u.pathname + u.search + location.hash);
+      }
+    } catch {}
     const hostPost = (eventType, eventData) => {
       try {
         window.parent && window.parent.postMessage(JSON.stringify({ eventType, eventData: eventData || {} }), '*');
@@ -551,7 +557,7 @@ async function handle(request: Request, params: { _splat?: string }) {
     let html = await upstream.text();
     const finalUrl = upstream.url || target;
     const upstreamDir = new URL(".", finalUrl).toString();
-    const script = `<script>${buildOverrideScript(accountId)}</script>`;
+    const script = `<script>${buildOverrideScript(accountId, finalUrl)}</script>`;
     const base = `<base href="${upstreamDir}">`;
     html = rewriteHtmlUrls(html, finalUrl, accountId);
     if (/<head[^>]*>/i.test(html)) {
