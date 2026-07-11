@@ -1671,9 +1671,9 @@ function ActionsPageInner() {
                           }
                         >
                           <option value="">— Pick account —</option>
-                          {accountList.map((a) => (
+                          {accountList.map((a, i) => (
                             <option key={a.id} value={a.id}>
-                              {a.first_name || a.username || a.phone}
+                              #{i + 1} — {a.first_name || a.username || a.phone}
                             </option>
                           ))}
                         </select>
@@ -1981,9 +1981,9 @@ function ActionsPageInner() {
                           }
                         >
                           <option value="">— Pick account —</option>
-                          {accountList.map((a) => (
+                          {accountList.map((a, i) => (
                             <option key={a.id} value={a.id}>
-                              {a.first_name || a.username || a.phone}
+                              #{i + 1} — {a.first_name || a.username || a.phone}
                             </option>
                           ))}
                         </select>
