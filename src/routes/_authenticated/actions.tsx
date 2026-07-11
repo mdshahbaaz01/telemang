@@ -340,6 +340,8 @@ function ActionsPageInner() {
   const [rows, setRows] = useState<BroadcastRow[]>([
     { id: "broadcast-row-1", message: "", targets: "" },
   ]);
+  const precheckFn = useServerFn(precheckBroadcastTargets);
+  const [precheckByRow, setPrecheckByRow] = useState<Record<string, { loading: boolean; error?: string; data?: PrecheckResult[] }>>({});
   const [replyRows, setReplyRows] = useState<ReplyRow[]>([
     { id: "reply-row-1", message: "" },
   ]);
