@@ -352,6 +352,9 @@ function ActionsPageInner() {
   const [voiceMode, setVoiceMode] = useState(false);
   const [editText, setEditText] = useState("");
   const [deleteIds, setDeleteIds] = useState("");
+  const [deleteMode, setDeleteMode] = useState<"list" | "range">("list");
+  const [deleteRangeStart, setDeleteRangeStart] = useState("");
+  const [deleteRangeEnd, setDeleteRangeEnd] = useState("");
 
   const [logs, setLogs] = useState<LogEntry[]>([]);
   const [running, setRunning] = useState(false);
