@@ -369,11 +369,13 @@ export const updateGroup = createServerFn({ method: "POST" })
         .single();
       if (cErr || !newTask) continue;
       if (data.targets.length) {
-        const rows = data.targets.map((t, i) => ({
+        const targets = dedupeTargets(data.targets);
+        const order = shuffledOrder(targets.length, newTask.id);
+        const rows = targets.map((t, i) => ({
           task_id: newTask.id,
           user_id: context.userId,
           target: t,
-          position: i,
+          position: order[i],
         }));
         await context.supabase.from("join_task_items").insert(rows);
       }
@@ -1105,11 +1107,15 @@ export const addAccountsToGroup = createServerFn({ method: "POST" })
         .single();
       if (crErr || !newTask) continue;
       if (templateItems?.length) {
-        const rows = templateItems.map((it: { target: string; position: number }) => ({
+        const uniq = dedupeTargets(
+          templateItems.map((it: { target: string }) => it.target),
+        );
+        const order = shuffledOrder(uniq.length, newTask.id);
+        const rows = uniq.map((target, i) => ({
           task_id: newTask.id,
           user_id: context.userId,
-          target: it.target,
-          position: it.position,
+          target,
+          position: order[i],
         }));
         await context.supabase.from("join_task_items").insert(rows);
       }
