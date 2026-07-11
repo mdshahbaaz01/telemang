@@ -46,9 +46,10 @@ async function scanDialogsForNumericTarget(client: any, Api: any, idStr: string)
   if (idStr.startsWith("-")) return null;
 
   const { default: bigInt } = await import("big-integer");
-  const inputUser = new Api.InputUser({ userId: bigInt(idStr), accessHash: bigInt.zero });
   const scanLimit = 80;
+  const memberScanLimit = 2500;
   let scanned = 0;
+  let scannedMembers = 0;
 
   for (const dialog of dialogs) {
     if (scanned >= scanLimit) break;
@@ -58,13 +59,24 @@ async function scanDialogsForNumericTarget(client: any, Api: any, idStr: string)
     if (entity.className === "Channel" && (entity.megagroup || entity.gigagroup)) {
       scanned++;
       try {
-        const res: any = await client.invoke(
-          new Api.channels.GetParticipant({ channel: entity, participant: inputUser }),
-        );
-        const user = findUser(res?.users, idStr);
-        if (user) {
-          const resolved = (await tryGetInputEntity(client, user)) ?? (await tryGetInputEntity(client, numericId));
-          if (resolved) return resolved;
+        for (let offset = 0; offset < 1000 && scannedMembers < memberScanLimit; offset += 200) {
+          const res: any = await client.invoke(
+            new Api.channels.GetParticipants({
+              channel: entity,
+              filter: new Api.ChannelParticipantsRecent(),
+              offset,
+              limit: 200,
+              hash: bigInt.zero,
+            }),
+          );
+          const users = res?.users ?? [];
+          scannedMembers += users.length;
+          const user = findUser(users, idStr);
+          if (user) {
+            const resolved = (await tryGetInputEntity(client, user)) ?? (await tryGetInputEntity(client, numericId));
+            if (resolved) return resolved;
+          }
+          if (users.length < 200) break;
         }
       } catch {
         // Hidden members / no rights / not a participant in this group.
