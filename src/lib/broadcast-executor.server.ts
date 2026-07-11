@@ -1,6 +1,8 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Database } from "@/integrations/supabase/types";
 import { resolveTargetEntity } from "./telegram-target-resolver.server";
+import { runWithLimit } from "./p-limit";
+import type { SpintaxVars } from "./spintax";
 
 export type Attachment = { path: string; filename: string; mimeType?: string; isVoice?: boolean };
 
@@ -17,6 +19,7 @@ export type BroadcastExecInput = {
   rows: BroadcastRowInput[];
   minDelay: number;
   maxDelay: number;
+  concurrency?: number;
 };
 
 export type BroadcastExecResult = {
@@ -41,6 +44,7 @@ export type ReplyExecInput = {
   rows: ReplyRowInput[];
   minDelay: number;
   maxDelay: number;
+  concurrency?: number;
 };
 
 export type ForwardExecInput = {
@@ -49,6 +53,7 @@ export type ForwardExecInput = {
   targets: string[];
   minDelay: number;
   maxDelay: number;
+  concurrency?: number;
 };
 
 function jitter(min: number, max: number) {
@@ -63,6 +68,33 @@ function errorText(error: unknown) {
 }
 
 import { formatMessage } from "./message-format";
+
+function varsFromEntity(e: any, index: number, accountName?: string): SpintaxVars {
+  return {
+    first_name: e?.firstName ?? e?.title ?? "",
+    last_name: e?.lastName ?? "",
+    username: e?.username ?? "",
+    n: index + 1,
+    account_index: index + 1,
+    account_name: accountName ?? "",
+  };
+}
+
+async function loadAccountMeta(supabase: SupabaseClient<Database>, ids: string[]) {
+  if (!ids.length) return new Map<string, { signature: string | null; name: string }>();
+  const { data } = await supabase
+    .from("telegram_accounts")
+    .select("id, signature, first_name, username, phone")
+    .in("id", ids);
+  const m = new Map<string, { signature: string | null; name: string }>();
+  for (const a of (data ?? []) as any[]) {
+    m.set(a.id, {
+      signature: a.signature ?? null,
+      name: a.first_name || a.username || a.phone || String(a.id).slice(0, 6),
+    });
+  }
+  return m;
+}
 
 async function resolveSourcePeer(client: any, Api: any, src: SourceRef) {
   if (src.chat.startsWith("c/")) {
@@ -171,9 +203,11 @@ export async function executeBroadcast(
   let ok = 0;
   let fail = 0;
 
+  const meta = await loadAccountMeta(supabase, Array.from(byAccount.keys()));
+  const concurrency = Math.max(1, Math.min(20, input.concurrency ?? 5));
+
   // All accounts fire in parallel so scheduled dispatch is not serialized.
-  await Promise.all(
-    Array.from(byAccount.entries()).map(async ([accountId, rows]) => {
+  await runWithLimit(Array.from(byAccount.entries()), concurrency, async ([accountId, rows]) => {
       let client;
       try {
         client = await openClientForAccount(supabase, accountId);
@@ -184,6 +218,7 @@ export async function executeBroadcast(
         return;
       }
       try {
+        const am = meta.get(accountId) ?? { signature: null, name: "" };
         for (const row of rows) {
           const rowAtts = (row.attachments && row.attachments.length > 0
             ? row.attachments
@@ -201,11 +236,13 @@ export async function executeBroadcast(
               continue;
             }
           }
+          let tIdx = 0;
           for (const t of row.targets) {
             try {
               const dest = await resolveTarget(client, t);
+              const vars = varsFromEntity(dest, tIdx, am.name);
               if (attDatas.length > 1) {
-                const formatted = formatMessage(row.message, row.format);
+                const formatted = formatMessage(row.message, row.format, { vars, signature: am.signature });
                 await client.sendFile(dest, {
                   file: attDatas.map((a) => new CustomFile(a.filename, a.buf.length, a.filename, a.buf)),
                   caption: formatted.message || undefined,
@@ -213,7 +250,7 @@ export async function executeBroadcast(
                 });
               } else if (attDatas.length === 1) {
                 const attData = attDatas[0];
-                const formatted = formatMessage(row.message, row.format);
+                const formatted = formatMessage(row.message, row.format, { vars, signature: am.signature });
                 await client.sendFile(dest, {
                   file: new CustomFile(attData.filename, attData.buf.length, attData.filename, attData.buf),
                   caption: formatted.message || undefined,
@@ -221,7 +258,7 @@ export async function executeBroadcast(
                   voiceNote: !!attData.isVoice,
                 });
               } else {
-                await client.sendMessage(dest, formatMessage(row.message, row.format));
+                await client.sendMessage(dest, formatMessage(row.message, row.format, { vars, signature: am.signature }));
               }
               ok++;
               push({ accountId, target: t, level: "success", message: `Sent to ${t}` });
@@ -231,13 +268,13 @@ export async function executeBroadcast(
               push({ accountId, target: t, level: "error", message: em });
             }
             await new Promise((r) => setTimeout(r, jitter(input.minDelay, input.maxDelay)));
+            tIdx++;
           }
         }
       } finally {
         await client.disconnect().catch(() => {});
       }
-    }),
-  );
+  });
 
   return { ok, fail, logs };
 }
@@ -285,8 +322,10 @@ export async function executeReply(
   let fail = 0;
   const targetLabel = `${input.source.chat}/${input.source.msgId}`;
 
-  await Promise.all(
-    Array.from(byAccount.entries()).map(async ([accountId, rows]) => {
+  const meta = await loadAccountMeta(supabase, Array.from(byAccount.keys()));
+  const concurrency = Math.max(1, Math.min(20, input.concurrency ?? 5));
+
+  await runWithLimit(Array.from(byAccount.entries()), concurrency, async ([accountId, rows]) => {
       let client;
       try {
         client = await openClientForAccount(supabase, accountId);
@@ -313,6 +352,8 @@ export async function executeReply(
           topMsgId = dt.msgId;
           await ensureJoined(client, Api, replyPeer);
         }
+        const am = meta.get(accountId) ?? { signature: null, name: "" };
+        let idx = 0;
         for (const row of rows) {
           try {
             const rowAtts = (row.attachments && row.attachments.length > 0
@@ -321,8 +362,9 @@ export async function executeReply(
                 ? [row.attachment]
                 : []) as Attachment[];
             const attDatas = rowAtts.length ? await Promise.all(rowAtts.map((a) => loadAttachment(a))) : [];
+            const vars = varsFromEntity(replyPeer, idx, am.name);
             if (attDatas.length > 1) {
-              const formatted = formatMessage(row.message, row.format);
+              const formatted = formatMessage(row.message, row.format, { vars, signature: am.signature });
               await client.sendFile(replyPeer, {
                 file: attDatas.map((a) => new CustomFile(a.filename, a.buf.length, a.filename, a.buf)),
                 caption: formatted.message || undefined,
@@ -332,7 +374,7 @@ export async function executeReply(
               });
             } else if (attDatas.length === 1) {
               const attData = attDatas[0];
-              const formatted = formatMessage(row.message, row.format);
+              const formatted = formatMessage(row.message, row.format, { vars, signature: am.signature });
               await client.sendFile(replyPeer, {
                 file: new CustomFile(attData.filename, attData.buf.length, attData.filename, attData.buf),
                 caption: formatted.message || undefined,
@@ -343,7 +385,7 @@ export async function executeReply(
               });
             } else {
               await client.sendMessage(replyPeer, {
-                ...formatMessage(row.message, row.format),
+                ...formatMessage(row.message, row.format, { vars, signature: am.signature }),
                 replyTo: replyToId,
                 ...(topMsgId ? { topMsgId } : {}),
               });
@@ -355,6 +397,7 @@ export async function executeReply(
             push({ accountId, target: targetLabel, level: "error", message: errorText(e) });
           }
           await new Promise((r) => setTimeout(r, jitter(input.minDelay, input.maxDelay)));
+          idx++;
         }
       } catch (e) {
         fail += rows.length;
@@ -362,8 +405,7 @@ export async function executeReply(
       } finally {
         await client.disconnect().catch(() => {});
       }
-    }),
-  );
+  });
 
   return { ok, fail, logs };
 }
@@ -385,8 +427,8 @@ export async function executeForward(
   let ok = 0;
   let fail = 0;
 
-  await Promise.all(
-    input.accountIds.map(async (accountId) => {
+  const concurrency = Math.max(1, Math.min(20, input.concurrency ?? 5));
+  await runWithLimit(input.accountIds, concurrency, async (accountId) => {
       let client;
       try {
         client = await openClientForAccount(supabase, accountId);
@@ -423,8 +465,7 @@ export async function executeForward(
       } finally {
         await client.disconnect().catch(() => {});
       }
-    }),
-  );
+  });
 
   return { ok, fail, logs };
 }

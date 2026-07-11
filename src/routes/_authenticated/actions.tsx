@@ -401,6 +401,14 @@ function ActionsPageInner() {
   const loadPollFn = useServerFn(loadPoll);
   const [minDelay, setMinDelay] = useState(1);
   const [maxDelay, setMaxDelay] = useState(2);
+  const [concurrency, setConcurrency] = useState<number>(() => {
+    if (typeof window === "undefined") return 5;
+    const v = Number(window.localStorage.getItem("tmpro:concurrency") || 5);
+    return Number.isFinite(v) && v >= 1 && v <= 50 ? v : 5;
+  });
+  useEffect(() => {
+    try { window.localStorage.setItem("tmpro:concurrency", String(concurrency)); } catch {}
+  }, [concurrency]);
   const [rows, setRows] = useState<BroadcastRow[]>([
     { id: "broadcast-row-1", message: "", targets: "" },
   ]);
@@ -620,6 +628,7 @@ function ActionsPageInner() {
           accountIds: runAccountIds,
           minDelay,
           maxDelay,
+          concurrency,
           op,
         }),
         signal: ac.signal,
@@ -738,6 +747,7 @@ function ActionsPageInner() {
       accountIds: [],
       minDelay,
       maxDelay,
+      concurrency,
       op: { kind: "reply", source: src, viaDiscussion: tab === "comment", rows: cleaned },
     });
   };
@@ -822,6 +832,7 @@ function ActionsPageInner() {
           accountIds: [],
           minDelay,
           maxDelay,
+          concurrency,
           op: { kind: "broadcast", rows: cleaned },
         }),
         signal: ac.signal,
@@ -1019,6 +1030,21 @@ function ActionsPageInner() {
       <header className="border-b border-border bg-card">
         <div className="mx-auto flex max-w-7xl items-center gap-3 px-4 py-3 md:px-8">
           <h1 className="mr-auto text-xl font-semibold">Actions</h1>
+          <div className="flex items-center gap-2 rounded-md border border-border px-2 py-1 text-xs">
+            <span className="text-muted-foreground">Parallel</span>
+            <Input
+              type="number"
+              min={1}
+              max={50}
+              value={concurrency}
+              onChange={(e) => {
+                const v = Number(e.target.value);
+                setConcurrency(Number.isFinite(v) ? Math.max(1, Math.min(50, v)) : 5);
+              }}
+              className="h-7 w-14"
+            />
+            <span className="text-muted-foreground">accts</span>
+          </div>
           <Button variant="outline" size="sm" onClick={toggleAccounts}>
             {showAccounts ? (
               <>

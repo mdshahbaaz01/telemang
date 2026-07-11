@@ -1,45 +1,61 @@
-# Broadcast to users by user ID
+# Plan — Feature batch (1, 3, 6, 13, 20, 32, 42)
 
-## Short answer
-Partially yes. Telegram itself does **not** let you DM an arbitrary numeric user ID out of nowhere — every send needs an `access_hash` for that user. That hash only exists on your account if it has "seen" the user before (mutual group/channel, contact, forwarded message, previous DM, or a resolved username at least once).
+Note on **#21 (Bulk profile updater)** — already implemented at `/profile-updater` (`src/lib/profile.functions.ts` + route). I'll skip re-building and only add a small link/callout so you can find it faster. Say the word if you want it expanded (per-account templating with spintax + `{n}`).
 
-So the rule is:
-- **User has interacted with that account before** (any of the above) → we can send using just the numeric ID.
-- **Never interacted** → Telegram returns `PEER_ID_INVALID` / `Could not find the input entity`. No client can bypass this; even official Telegram won't let you type a random ID and message it.
+---
 
-## What I'll change in the app
+## 1. Spintax + variables in messages
+- New `src/lib/spintax.ts` — `renderSpintax(text, vars)` supporting:
+  - `{a|b|c}` random pick (nested).
+  - Tokens: `{n}`, `{first_name}`, `{last_name}`, `{username}`, `{account_index}`, `{account_name}`.
+- Wire into `formatMessage` pipeline (`src/lib/message-format.ts`) so **every** send path (broadcast, reply, comment, forwarder captions, scheduled) renders spintax per-recipient.
+- Resolver runs in `broadcast-executor.server.ts` and `actions-stream.ts` right before `sendMessage/sendFile`, using the resolved dest entity to fill `{first_name}` etc.
+- UI: small "Spintax help" popover next to the format buttons + live preview shows one random render.
 
-### 1. Accept numeric IDs in target inputs
-Currently `resolveTargetEntity` (`src/lib/broadcast-executor.server.ts`) and the actions-stream target parser only handle `@username`, `t.me/...`, `c/<id>`, and invite links. I'll extend both to accept:
-- Pure numeric: `123456789` → treat as user ID
-- Prefixed: `user:123456789`, `id:123456789` → explicit user
-- Chat/channel numeric IDs (`-100...` or `c/...` already handled)
+## 3. Message templates library
+- New table `message_templates (id, user_id, name, body, format, attachments jsonb, created_at)` with RLS + grants.
+- `src/lib/templates.functions.ts` — list/save/delete/update.
+- UI: "Templates" dropdown in Broadcast, Reply, Comment cards → **Save as template** / **Load template**. Attachments stored as storage paths (same bucket).
 
-### 2. Resolution strategy per account
-For each numeric user ID:
-1. Try `client.getInputEntity(Number(id))` — hits the local entity cache.
-2. On miss, prime the cache: `client.getDialogs({ limit: 500 })` (same trick already used in `resolvePeerFromKey`), then retry.
-3. Still miss → throw a clear, human-readable error: `User 123456789 not reachable from account @X (no prior interaction — Telegram needs an access_hash).`
+## 6. Per-account signature suffix
+- Add `signature text` column to `accounts` table (migration).
+- Editable in Accounts list (inline) and in a new field on the per-account row inside Broadcast/Reply.
+- Executor appends `\n\n{signature}` (respecting selected format) when non-empty. Works with spintax too.
 
-That error will show up per row in the logs so the user knows exactly which account/target combination failed and why, instead of the generic 400.
+## 13. Parallel account execution with global concurrency slider
+- Replace `Promise.all(byAccount…)` in `broadcast-executor.server.ts`, `executeReply`, `executeForward`, and the corresponding blocks in `actions-stream.ts` with a small `pLimit(concurrency)` helper (`src/lib/p-limit.ts`, no dep).
+- Add `concurrency` (1–20, default 5) to all Zod input schemas and the request payloads.
+- UI: single slider in the Actions page header ("Accounts in parallel: N") persisted to `localStorage`, applied to broadcast/reply/comment/forward/bulk-mix runs.
 
-### 3. TargetsPicker UI hint
-Add a small helper line under the targets textarea in Broadcast / Reply / Forwarder / Bulk delete:
-"You can paste `@username`, `t.me/...` link, invite link, or a numeric user ID (`123456789`). Numeric IDs only work from accounts that have interacted with that user before."
+## 20. Bulk mute / unmute / archive / pin
+- Extend `cleanup-stream.ts` with a new `dialogAction` kind: `{ op: 'mute'|'unmute'|'archive'|'unarchive'|'pin'|'unpin', targets: string[], accountIds: string[] }`.
+- Uses `Api.account.UpdateNotifySettings`, `Api.folders.EditPeerFolders` (folder 1 = archive, 0 = main), `Api.messages.ToggleDialogPin`.
+- New "Bulk chat actions" tab on `/cleanup` with `AccountMultiPicker` + `TargetsPicker` + op selector.
 
-### 4. Optional: contacts import fallback
-If the user turns on a new "Try importing contact for unknown IDs" toggle, before failing we call `contacts.ImportContacts` with the numeric ID and a placeholder name. This sometimes lets Telegram return an access_hash. Off by default because it writes to the account's contacts.
+## 32. Live dashboard — per-account health
+- Rebuild `/dashboard` with a table: account, status (connected/floodwait/banned/offline), current FloodWait remaining (ticks live), last-seen, quota used today (msgs / joins / leaves), errors last 24h count.
+- Data sources: existing `accounts` table + `action_runs` aggregation + FloodWait store already in memory (surface via new `getAccountsHealth` server fn).
+- Auto-refresh every 10s (React Query `refetchInterval`).
 
-## Files touched
-- `src/lib/broadcast-executor.server.ts` — extend `resolveTargetEntity` with numeric-ID branch + dialog prime + friendly error.
-- `src/routes/api/public/actions-stream.ts` — same extension for the streaming path (broadcast / reply / forward / delete).
-- `src/routes/_authenticated/actions.tsx` — helper hint text under targets fields; no behavior change.
-- (Optional) new checkbox `importUnknownContacts` wired through the payload if you want the contacts fallback.
+## 42. Global search across accounts
+- New route `/search` with input + account multi-select + scope tabs (Chats / Messages / Users).
+- Server fn `globalSearch(query, accountIds, scope)` runs `Api.contacts.Search` (chats/users) or `Api.messages.SearchGlobal` (messages) in parallel per account with `pLimit`.
+- Results grouped by account with click → open `ChatViewerDrawer` at that message.
+- ⌘K / Ctrl-K opens the search route from anywhere.
 
-## Not doing
-- No attempt to bypass `access_hash` — impossible on Telegram's protocol.
-- No change to Bulk Mix / view boosts (they need message links, not users).
+---
 
-## Confirm before I build
-1. Include the optional "import contact" fallback toggle, or skip it?
-2. Should numeric IDs also be accepted as **forward destinations** and **reply targets**, or only in broadcast?
+## Order of execution
+1. Migrations (`message_templates`, `accounts.signature`).
+2. Shared utils (`spintax.ts`, `p-limit.ts`).
+3. Executor changes (concurrency + spintax + signature) — all three land together to avoid double-touching hot files.
+4. Templates + UI wiring.
+5. Cleanup dialogAction + tab.
+6. Dashboard rebuild.
+7. Global search route + ⌘K.
+
+## Out of scope for this batch
+- AI rewrite/translate (#2), A/B split (#4), recurring schedule (#5), silent send (#7) — say the word and I'll add them next.
+- Full rebuild of profile updater (#21) — already exists.
+
+Reply **go** to start, or tell me which items to drop/re-order.

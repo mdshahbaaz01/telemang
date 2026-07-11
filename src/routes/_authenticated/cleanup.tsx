@@ -46,7 +46,17 @@ type Dialog = {
   peer: Peer;
 };
 
-type Action = "leave" | "block" | "deleteHistory" | "deletePersonal";
+type Action =
+  | "leave"
+  | "block"
+  | "deleteHistory"
+  | "deletePersonal"
+  | "mute"
+  | "unmute"
+  | "archive"
+  | "unarchive"
+  | "pin"
+  | "unpin";
 
 type LogEntry = {
   time: string;
@@ -459,6 +469,12 @@ function CleanupPanelInner({ mode }: { mode: "chats" | "personal" }) {
                 <SelectItem value="leave">Leave channels / groups</SelectItem>
                 <SelectItem value="block">Block bot/user + delete both sides</SelectItem>
                 <SelectItem value="deleteHistory">Delete history (my side)</SelectItem>
+                <SelectItem value="mute">Mute selected chats</SelectItem>
+                <SelectItem value="unmute">Unmute selected chats</SelectItem>
+                <SelectItem value="archive">Archive selected chats</SelectItem>
+                <SelectItem value="unarchive">Unarchive selected chats</SelectItem>
+                <SelectItem value="pin">Pin selected chats</SelectItem>
+                <SelectItem value="unpin">Unpin selected chats</SelectItem>
               </SelectContent>
             </Select>
           )}
