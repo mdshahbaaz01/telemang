@@ -354,6 +354,7 @@ function buildOverrideScript(accountId: string, upstreamUrl: string) {
       try { Object.defineProperty(obj, key, { get: () => val, configurable: true }); } catch (e) {}
     };
     const platformName = fp.platform.includes('iPhone') ? 'iOS' : fp.mobile ? 'Android' : 'Linux';
+    const isIOS = platformName === 'iOS';
     const chromeVersion = (fp.userAgent.split('Chrome/')[1] || '').split('.')[0] || '120';
     const mobileModel = (() => {
       try {
@@ -367,7 +368,7 @@ function buildOverrideScript(accountId: string, upstreamUrl: string) {
       { brand: 'Google Chrome', version: chromeVersion },
       { brand: 'Not:A-Brand', version: '99' },
     ]);
-    const uaData = {
+    const uaData = isIOS ? undefined : {
       brands,
       mobile: fp.mobile,
       platform: platformName,
@@ -379,7 +380,7 @@ function buildOverrideScript(accountId: string, upstreamUrl: string) {
           architecture: fp.mobile ? '' : (fp.platform.includes('Win') ? 'x86' : 'arm'),
           bitness: fp.mobile ? '' : '64',
           model: fp.mobile ? mobileModel : '',
-          platformVersion: fp.mobile ? '14.0.0' : fp.platform.includes('Win') ? '15.0.0' : '14.0.0',
+          platformVersion: fp.userAgent.includes('Android 13') ? '13.0.0' : fp.userAgent.includes('Android 12') ? '12.0.0' : '14.0.0',
           uaFullVersion: chromeVersion + '.0.0.0',
           fullVersionList: brands.map((b) => ({ brand: b.brand, version: b.brand === 'Not:A-Brand' ? '99.0.0.0' : chromeVersion + '.0.0.0' })),
           wow64: false,
@@ -399,7 +400,7 @@ function buildOverrideScript(accountId: string, upstreamUrl: string) {
         : key === 'hardwareConcurrency' ? fp.hardwareConcurrency
         : key === 'deviceMemory' ? fp.deviceMemory
         : key === 'maxTouchPoints' ? (fp.mobile ? 5 : 0)
-        : key === 'vendor' ? (fp.platform === 'iPhone' || fp.platform === 'MacIntel' ? 'Apple Computer, Inc.' : 'Google Inc.')
+        : key === 'vendor' ? (isIOS ? 'Apple Computer, Inc.' : 'Google Inc.')
         : key === 'webdriver' ? undefined
         : uaData;
       set(nav, key, val);
