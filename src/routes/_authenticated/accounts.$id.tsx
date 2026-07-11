@@ -560,6 +560,36 @@ function AccountViewerPage() {
                 </div>
               )}
 
+              {latestReplyKeyboard && (
+                <div className="border-t bg-muted/30 p-2">
+                  <div className="mb-1 flex items-center gap-2 text-[10px] uppercase tracking-wide text-muted-foreground">
+                    <span>Bot keyboard</span>
+                  </div>
+                  <div className="space-y-1">
+                    {latestReplyKeyboard.rows.map((row, ri) => (
+                      <div key={ri} className="flex flex-wrap gap-1">
+                        {row.map((btn, ci) => {
+                          const key = `kb:${latestReplyKeyboard.msg.id}:${ri}:${ci}`;
+                          const busy = pressingKey === key;
+                          return (
+                            <button
+                              key={ci}
+                              type="button"
+                              disabled={busy}
+                              onClick={() => pressButton(latestReplyKeyboard.msg, btn, key)}
+                              className="inline-flex flex-1 items-center justify-center gap-1 rounded-md border border-primary/40 bg-primary/10 px-2 py-1.5 text-xs hover:bg-primary/20 disabled:opacity-60"
+                            >
+                              {busy && <Loader2 className="h-3 w-3 animate-spin" />}
+                              <span className="truncate">{btn.text}</span>
+                            </button>
+                          );
+                        })}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
               <div className="flex items-center gap-2 border-t p-3">
                 <Input
                   ref={textareaRef as any}
