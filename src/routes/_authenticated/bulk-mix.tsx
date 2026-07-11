@@ -9,6 +9,7 @@ import { runViewBoostLive } from "@/lib/view-boost.functions";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Switch } from "@/components/ui/switch";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -27,6 +28,38 @@ export const Route = createFileRoute("/_authenticated/bulk-mix")({
 
 type Emoji = { emoji: string; weight: number };
 type LogRow = { accountId: string | null; target: string | null; level: string; message: string };
+
+// Parse Telegram post links / "chat/msgId" pairs into { chat, msgId } entries.
+// Accepts: https://t.me/name/123, https://t.me/c/123456/789,
+// https://t.me/name/topic/789 (msgId = last integer), @name/123, name/123
+function parsePostLinks(input: string): { chat: string; msgId: number; raw: string }[] {
+  const out: { chat: string; msgId: number; raw: string }[] = [];
+  const seen = new Set<string>();
+  for (const line of input.split(/[\s,]+/)) {
+    const raw = line.trim();
+    if (!raw) continue;
+    const stripped = raw
+      .replace(/^https?:\/\/(t\.me|telegram\.me)\//i, "")
+      .replace(/^@/, "")
+      .replace(/\?.*$/, "")
+      .replace(/\/+$/, "");
+    const parts = stripped.split("/").filter(Boolean);
+    if (parts.length < 2) continue;
+    const msgId = Number(parts[parts.length - 1]);
+    if (!Number.isInteger(msgId) || msgId <= 0) continue;
+    let chat: string;
+    if (parts[0] === "c" && parts.length >= 3) {
+      chat = `c/${parts[1]}`;
+    } else {
+      chat = parts[0];
+    }
+    const key = `${chat}#${msgId}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    out.push({ chat, msgId, raw });
+  }
+  return out;
+}
 
 function AccountsPicker({
   accounts, selected, setSelected,
