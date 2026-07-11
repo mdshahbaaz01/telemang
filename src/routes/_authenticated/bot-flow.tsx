@@ -5,7 +5,7 @@ import { useMemo, useRef, useState } from "react";
 import { useTelegramWebviewBridge } from "@/lib/telegram-webview-bridge";
 import { supabase } from "@/integrations/supabase/client";
 import { listAccounts } from "@/lib/accounts.functions";
-import { openStartAppLink } from "@/lib/tg-viewer.functions";
+import { openStartAppLink, joinFromLink } from "@/lib/tg-viewer.functions";
 import { AdminGate } from "@/components/AdminGate";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -512,8 +512,8 @@ function BotFlowPage() {
                       {r.status === "error" && (
                         <div className="p-3 text-xs text-destructive">{r.error}</div>
                       )}
-                      {r.status === "ready" && r.url && (
-                        <MiniAppFrame url={r.url} title={who} />
+                       {r.status === "ready" && r.url && (
+                        <MiniAppFrame url={r.url} title={who} accountId={r.accountId} />
                       )}
                     </div>
                   </div>
@@ -554,19 +554,91 @@ function BotFlowPage() {
   );
 }
 
-function MiniAppFrame({ url, title }: { url: string; title: string }) {
+function MiniAppFrame({ url, title, accountId }: { url: string; title: string; accountId: string }) {
   const ref = useRef<HTMLIFrameElement | null>(null);
-  useTelegramWebviewBridge(ref);
+  const joinFn = useServerFn(joinFromLink);
+  const [overlay, setOverlay] = useState<
+    | { status: "loading"; url: string }
+    | { status: "ready"; url: string; peerKey: string; title: string; note: string }
+    | { status: "error"; url: string; error: string }
+    | null
+  >(null);
+  useTelegramWebviewBridge(ref, {
+    onOpenTgLink: (link) => {
+      // Intercept: resolve+join via THIS account, then show chat in same tile.
+      setOverlay({ status: "loading", url: link });
+      joinFn({ data: { accountId, url: link } })
+        .then((res) => {
+          setOverlay({
+            status: "ready",
+            url: link,
+            peerKey: res.peerKey,
+            title: res.title,
+            note: res.joined
+              ? "Joined ✓"
+              : res.alreadyMember
+                ? "Already a member"
+                : "Opened",
+          });
+        })
+        .catch((e: Error) =>
+          setOverlay({ status: "error", url: link, error: e.message || "Failed" }),
+        );
+      return true; // handled
+    },
+  });
   return (
-    <iframe
-      key={url}
-      ref={ref}
-      src={url}
-      title={title}
-      className="h-full w-full border-0"
-      allow="clipboard-read; clipboard-write; camera; microphone; geolocation; payment"
-      sandbox="allow-scripts allow-same-origin allow-forms allow-popups allow-popups-to-escape-sandbox allow-modals allow-storage-access-by-user-activation"
-      referrerPolicy="no-referrer"
-    />
+    <div className="relative h-full w-full">
+      <iframe
+        key={url}
+        ref={ref}
+        src={url}
+        title={title}
+        className="h-full w-full border-0"
+        allow="clipboard-read; clipboard-write; camera; microphone; geolocation; payment"
+        sandbox="allow-scripts allow-same-origin allow-forms allow-popups allow-popups-to-escape-sandbox allow-modals allow-storage-access-by-user-activation"
+        referrerPolicy="no-referrer"
+      />
+      {overlay && (
+        <div className="absolute inset-0 flex flex-col bg-background">
+          <div className="flex items-center gap-2 border-b px-2 py-1.5 text-xs">
+            <button
+              type="button"
+              className="rounded p-1 hover:bg-muted"
+              onClick={() => setOverlay(null)}
+              title="Back to mini app"
+            >
+              <ArrowLeft className="h-3.5 w-3.5" />
+            </button>
+            <div className="min-w-0 flex-1">
+              <div className="truncate font-semibold">
+                {overlay.status === "ready" ? overlay.title : "Opening…"}
+              </div>
+              <div className="truncate text-[10px] text-muted-foreground">
+                {overlay.status === "ready" ? overlay.note : overlay.url}
+              </div>
+            </div>
+          </div>
+          <div className="relative flex-1">
+            {overlay.status === "loading" && (
+              <div className="flex h-full items-center justify-center">
+                <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
+              </div>
+            )}
+            {overlay.status === "error" && (
+              <div className="p-3 text-xs text-destructive">{overlay.error}</div>
+            )}
+            {overlay.status === "ready" && (
+              <iframe
+                key={overlay.peerKey}
+                src={`/accounts/${accountId}?peer=${encodeURIComponent(overlay.peerKey)}&solo=1`}
+                title={overlay.title}
+                className="h-full w-full border-0"
+              />
+            )}
+          </div>
+        </div>
+      )}
+    </div>
   );
 }
