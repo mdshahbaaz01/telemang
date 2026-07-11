@@ -4,12 +4,13 @@ import { useQuery } from "@tanstack/react-query";
 import { useMemo, useRef, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { listAccounts } from "@/lib/accounts.functions";
+import { openStartAppLink } from "@/lib/tg-viewer.functions";
 import { AdminGate } from "@/components/AdminGate";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { toast } from "sonner";
-import { Play, Square, ArrowLeft } from "lucide-react";
+import { Play, Square, ArrowLeft, ExternalLink, Loader2, RefreshCw, X } from "lucide-react";
 import { AccountIdPaste } from "@/components/AccountIdPaste";
 
 export const Route = createFileRoute("/_authenticated/bot-flow")({
@@ -31,6 +32,7 @@ type LogEntry = {
 function BotFlowPage() {
   const listAcc = useServerFn(listAccounts);
   const accountsQ = useQuery({ queryKey: ["accounts"], queryFn: () => listAcc() });
+  const openStartApp = useServerFn(openStartAppLink);
 
   const [referLink, setReferLink] = useState("");
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
@@ -158,6 +160,70 @@ function BotFlowPage() {
     setRunning(false);
   };
 
+  // ─── Mini App (startapp) launcher ────────────────────────────────────
+  const [miniLink, setMiniLink] = useState("");
+  const [miniSelected, setMiniSelected] = useState<string[]>([]);
+  const [miniRuns, setMiniRuns] = useState<
+    { accountId: string; status: "loading" | "ready" | "error"; url?: string; error?: string }[]
+  >([]);
+
+  const miniParsed = useMemo(() => {
+    const raw = miniLink.trim();
+    if (!raw) return null;
+    try {
+      const url = new URL(raw.startsWith("http") ? raw : `https://${raw}`);
+      const path = url.pathname.replace(/^\/+/, "").split("/");
+      const username = path[0]?.replace(/^@/, "") ?? "";
+      const appShortName = path[1] ?? "";
+      const startParam =
+        url.searchParams.get("startapp") ||
+        url.searchParams.get("start") ||
+        "";
+      return { username, startParam, appShortName };
+    } catch {
+      return null;
+    }
+  }, [miniLink]);
+
+  const miniToggle = (id: string) =>
+    setMiniSelected((ids) => (ids.includes(id) ? ids.filter((x) => x !== id) : [...ids, id]));
+
+  const resolveOne = async (accountId: string, username: string, startParam: string) => {
+    setMiniRuns((prev) => {
+      const others = prev.filter((r) => r.accountId !== accountId);
+      return [...others, { accountId, status: "loading" }];
+    });
+    try {
+      const res = await openStartApp({
+        data: { accountId, botUsername: username, startParam: startParam || undefined },
+      });
+      if (!res?.url) throw new Error("Telegram returned no URL");
+      setMiniRuns((prev) =>
+        prev.map((r) => (r.accountId === accountId ? { ...r, status: "ready", url: res.url } : r)),
+      );
+    } catch (e) {
+      setMiniRuns((prev) =>
+        prev.map((r) =>
+          r.accountId === accountId
+            ? { ...r, status: "error", error: (e as Error).message || "Failed" }
+            : r,
+        ),
+      );
+    }
+  };
+
+  const runMini = async () => {
+    if (!miniParsed?.username) return toast.error("Paste a mini app link (t.me/bot?startapp=CODE)");
+    const ids = miniSelected.length ? miniSelected : allIds;
+    if (!ids.length) return toast.error("Select at least one account");
+    setMiniRuns(ids.map((id) => ({ accountId: id, status: "loading" as const })));
+    await Promise.all(ids.map((id) => resolveOne(id, miniParsed.username, miniParsed.startParam)));
+  };
+
+  const closeMini = (accountId: string) =>
+    setMiniRuns((prev) => prev.filter((r) => r.accountId !== accountId));
+  const clearMini = () => setMiniRuns([]);
+
   return (
     <main className="min-h-screen bg-background">
       <div className="mx-auto max-w-5xl space-y-6 px-4 py-6 md:px-8">
@@ -243,6 +309,144 @@ function BotFlowPage() {
               </div>
             )}
           </div>
+        </section>
+
+        {/* ── Mini App launcher ─────────────────────────────────────── */}
+        <section className="rounded-lg border border-border bg-card p-4 space-y-4">
+          <h2 className="text-lg font-medium">Open Mini App on many accounts</h2>
+          <p className="text-xs text-muted-foreground">
+            Paste a Telegram mini app link (e.g. <code>https://t.me/wormcupbot?startapp=R84L82W</code>).
+            Each selected account gets its own live mini app window below — use them independently.
+          </p>
+
+          <div>
+            <Label>Mini app link</Label>
+            <Input
+              value={miniLink}
+              onChange={(e) => setMiniLink(e.target.value)}
+              placeholder="https://t.me/somebot?startapp=YOUR_REF"
+            />
+            {miniParsed?.username && (
+              <div className="mt-2 text-xs text-muted-foreground">
+                Bot: <span className="font-mono text-foreground">@{miniParsed.username}</span>
+                {miniParsed.startParam ? (
+                  <>
+                    {" · "}startapp:{" "}
+                    <span className="font-mono text-foreground">{miniParsed.startParam}</span>
+                  </>
+                ) : (
+                  <span className="text-yellow-600 dark:text-yellow-400"> · no startapp code</span>
+                )}
+              </div>
+            )}
+          </div>
+
+          <div className="space-y-2">
+            <div className="flex items-center gap-2">
+              <div className="text-sm font-medium mr-auto">
+                {miniSelected.length} / {allIds.length} accounts selected
+              </div>
+              <Button type="button" size="sm" variant="outline" onClick={() => setMiniSelected(allIds)}>Select all</Button>
+              <Button type="button" size="sm" variant="outline" onClick={() => setMiniSelected([])}>Deselect all</Button>
+            </div>
+            <div className="grid grid-cols-1 gap-1 sm:grid-cols-2 lg:grid-cols-3 max-h-56 overflow-auto rounded-md border border-border p-2">
+              {accountList.map((a) => {
+                const checked = miniSelected.includes(a.id);
+                return (
+                  <label key={a.id} className="flex items-center gap-2 rounded px-2 py-1 text-sm hover:bg-muted/40">
+                    <input type="checkbox" checked={checked} onChange={() => miniToggle(a.id)} />
+                    <span className="truncate">{a.first_name || a.username || a.phone}</span>
+                  </label>
+                );
+              })}
+            </div>
+          </div>
+
+          <div className="flex gap-2">
+            <Button onClick={runMini} disabled={!miniParsed?.username || allIds.length === 0}>
+              <Play className="mr-1 h-4 w-4" /> Open on selected
+            </Button>
+            {miniRuns.length > 0 && (
+              <Button variant="outline" onClick={clearMini}>
+                Close all
+              </Button>
+            )}
+          </div>
+
+          {miniRuns.length > 0 && (
+            <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3">
+              {miniRuns.map((r) => {
+                const acc = accountList.find((a) => a.id === r.accountId);
+                const who = acc?.first_name || acc?.username || acc?.phone || r.accountId.slice(0, 8);
+                return (
+                  <div key={r.accountId} className="flex h-[520px] flex-col overflow-hidden rounded-md border border-border bg-background">
+                    <div className="flex items-center gap-2 border-b px-2 py-1.5">
+                      <div className="min-w-0 flex-1 text-xs">
+                        <div className="truncate font-semibold">{who}</div>
+                        <div className="truncate text-[10px] text-muted-foreground">
+                          {r.status === "loading"
+                            ? "Resolving…"
+                            : r.status === "error"
+                              ? "Failed"
+                              : r.url
+                                ? new URL(r.url).host
+                                : ""}
+                        </div>
+                      </div>
+                      {r.url && (
+                        <a
+                          href={r.url}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="rounded p-1 hover:bg-muted"
+                          title="Open in new tab"
+                        >
+                          <ExternalLink className="h-3.5 w-3.5" />
+                        </a>
+                      )}
+                      <button
+                        type="button"
+                        className="rounded p-1 hover:bg-muted"
+                        title="Reload"
+                        onClick={() => miniParsed && resolveOne(r.accountId, miniParsed.username, miniParsed.startParam)}
+                      >
+                        <RefreshCw className="h-3.5 w-3.5" />
+                      </button>
+                      <button
+                        type="button"
+                        className="rounded p-1 hover:bg-muted"
+                        title="Close"
+                        onClick={() => closeMini(r.accountId)}
+                      >
+                        <X className="h-3.5 w-3.5" />
+                      </button>
+                    </div>
+                    <div className="relative flex-1">
+                      {r.status === "loading" && (
+                        <div className="absolute inset-0 flex items-center justify-center bg-background/60">
+                          <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
+                        </div>
+                      )}
+                      {r.status === "error" && (
+                        <div className="p-3 text-xs text-destructive">{r.error}</div>
+                      )}
+                      {r.status === "ready" && r.url && (
+                        <iframe
+                          key={r.url}
+                          src={r.url}
+                          title={who}
+                          className="h-full w-full border-0"
+                          allow="clipboard-read; clipboard-write; camera; microphone; geolocation; payment"
+                          sandbox="allow-scripts allow-same-origin allow-forms allow-popups allow-popups-to-escape-sandbox allow-modals allow-storage-access-by-user-activation"
+                          referrerPolicy="no-referrer"
+                        />
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
         </section>
 
         <section className="rounded-lg border border-border bg-card p-4">
