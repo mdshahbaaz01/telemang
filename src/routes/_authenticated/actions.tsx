@@ -1816,6 +1816,36 @@ function ActionsPageInner() {
                     : `Same ${tab} text goes out from every selected account (round-robin if you add multiple rows).`}
                 </p>
                 {replyMode === "all-ids" && (
+                  <></>
+                )}
+                {replyMode === "per-account" && (
+                  <RangeApply
+                    label="Auto-fill rows from account range"
+                    accountsCount={accountList.length}
+                    onApply={(start, end, template, appendNumbers) => {
+                      const slice = accountList.slice(start - 1, end);
+                      if (!slice.length) return;
+                      const sharedFiles = replyRows[0]?.files;
+                      setReplyRows(
+                        slice.map((acc, i) => {
+                          const n = start + i;
+                          const msg = template.includes("{n}")
+                            ? template.replaceAll("{n}", String(n))
+                            : appendNumbers
+                              ? `${template} ${n}`.trim()
+                              : template;
+                          return {
+                            id: crypto.randomUUID(),
+                            accountId: acc.id,
+                            message: msg,
+                            files: sharedFiles,
+                          };
+                        }),
+                      );
+                    }}
+                  />
+                )}
+                {replyMode === "all-ids-BOGUS_DISABLED" && (
                   <div className="rounded-md border border-border p-3 space-y-2">
                     <div className="flex items-center gap-2">
                       <Label className="mr-auto">Send from accounts</Label>
