@@ -132,7 +132,8 @@ function fmtDialogTime(ms: number | null) {
 
 function AccountViewerPage() {
   const { id: accountId } = Route.useParams();
-  const { peer: activePeer } = Route.useSearch();
+  const { peer: activePeer, solo: soloRaw } = Route.useSearch();
+  const solo = soloRaw === "1" || soloRaw === true;
   const navigate = Route.useNavigate();
 
   const listDialogsFn = useServerFn(listDialogs);
