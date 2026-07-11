@@ -806,7 +806,7 @@ export const processBatchJoin = createServerFn({ method: "POST" })
     const sessionStr = await decryptString(acct.session_enc);
     const client = await createTgClient(acct.api_id, apiHash, sessionStr, acct.id);
 
-    let floodPaused = null as { seconds: number } | null;
+    let floodPaused = null as { seconds: number; target: string; reason: string } | null;
 
     const processOne = async (item: { id: string; target: string }) => {
       let statusUpdate: {
