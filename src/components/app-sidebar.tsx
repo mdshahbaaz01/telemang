@@ -12,6 +12,9 @@ import {
   UserCog,
   Sparkles,
   Search,
+  Cpu,
+  Users,
+  BarChart3,
 } from "lucide-react";
 import {
   Sidebar,
@@ -56,6 +59,9 @@ const items: Item[] = [
   { title: "Bulk Mix", to: "/bulk-mix", icon: Sparkles },
   { title: "Profile Updater", to: "/profile-updater", icon: UserCog },
   { title: "Global Search", to: "/search", icon: Search },
+  { title: "Bot Parser", to: "/bot-parser", icon: Cpu },
+  { title: "Referrals", to: "/referrals", icon: Users },
+  { title: "Analytics", to: "/analytics", icon: BarChart3 },
 ];
 
 export function AppSidebar() {
