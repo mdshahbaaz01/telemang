@@ -353,24 +353,51 @@ function buildOverrideScript(accountId: string, upstreamUrl: string) {
     const set = (obj, key, val) => {
       try { Object.defineProperty(obj, key, { get: () => val, configurable: true }); } catch (e) {}
     };
-    set(nav, 'userAgent', fp.userAgent);
-    set(nav, 'appVersion', fp.userAgent.replace(/^Mozilla\\//, ''));
-    set(nav, 'platform', fp.platform);
-    set(nav, 'language', fp.languages[0]);
-    set(nav, 'languages', Object.freeze(fp.languages.slice()));
-    set(nav, 'hardwareConcurrency', fp.hardwareConcurrency);
-    set(nav, 'deviceMemory', fp.deviceMemory);
-    set(nav, 'maxTouchPoints', fp.mobile ? 5 : 0);
-    set(nav, 'vendor', fp.platform === 'iPhone' || fp.platform === 'MacIntel' ? 'Apple Computer, Inc.' : 'Google Inc.');
-    if (navigator.userAgentData) {
-      const brands = [
-        { brand: 'Chromium', version: '118' },
-        { brand: 'Not-A.Brand', version: '99' },
-      ];
-      set(navigator.userAgentData, 'mobile', fp.mobile);
-      set(navigator.userAgentData, 'platform', fp.platform.includes('iPhone') ? 'iOS' : fp.platform.includes('Mac') ? 'macOS' : fp.platform.includes('Win') ? 'Windows' : fp.mobile ? 'Android' : 'Linux');
-      set(navigator.userAgentData, 'brands', brands);
-    }
+    const platformName = fp.platform.includes('iPhone') ? 'iOS' : fp.platform.includes('Mac') ? 'macOS' : fp.platform.includes('Win') ? 'Windows' : fp.mobile ? 'Android' : 'Linux';
+    const chromeVersion = (fp.userAgent.match(/Chrome\/(\d+)/) || [])[1] || '120';
+    const brands = Object.freeze([
+      { brand: 'Chromium', version: chromeVersion },
+      { brand: 'Google Chrome', version: chromeVersion },
+      { brand: 'Not:A-Brand', version: '99' },
+    ]);
+    const uaData = {
+      brands,
+      mobile: fp.mobile,
+      platform: platformName,
+      getHighEntropyValues(hints) {
+        const values = {
+          brands,
+          mobile: fp.mobile,
+          platform: platformName,
+          architecture: fp.mobile ? '' : (fp.platform.includes('Win') ? 'x86' : 'arm'),
+          bitness: fp.mobile ? '' : '64',
+          model: fp.mobile ? (fp.userAgent.match(/;\s*([^;)]+)\) AppleWebKit/) || [])[1] || 'Pixel 7' : '',
+          platformVersion: fp.mobile ? '14.0.0' : fp.platform.includes('Win') ? '15.0.0' : '14.0.0',
+          uaFullVersion: chromeVersion + '.0.0.0',
+          fullVersionList: brands.map((b) => ({ brand: b.brand, version: b.brand === 'Not:A-Brand' ? '99.0.0.0' : chromeVersion + '.0.0.0' })),
+          wow64: false,
+        };
+        const out = { brands, mobile: fp.mobile, platform: platformName };
+        (Array.isArray(hints) ? hints : []).forEach((h) => { if (h in values) out[h] = values[h]; });
+        return Promise.resolve(out);
+      },
+      toJSON() { return { brands, mobile: fp.mobile, platform: platformName }; },
+    };
+    ['userAgent', 'appVersion', 'platform', 'language', 'languages', 'hardwareConcurrency', 'deviceMemory', 'maxTouchPoints', 'vendor', 'webdriver', 'userAgentData'].forEach((key) => {
+      const val = key === 'userAgent' ? fp.userAgent
+        : key === 'appVersion' ? fp.userAgent.replace(/^Mozilla\\//, '')
+        : key === 'platform' ? fp.platform
+        : key === 'language' ? fp.languages[0]
+        : key === 'languages' ? Object.freeze(fp.languages.slice())
+        : key === 'hardwareConcurrency' ? fp.hardwareConcurrency
+        : key === 'deviceMemory' ? fp.deviceMemory
+        : key === 'maxTouchPoints' ? (fp.mobile ? 5 : 0)
+        : key === 'vendor' ? (fp.platform === 'iPhone' || fp.platform === 'MacIntel' ? 'Apple Computer, Inc.' : 'Google Inc.')
+        : key === 'webdriver' ? undefined
+        : uaData;
+      set(nav, key, val);
+      set(navigator, key, val);
+    });
     const scr = Object.getPrototypeOf(screen);
     set(scr, 'width', fp.screenW);
     set(scr, 'height', fp.screenH);
@@ -416,8 +443,13 @@ function buildOverrideScript(accountId: string, upstreamUrl: string) {
           const ctx = this.getContext('2d');
           if (ctx) {
             const img = origGetImageData.call(ctx, 0, 0, this.width, this.height);
+            const original = new Uint8ClampedArray(img.data);
             jitter(img.data);
             ctx.putImageData(img, 0, 0);
+            const out = origToDataURL.apply(this, arguments);
+            img.data.set(original);
+            ctx.putImageData(img, 0, 0);
+            return out;
           }
         } catch (e) {}
         return origToDataURL.apply(this, arguments);
