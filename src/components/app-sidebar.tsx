@@ -15,6 +15,7 @@ import {
   Cpu,
   Users,
   BarChart3,
+  Columns,
 } from "lucide-react";
 import {
   Sidebar,
@@ -59,6 +60,7 @@ const items: Item[] = [
   { title: "Bulk Mix", to: "/bulk-mix", icon: Sparkles },
   { title: "Profile Updater", to: "/profile-updater", icon: UserCog },
   { title: "Global Search", to: "/search", icon: Search },
+  { title: "Workspace", to: "/workspace", icon: Columns },
   { title: "Bot Parser", to: "/bot-parser", icon: Cpu },
   { title: "Referrals", to: "/referrals", icon: Users },
   { title: "Analytics", to: "/analytics", icon: BarChart3 },

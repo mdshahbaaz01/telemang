@@ -12,6 +12,7 @@ import { Route as rootRouteImport } from './routes/__root'
 import { Route as AuthRouteImport } from './routes/auth'
 import { Route as AuthenticatedRouteRouteImport } from './routes/_authenticated/route'
 import { Route as IndexRouteImport } from './routes/index'
+import { Route as AuthenticatedWorkspaceRouteImport } from './routes/_authenticated/workspace'
 import { Route as AuthenticatedSearchRouteImport } from './routes/_authenticated/search'
 import { Route as AuthenticatedReferralsRouteImport } from './routes/_authenticated/referrals'
 import { Route as AuthenticatedProfileUpdaterRouteImport } from './routes/_authenticated/profile-updater'
@@ -49,6 +50,11 @@ const IndexRoute = IndexRouteImport.update({
   id: '/',
   path: '/',
   getParentRoute: () => rootRouteImport,
+} as any)
+const AuthenticatedWorkspaceRoute = AuthenticatedWorkspaceRouteImport.update({
+  id: '/workspace',
+  path: '/workspace',
+  getParentRoute: () => AuthenticatedRouteRoute,
 } as any)
 const AuthenticatedSearchRoute = AuthenticatedSearchRouteImport.update({
   id: '/search',
@@ -186,6 +192,7 @@ export interface FileRoutesByFullPath {
   '/profile-updater': typeof AuthenticatedProfileUpdaterRoute
   '/referrals': typeof AuthenticatedReferralsRoute
   '/search': typeof AuthenticatedSearchRoute
+  '/workspace': typeof AuthenticatedWorkspaceRoute
   '/accounts/$id': typeof AuthenticatedAccountsIdRoute
   '/groups/$id': typeof AuthenticatedGroupsIdRoute
   '/tasks/$id': typeof AuthenticatedTasksIdRoute
@@ -213,6 +220,7 @@ export interface FileRoutesByTo {
   '/profile-updater': typeof AuthenticatedProfileUpdaterRoute
   '/referrals': typeof AuthenticatedReferralsRoute
   '/search': typeof AuthenticatedSearchRoute
+  '/workspace': typeof AuthenticatedWorkspaceRoute
   '/accounts/$id': typeof AuthenticatedAccountsIdRoute
   '/groups/$id': typeof AuthenticatedGroupsIdRoute
   '/tasks/$id': typeof AuthenticatedTasksIdRoute
@@ -242,6 +250,7 @@ export interface FileRoutesById {
   '/_authenticated/profile-updater': typeof AuthenticatedProfileUpdaterRoute
   '/_authenticated/referrals': typeof AuthenticatedReferralsRoute
   '/_authenticated/search': typeof AuthenticatedSearchRoute
+  '/_authenticated/workspace': typeof AuthenticatedWorkspaceRoute
   '/_authenticated/accounts/$id': typeof AuthenticatedAccountsIdRoute
   '/_authenticated/groups/$id': typeof AuthenticatedGroupsIdRoute
   '/_authenticated/tasks/$id': typeof AuthenticatedTasksIdRoute
@@ -271,6 +280,7 @@ export interface FileRouteTypes {
     | '/profile-updater'
     | '/referrals'
     | '/search'
+    | '/workspace'
     | '/accounts/$id'
     | '/groups/$id'
     | '/tasks/$id'
@@ -298,6 +308,7 @@ export interface FileRouteTypes {
     | '/profile-updater'
     | '/referrals'
     | '/search'
+    | '/workspace'
     | '/accounts/$id'
     | '/groups/$id'
     | '/tasks/$id'
@@ -326,6 +337,7 @@ export interface FileRouteTypes {
     | '/_authenticated/profile-updater'
     | '/_authenticated/referrals'
     | '/_authenticated/search'
+    | '/_authenticated/workspace'
     | '/_authenticated/accounts/$id'
     | '/_authenticated/groups/$id'
     | '/_authenticated/tasks/$id'
@@ -372,6 +384,13 @@ declare module '@tanstack/react-router' {
       fullPath: '/'
       preLoaderRoute: typeof IndexRouteImport
       parentRoute: typeof rootRouteImport
+    }
+    '/_authenticated/workspace': {
+      id: '/_authenticated/workspace'
+      path: '/workspace'
+      fullPath: '/workspace'
+      preLoaderRoute: typeof AuthenticatedWorkspaceRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
     }
     '/_authenticated/search': {
       id: '/_authenticated/search'
@@ -551,6 +570,7 @@ interface AuthenticatedRouteRouteChildren {
   AuthenticatedProfileUpdaterRoute: typeof AuthenticatedProfileUpdaterRoute
   AuthenticatedReferralsRoute: typeof AuthenticatedReferralsRoute
   AuthenticatedSearchRoute: typeof AuthenticatedSearchRoute
+  AuthenticatedWorkspaceRoute: typeof AuthenticatedWorkspaceRoute
   AuthenticatedAccountsIdRoute: typeof AuthenticatedAccountsIdRoute
   AuthenticatedGroupsIdRoute: typeof AuthenticatedGroupsIdRoute
   AuthenticatedTasksIdRoute: typeof AuthenticatedTasksIdRoute
@@ -571,6 +591,7 @@ const AuthenticatedRouteRouteChildren: AuthenticatedRouteRouteChildren = {
   AuthenticatedProfileUpdaterRoute: AuthenticatedProfileUpdaterRoute,
   AuthenticatedReferralsRoute: AuthenticatedReferralsRoute,
   AuthenticatedSearchRoute: AuthenticatedSearchRoute,
+  AuthenticatedWorkspaceRoute: AuthenticatedWorkspaceRoute,
   AuthenticatedAccountsIdRoute: AuthenticatedAccountsIdRoute,
   AuthenticatedGroupsIdRoute: AuthenticatedGroupsIdRoute,
   AuthenticatedTasksIdRoute: AuthenticatedTasksIdRoute,
