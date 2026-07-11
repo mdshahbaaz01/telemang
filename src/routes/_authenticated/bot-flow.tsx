@@ -6,6 +6,7 @@ import { useTelegramWebviewBridge } from "@/lib/telegram-webview-bridge";
 import { supabase } from "@/integrations/supabase/client";
 import { listAccounts } from "@/lib/accounts.functions";
 import { openStartAppLink, joinFromLink } from "@/lib/tg-viewer.functions";
+import { proxifyMiniAppUrl } from "@/lib/miniapp-proxy-url";
 import { AdminGate } from "@/components/AdminGate";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -592,7 +593,7 @@ function MiniAppFrame({ url, title, accountId }: { url: string; title: string; a
       <iframe
         key={url}
         ref={ref}
-        src={url}
+        src={proxifyMiniAppUrl(url, accountId)}
         title={title}
         name={`tgminiapp-${accountId}`}
         {...({ credentialless: "true" } as any)}

@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { X, ExternalLink, Loader2, AlertTriangle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useTelegramWebviewBridge } from "@/lib/telegram-webview-bridge";
+import { proxifyMiniAppUrl } from "@/lib/miniapp-proxy-url";
 
 export type MiniAppRequest = {
   accountId: string;
@@ -109,7 +110,7 @@ export function MiniAppDrawer({
             <iframe
               key={resolvedUrl}
               ref={iframeRef}
-              src={resolvedUrl}
+              src={proxifyMiniAppUrl(resolvedUrl, request?.accountId ?? "anon")}
               title={request?.buttonText || "Telegram Mini App"}
               name={`tgminiapp-${request?.accountId ?? "drawer"}`}
               {...({ credentialless: "true" } as any)}
