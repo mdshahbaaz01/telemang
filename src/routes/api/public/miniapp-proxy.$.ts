@@ -36,7 +36,7 @@ function buildOverrideScript(accountId: string, upstreamUrl: string) {
     try {
       const u = new URL(UPSTREAM);
       if (location.pathname.startsWith(PROXY_PREFIX)) {
-        history.replaceState(history.state, '', u.pathname + u.search + location.hash);
+        history.replaceState(history.state, '', location.origin + u.pathname + u.search + location.hash);
       }
     } catch {}
     const hostPost = (eventType, eventData) => {
@@ -226,14 +226,14 @@ function buildOverrideScript(accountId: string, upstreamUrl: string) {
         if (abs.protocol !== 'http:' && abs.protocol !== 'https:') return s;
         // Already proxied? leave alone.
         if (abs.origin === location.origin && abs.pathname.startsWith(PROXY_PREFIX)) return s;
-        // If it points at our origin (mini-app used location.href/fetch with a path), rewrite to upstream host.
+        // Rewrite both same-preview paths and absolute upstream calls through the proxy.
         const target = (abs.origin === location.origin && upstreamOrigin)
           ? upstreamOrigin + abs.pathname + abs.search + abs.hash
           : abs.toString();
         const hashIdx = target.indexOf('#');
         const bare = hashIdx === -1 ? target : target.slice(0, hashIdx);
         const hash = hashIdx === -1 ? '' : target.slice(hashIdx);
-        return PROXY_PREFIX + encodeURIComponent(bare) + '?a=' + encodeURIComponent(ACCT) + hash;
+        return location.origin + PROXY_PREFIX + encodeURIComponent(bare) + '?a=' + encodeURIComponent(ACCT) + hash;
       } catch { return s; }
     };
     const isTgLink = (raw) => {
@@ -353,24 +353,58 @@ function buildOverrideScript(accountId: string, upstreamUrl: string) {
     const set = (obj, key, val) => {
       try { Object.defineProperty(obj, key, { get: () => val, configurable: true }); } catch (e) {}
     };
-    set(nav, 'userAgent', fp.userAgent);
-    set(nav, 'appVersion', fp.userAgent.replace(/^Mozilla\\//, ''));
-    set(nav, 'platform', fp.platform);
-    set(nav, 'language', fp.languages[0]);
-    set(nav, 'languages', Object.freeze(fp.languages.slice()));
-    set(nav, 'hardwareConcurrency', fp.hardwareConcurrency);
-    set(nav, 'deviceMemory', fp.deviceMemory);
-    set(nav, 'maxTouchPoints', fp.mobile ? 5 : 0);
-    set(nav, 'vendor', fp.platform === 'iPhone' || fp.platform === 'MacIntel' ? 'Apple Computer, Inc.' : 'Google Inc.');
-    if (navigator.userAgentData) {
-      const brands = [
-        { brand: 'Chromium', version: '118' },
-        { brand: 'Not-A.Brand', version: '99' },
-      ];
-      set(navigator.userAgentData, 'mobile', fp.mobile);
-      set(navigator.userAgentData, 'platform', fp.platform.includes('iPhone') ? 'iOS' : fp.platform.includes('Mac') ? 'macOS' : fp.platform.includes('Win') ? 'Windows' : fp.mobile ? 'Android' : 'Linux');
-      set(navigator.userAgentData, 'brands', brands);
-    }
+    const platformName = fp.platform.includes('iPhone') ? 'iOS' : fp.platform.includes('Mac') ? 'macOS' : fp.platform.includes('Win') ? 'Windows' : fp.mobile ? 'Android' : 'Linux';
+    const chromeVersion = (fp.userAgent.split('Chrome/')[1] || '').split('.')[0] || '120';
+    const mobileModel = (() => {
+      try {
+        const androidPart = fp.userAgent.split('; Android ')[1] || '';
+        const modelPart = androidPart.split(') AppleWebKit')[0].split(';').pop();
+        return (modelPart || 'Pixel 7').trim();
+      } catch { return 'Pixel 7'; }
+    })();
+    const brands = Object.freeze([
+      { brand: 'Chromium', version: chromeVersion },
+      { brand: 'Google Chrome', version: chromeVersion },
+      { brand: 'Not:A-Brand', version: '99' },
+    ]);
+    const uaData = {
+      brands,
+      mobile: fp.mobile,
+      platform: platformName,
+      getHighEntropyValues(hints) {
+        const values = {
+          brands,
+          mobile: fp.mobile,
+          platform: platformName,
+          architecture: fp.mobile ? '' : (fp.platform.includes('Win') ? 'x86' : 'arm'),
+          bitness: fp.mobile ? '' : '64',
+          model: fp.mobile ? mobileModel : '',
+          platformVersion: fp.mobile ? '14.0.0' : fp.platform.includes('Win') ? '15.0.0' : '14.0.0',
+          uaFullVersion: chromeVersion + '.0.0.0',
+          fullVersionList: brands.map((b) => ({ brand: b.brand, version: b.brand === 'Not:A-Brand' ? '99.0.0.0' : chromeVersion + '.0.0.0' })),
+          wow64: false,
+        };
+        const out = { brands, mobile: fp.mobile, platform: platformName };
+        (Array.isArray(hints) ? hints : []).forEach((h) => { if (h in values) out[h] = values[h]; });
+        return Promise.resolve(out);
+      },
+      toJSON() { return { brands, mobile: fp.mobile, platform: platformName }; },
+    };
+    ['userAgent', 'appVersion', 'platform', 'language', 'languages', 'hardwareConcurrency', 'deviceMemory', 'maxTouchPoints', 'vendor', 'webdriver', 'userAgentData'].forEach((key) => {
+      const val = key === 'userAgent' ? fp.userAgent
+        : key === 'appVersion' ? fp.userAgent.replace(/^Mozilla\\//, '')
+        : key === 'platform' ? fp.platform
+        : key === 'language' ? fp.languages[0]
+        : key === 'languages' ? Object.freeze(fp.languages.slice())
+        : key === 'hardwareConcurrency' ? fp.hardwareConcurrency
+        : key === 'deviceMemory' ? fp.deviceMemory
+        : key === 'maxTouchPoints' ? (fp.mobile ? 5 : 0)
+        : key === 'vendor' ? (fp.platform === 'iPhone' || fp.platform === 'MacIntel' ? 'Apple Computer, Inc.' : 'Google Inc.')
+        : key === 'webdriver' ? undefined
+        : uaData;
+      set(nav, key, val);
+      set(navigator, key, val);
+    });
     const scr = Object.getPrototypeOf(screen);
     set(scr, 'width', fp.screenW);
     set(scr, 'height', fp.screenH);
@@ -416,8 +450,13 @@ function buildOverrideScript(accountId: string, upstreamUrl: string) {
           const ctx = this.getContext('2d');
           if (ctx) {
             const img = origGetImageData.call(ctx, 0, 0, this.width, this.height);
+            const original = new Uint8ClampedArray(img.data);
             jitter(img.data);
             ctx.putImageData(img, 0, 0);
+            const out = origToDataURL.apply(this, arguments);
+            img.data.set(original);
+            ctx.putImageData(img, 0, 0);
+            return out;
           }
         } catch (e) {}
         return origToDataURL.apply(this, arguments);
@@ -469,11 +508,11 @@ function buildOverrideScript(accountId: string, upstreamUrl: string) {
 })();`;
 }
 
-function proxyUrl(target: string, accountId: string) {
-  return `/api/public/miniapp-proxy/${encodeURIComponent(target)}?a=${encodeURIComponent(accountId)}`;
+function proxyUrl(target: string, accountId: string, proxyOrigin = "") {
+  return `${proxyOrigin}/api/public/miniapp-proxy/${encodeURIComponent(target)}?a=${encodeURIComponent(accountId)}`;
 }
 
-function rewriteHtmlUrls(html: string, baseUrl: string, accountId: string) {
+function rewriteHtmlUrls(html: string, baseUrl: string, accountId: string, proxyOrigin: string) {
   const base = new URL(baseUrl);
   const toProxy = (raw: string) => {
     if (!raw || raw.startsWith("#") || raw.startsWith("data:") || raw.startsWith("blob:") || raw.startsWith("mailto:") || raw.startsWith("tel:")) {
@@ -482,7 +521,7 @@ function rewriteHtmlUrls(html: string, baseUrl: string, accountId: string) {
     try {
       const absolute = new URL(raw, base).toString();
       if (!/^https?:\/\//i.test(absolute)) return raw;
-      return proxyUrl(absolute, accountId);
+      return proxyUrl(absolute, accountId, proxyOrigin);
     } catch {
       return raw;
     }
@@ -505,16 +544,26 @@ function rewriteHtmlUrls(html: string, baseUrl: string, accountId: string) {
     });
 }
 
-function rewriteCssUrls(css: string, baseUrl: string, accountId: string) {
+function rewriteCssUrls(css: string, baseUrl: string, accountId: string, proxyOrigin: string) {
   const base = new URL(baseUrl);
   return css.replace(/url\((['"]?)(.*?)\1\)/gi, (_m, quote, value) => {
     if (!value || value.startsWith("data:") || value.startsWith("blob:")) return `url(${quote}${value}${quote})`;
     try {
-      return `url(${quote}${proxyUrl(new URL(value, base).toString(), accountId)}${quote})`;
+      return `url(${quote}${proxyUrl(new URL(value, base).toString(), accountId, proxyOrigin)}${quote})`;
     } catch {
       return `url(${quote}${value}${quote})`;
     }
   });
+}
+
+function rewriteJsUrls(js: string, baseUrl: string, accountId: string, proxyOrigin: string) {
+  try {
+    const upstream = new URL(baseUrl);
+    const proxyBase = `${proxyOrigin}/api/public/miniapp-proxy/${encodeURIComponent(upstream.origin)}`;
+    return js.replaceAll(upstream.origin, proxyBase);
+  } catch {
+    return js;
+  }
 }
 
 async function handle(request: Request, params: { _splat?: string }) {
@@ -523,6 +572,7 @@ async function handle(request: Request, params: { _splat?: string }) {
     return new Response("Missing target URL", { status: 400 });
   }
   const proxyReqUrl = new URL(request.url);
+  const proxyOrigin = proxyReqUrl.origin;
   const accountId = proxyReqUrl.searchParams.get("a") || "anon";
 
   const upstreamHeaders = new Headers();
@@ -559,9 +609,9 @@ async function handle(request: Request, params: { _splat?: string }) {
     const upstreamDir = new URL(".", finalUrl).toString();
     const script = `<script>${buildOverrideScript(accountId, finalUrl)}</script>`;
     const base = `<base href="${upstreamDir}">`;
-    html = rewriteHtmlUrls(html, finalUrl, accountId);
+    html = rewriteHtmlUrls(html, finalUrl, accountId, proxyOrigin);
     if (/<head[^>]*>/i.test(html)) {
-      html = html.replace(/<head([^>]*)>/i, `<head$1>${base}${script}`);
+      html = html.replace(/<head([^>]*)>/i, `<head$1>${script}${base}`);
     } else {
       html = `${base}${script}${html}`;
     }
@@ -569,9 +619,14 @@ async function handle(request: Request, params: { _splat?: string }) {
     return new Response(html, { status: upstream.status, headers: outHeaders });
   }
   if (ctype.includes("text/css")) {
-    const css = rewriteCssUrls(await upstream.text(), upstream.url || target, accountId);
+    const css = rewriteCssUrls(await upstream.text(), upstream.url || target, accountId, proxyOrigin);
     outHeaders.set("content-type", "text/css; charset=utf-8");
     return new Response(css, { status: upstream.status, headers: outHeaders });
+  }
+  if (ctype.includes("javascript") || ctype.includes("ecmascript") || /\.m?js(?:$|\?)/i.test(target)) {
+    const js = rewriteJsUrls(await upstream.text(), upstream.url || target, accountId, proxyOrigin);
+    outHeaders.set("content-type", ctype || "application/javascript; charset=utf-8");
+    return new Response(js, { status: upstream.status, headers: outHeaders });
   }
   return new Response(upstream.body, { status: upstream.status, headers: outHeaders });
 }
