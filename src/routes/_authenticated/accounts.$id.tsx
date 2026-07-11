@@ -731,9 +731,9 @@ function MessageRow({
           </div>
         )}
 
-        {msg.replyMarkup && msg.replyMarkup.length > 0 && (
+        {msg.replyMarkup && (msg.replyMarkup.kind === "inline" || msg.replyMarkup.kind === "keyboard") && msg.replyMarkup.rows.length > 0 && (
           <div className="mt-2 space-y-1">
-            {msg.replyMarkup.map((row, ri) => (
+            {msg.replyMarkup.rows.map((row, ri) => (
               <div key={ri} className="flex flex-wrap gap-1">
                 {row.map((btn, ci) => {
                   const key = `${msg.id}:${ri}:${ci}`;
