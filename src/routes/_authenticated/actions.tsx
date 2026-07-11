@@ -1815,9 +1815,6 @@ function ActionsPageInner() {
                     ? `Each row: the chosen account sends this ${tab}. Rows run in parallel — different accounts can post different ${tab}s on the same post.`
                     : `Same ${tab} text goes out from every selected account (round-robin if you add multiple rows).`}
                 </p>
-                {replyMode === "all-ids" && (
-                  <></>
-                )}
                 {replyMode === "per-account" && (
                   <RangeApply
                     label="Auto-fill rows from account range"
@@ -1845,7 +1842,7 @@ function ActionsPageInner() {
                     }}
                   />
                 )}
-                {replyMode === "all-ids-BOGUS_DISABLED" && (
+                {replyMode === "all-ids" && (
                   <div className="rounded-md border border-border p-3 space-y-2">
                     <div className="flex items-center gap-2">
                       <Label className="mr-auto">Send from accounts</Label>
