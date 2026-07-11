@@ -579,7 +579,6 @@ function MiniAppFrame({ url, title, accountId }: { url: string; title: string; a
         src={proxifyMiniAppUrl(url, accountId)}
         title={title}
         name={`tgminiapp-${accountId}`}
-        {...({ credentialless: "true" } as any)}
         className="h-full w-full border-0"
         allow="clipboard-read; clipboard-write; camera; microphone; geolocation; payment"
         sandbox="allow-scripts allow-same-origin allow-forms allow-modals allow-storage-access-by-user-activation"
