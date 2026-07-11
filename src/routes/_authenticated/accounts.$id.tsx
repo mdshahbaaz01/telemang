@@ -29,6 +29,20 @@ export const Route = createFileRoute("/_authenticated/accounts/$id")({
   validateSearch: (s) => searchSchema.parse(s),
   head: () => ({ meta: [{ title: "Account Viewer — TeleManager Pro" }] }),
   component: AccountViewerPage,
+  errorComponent: ({ error, reset }) => (
+    <div className="flex h-screen flex-col items-center justify-center gap-3 p-6 text-center">
+      <div className="text-sm font-semibold">Chat failed to load</div>
+      <pre className="max-w-full overflow-auto whitespace-pre-wrap break-words rounded border bg-muted/30 p-2 text-[10px] text-muted-foreground">
+        {String((error as Error)?.message ?? error)}
+      </pre>
+      <button
+        onClick={() => reset()}
+        className="rounded-md bg-primary px-3 py-1 text-xs font-medium text-primary-foreground"
+      >
+        Retry
+      </button>
+    </div>
+  ),
 });
 
 type Dialog = {
