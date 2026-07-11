@@ -142,7 +142,7 @@ function buildOverrideScript(accountId: string, upstreamUrl: string) {
           isVerticalSwipesEnabled: true,
           ready() { hostPost('web_app_ready', {}); },
           expand() { this.isExpanded = true; hostPost('web_app_expand', {}); },
-          close() { hostPost('web_app_close', {}); },
+          close() { hostPost('web_app_close', { reason: 'close' }); },
           sendData(data) { hostPost('web_app_data_send', { data: String(data || '') }); },
           openLink(url) { hostPost('web_app_open_link', { url: String(url || '') }); },
           openTelegramLink(url) { hostPost('web_app_open_tg_link', { url: String(url || '') }); },
@@ -353,7 +353,7 @@ function buildOverrideScript(accountId: string, upstreamUrl: string) {
     const set = (obj, key, val) => {
       try { Object.defineProperty(obj, key, { get: () => val, configurable: true }); } catch (e) {}
     };
-    const platformName = fp.platform.includes('iPhone') ? 'iOS' : fp.platform.includes('Mac') ? 'macOS' : fp.platform.includes('Win') ? 'Windows' : fp.mobile ? 'Android' : 'Linux';
+    const platformName = fp.platform.includes('iPhone') ? 'iOS' : fp.mobile ? 'Android' : 'Linux';
     const chromeVersion = (fp.userAgent.split('Chrome/')[1] || '').split('.')[0] || '120';
     const mobileModel = (() => {
       try {
@@ -577,12 +577,17 @@ async function handle(request: Request, params: { _splat?: string }) {
 
   const upstreamHeaders = new Headers();
   const fp = deriveMiniAppIdentity(accountId).fingerprint;
+  const targetUrl = new URL(target);
   upstreamHeaders.set("user-agent", fp.userAgent);
   upstreamHeaders.set("accept-language", fp.languages.join(","));
+  upstreamHeaders.set("origin", targetUrl.origin);
+  upstreamHeaders.set("referer", `${targetUrl.origin}/`);
   const accept = request.headers.get("accept");
   if (accept) upstreamHeaders.set("accept", accept);
-  const referer = request.headers.get("referer");
-  if (referer) upstreamHeaders.set("referer", target);
+  const contentType = request.headers.get("content-type");
+  if (contentType) upstreamHeaders.set("content-type", contentType);
+  const requestedWith = request.headers.get("x-requested-with");
+  if (requestedWith) upstreamHeaders.set("x-requested-with", requestedWith);
 
   let upstream: Response;
   try {

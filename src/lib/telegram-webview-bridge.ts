@@ -29,6 +29,7 @@ export function useTelegramWebviewBridge(
     theme?: ThemeParams;
     viewportHeight?: number;
     onOpenTgLink?: (url: string) => boolean | void; // return true to intercept
+    onClose?: () => boolean | void;
   } = {},
 ) {
   const theme = opts.theme ?? DEFAULT_THEME;
@@ -37,6 +38,8 @@ export function useTelegramWebviewBridge(
   themeRef.current = theme;
   const onOpenTgLinkRef = useRef(opts.onOpenTgLink);
   onOpenTgLinkRef.current = opts.onOpenTgLink;
+  const onCloseRef = useRef(opts.onClose);
+  onCloseRef.current = opts.onClose;
 
   useEffect(() => {
     function post(target: Window, eventType: string, eventData: unknown = {}) {
@@ -128,7 +131,12 @@ export function useTelegramWebviewBridge(
           break;
         }
         case "web_app_close":
-          // Let apps that call close still show their final state; ignore.
+          if (onCloseRef.current) {
+            try {
+              const handled = onCloseRef.current();
+              if (handled !== false) break;
+            } catch {}
+          }
           break;
         case "web_app_request_write_access":
           post(source, "write_access_requested", { status: "allowed" });
