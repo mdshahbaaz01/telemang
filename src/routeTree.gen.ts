@@ -20,6 +20,7 @@ import { Route as AuthenticatedOwnerRouteImport } from './routes/_authenticated/
 import { Route as AuthenticatedDashboardRouteImport } from './routes/_authenticated/dashboard'
 import { Route as AuthenticatedCleanupRouteImport } from './routes/_authenticated/cleanup'
 import { Route as AuthenticatedButtonsRouteImport } from './routes/_authenticated/buttons'
+import { Route as AuthenticatedBulkPlusRouteImport } from './routes/_authenticated/bulk-plus'
 import { Route as AuthenticatedBulkMixRouteImport } from './routes/_authenticated/bulk-mix'
 import { Route as AuthenticatedBotParserRouteImport } from './routes/_authenticated/bot-parser'
 import { Route as AuthenticatedBotFlowRouteImport } from './routes/_authenticated/bot-flow'
@@ -27,6 +28,7 @@ import { Route as AuthenticatedAnalyticsRouteImport } from './routes/_authentica
 import { Route as AuthenticatedAlertsRouteImport } from './routes/_authenticated/alerts'
 import { Route as AuthenticatedActionsRouteImport } from './routes/_authenticated/actions'
 import { Route as ApiPublicCleanupStreamRouteImport } from './routes/api/public/cleanup-stream'
+import { Route as ApiPublicBulkStreamRouteImport } from './routes/api/public/bulk-stream'
 import { Route as ApiPublicActionsStreamRouteImport } from './routes/api/public/actions-stream'
 import { Route as AuthenticatedTasksNewRouteImport } from './routes/_authenticated/tasks.new'
 import { Route as AuthenticatedTasksIdRouteImport } from './routes/_authenticated/tasks.$id'
@@ -92,6 +94,11 @@ const AuthenticatedButtonsRoute = AuthenticatedButtonsRouteImport.update({
   path: '/buttons',
   getParentRoute: () => AuthenticatedRouteRoute,
 } as any)
+const AuthenticatedBulkPlusRoute = AuthenticatedBulkPlusRouteImport.update({
+  id: '/bulk-plus',
+  path: '/bulk-plus',
+  getParentRoute: () => AuthenticatedRouteRoute,
+} as any)
 const AuthenticatedBulkMixRoute = AuthenticatedBulkMixRouteImport.update({
   id: '/bulk-mix',
   path: '/bulk-mix',
@@ -125,6 +132,11 @@ const AuthenticatedActionsRoute = AuthenticatedActionsRouteImport.update({
 const ApiPublicCleanupStreamRoute = ApiPublicCleanupStreamRouteImport.update({
   id: '/api/public/cleanup-stream',
   path: '/api/public/cleanup-stream',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiPublicBulkStreamRoute = ApiPublicBulkStreamRouteImport.update({
+  id: '/api/public/bulk-stream',
+  path: '/api/public/bulk-stream',
   getParentRoute: () => rootRouteImport,
 } as any)
 const ApiPublicActionsStreamRoute = ApiPublicActionsStreamRouteImport.update({
@@ -185,6 +197,7 @@ export interface FileRoutesByFullPath {
   '/bot-flow': typeof AuthenticatedBotFlowRoute
   '/bot-parser': typeof AuthenticatedBotParserRoute
   '/bulk-mix': typeof AuthenticatedBulkMixRoute
+  '/bulk-plus': typeof AuthenticatedBulkPlusRoute
   '/buttons': typeof AuthenticatedButtonsRoute
   '/cleanup': typeof AuthenticatedCleanupRoute
   '/dashboard': typeof AuthenticatedDashboardRoute
@@ -198,6 +211,7 @@ export interface FileRoutesByFullPath {
   '/tasks/$id': typeof AuthenticatedTasksIdRoute
   '/tasks/new': typeof AuthenticatedTasksNewRoute
   '/api/public/actions-stream': typeof ApiPublicActionsStreamRoute
+  '/api/public/bulk-stream': typeof ApiPublicBulkStreamRoute
   '/api/public/cleanup-stream': typeof ApiPublicCleanupStreamRoute
   '/api/public/hooks/auto-leave': typeof ApiPublicHooksAutoLeaveRoute
   '/api/public/hooks/daily-summary': typeof ApiPublicHooksDailySummaryRoute
@@ -213,6 +227,7 @@ export interface FileRoutesByTo {
   '/bot-flow': typeof AuthenticatedBotFlowRoute
   '/bot-parser': typeof AuthenticatedBotParserRoute
   '/bulk-mix': typeof AuthenticatedBulkMixRoute
+  '/bulk-plus': typeof AuthenticatedBulkPlusRoute
   '/buttons': typeof AuthenticatedButtonsRoute
   '/cleanup': typeof AuthenticatedCleanupRoute
   '/dashboard': typeof AuthenticatedDashboardRoute
@@ -226,6 +241,7 @@ export interface FileRoutesByTo {
   '/tasks/$id': typeof AuthenticatedTasksIdRoute
   '/tasks/new': typeof AuthenticatedTasksNewRoute
   '/api/public/actions-stream': typeof ApiPublicActionsStreamRoute
+  '/api/public/bulk-stream': typeof ApiPublicBulkStreamRoute
   '/api/public/cleanup-stream': typeof ApiPublicCleanupStreamRoute
   '/api/public/hooks/auto-leave': typeof ApiPublicHooksAutoLeaveRoute
   '/api/public/hooks/daily-summary': typeof ApiPublicHooksDailySummaryRoute
@@ -243,6 +259,7 @@ export interface FileRoutesById {
   '/_authenticated/bot-flow': typeof AuthenticatedBotFlowRoute
   '/_authenticated/bot-parser': typeof AuthenticatedBotParserRoute
   '/_authenticated/bulk-mix': typeof AuthenticatedBulkMixRoute
+  '/_authenticated/bulk-plus': typeof AuthenticatedBulkPlusRoute
   '/_authenticated/buttons': typeof AuthenticatedButtonsRoute
   '/_authenticated/cleanup': typeof AuthenticatedCleanupRoute
   '/_authenticated/dashboard': typeof AuthenticatedDashboardRoute
@@ -256,6 +273,7 @@ export interface FileRoutesById {
   '/_authenticated/tasks/$id': typeof AuthenticatedTasksIdRoute
   '/_authenticated/tasks/new': typeof AuthenticatedTasksNewRoute
   '/api/public/actions-stream': typeof ApiPublicActionsStreamRoute
+  '/api/public/bulk-stream': typeof ApiPublicBulkStreamRoute
   '/api/public/cleanup-stream': typeof ApiPublicCleanupStreamRoute
   '/api/public/hooks/auto-leave': typeof ApiPublicHooksAutoLeaveRoute
   '/api/public/hooks/daily-summary': typeof ApiPublicHooksDailySummaryRoute
@@ -273,6 +291,7 @@ export interface FileRouteTypes {
     | '/bot-flow'
     | '/bot-parser'
     | '/bulk-mix'
+    | '/bulk-plus'
     | '/buttons'
     | '/cleanup'
     | '/dashboard'
@@ -286,6 +305,7 @@ export interface FileRouteTypes {
     | '/tasks/$id'
     | '/tasks/new'
     | '/api/public/actions-stream'
+    | '/api/public/bulk-stream'
     | '/api/public/cleanup-stream'
     | '/api/public/hooks/auto-leave'
     | '/api/public/hooks/daily-summary'
@@ -301,6 +321,7 @@ export interface FileRouteTypes {
     | '/bot-flow'
     | '/bot-parser'
     | '/bulk-mix'
+    | '/bulk-plus'
     | '/buttons'
     | '/cleanup'
     | '/dashboard'
@@ -314,6 +335,7 @@ export interface FileRouteTypes {
     | '/tasks/$id'
     | '/tasks/new'
     | '/api/public/actions-stream'
+    | '/api/public/bulk-stream'
     | '/api/public/cleanup-stream'
     | '/api/public/hooks/auto-leave'
     | '/api/public/hooks/daily-summary'
@@ -330,6 +352,7 @@ export interface FileRouteTypes {
     | '/_authenticated/bot-flow'
     | '/_authenticated/bot-parser'
     | '/_authenticated/bulk-mix'
+    | '/_authenticated/bulk-plus'
     | '/_authenticated/buttons'
     | '/_authenticated/cleanup'
     | '/_authenticated/dashboard'
@@ -343,6 +366,7 @@ export interface FileRouteTypes {
     | '/_authenticated/tasks/$id'
     | '/_authenticated/tasks/new'
     | '/api/public/actions-stream'
+    | '/api/public/bulk-stream'
     | '/api/public/cleanup-stream'
     | '/api/public/hooks/auto-leave'
     | '/api/public/hooks/daily-summary'
@@ -355,6 +379,7 @@ export interface RootRouteChildren {
   AuthenticatedRouteRoute: typeof AuthenticatedRouteRouteWithChildren
   AuthRoute: typeof AuthRoute
   ApiPublicActionsStreamRoute: typeof ApiPublicActionsStreamRoute
+  ApiPublicBulkStreamRoute: typeof ApiPublicBulkStreamRoute
   ApiPublicCleanupStreamRoute: typeof ApiPublicCleanupStreamRoute
   ApiPublicHooksAutoLeaveRoute: typeof ApiPublicHooksAutoLeaveRoute
   ApiPublicHooksDailySummaryRoute: typeof ApiPublicHooksDailySummaryRoute
@@ -441,6 +466,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedButtonsRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
+    '/_authenticated/bulk-plus': {
+      id: '/_authenticated/bulk-plus'
+      path: '/bulk-plus'
+      fullPath: '/bulk-plus'
+      preLoaderRoute: typeof AuthenticatedBulkPlusRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
     '/_authenticated/bulk-mix': {
       id: '/_authenticated/bulk-mix'
       path: '/bulk-mix'
@@ -488,6 +520,13 @@ declare module '@tanstack/react-router' {
       path: '/api/public/cleanup-stream'
       fullPath: '/api/public/cleanup-stream'
       preLoaderRoute: typeof ApiPublicCleanupStreamRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/public/bulk-stream': {
+      id: '/api/public/bulk-stream'
+      path: '/api/public/bulk-stream'
+      fullPath: '/api/public/bulk-stream'
+      preLoaderRoute: typeof ApiPublicBulkStreamRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/api/public/actions-stream': {
@@ -563,6 +602,7 @@ interface AuthenticatedRouteRouteChildren {
   AuthenticatedBotFlowRoute: typeof AuthenticatedBotFlowRoute
   AuthenticatedBotParserRoute: typeof AuthenticatedBotParserRoute
   AuthenticatedBulkMixRoute: typeof AuthenticatedBulkMixRoute
+  AuthenticatedBulkPlusRoute: typeof AuthenticatedBulkPlusRoute
   AuthenticatedButtonsRoute: typeof AuthenticatedButtonsRoute
   AuthenticatedCleanupRoute: typeof AuthenticatedCleanupRoute
   AuthenticatedDashboardRoute: typeof AuthenticatedDashboardRoute
@@ -584,6 +624,7 @@ const AuthenticatedRouteRouteChildren: AuthenticatedRouteRouteChildren = {
   AuthenticatedBotFlowRoute: AuthenticatedBotFlowRoute,
   AuthenticatedBotParserRoute: AuthenticatedBotParserRoute,
   AuthenticatedBulkMixRoute: AuthenticatedBulkMixRoute,
+  AuthenticatedBulkPlusRoute: AuthenticatedBulkPlusRoute,
   AuthenticatedButtonsRoute: AuthenticatedButtonsRoute,
   AuthenticatedCleanupRoute: AuthenticatedCleanupRoute,
   AuthenticatedDashboardRoute: AuthenticatedDashboardRoute,
@@ -606,6 +647,7 @@ const rootRouteChildren: RootRouteChildren = {
   AuthenticatedRouteRoute: AuthenticatedRouteRouteWithChildren,
   AuthRoute: AuthRoute,
   ApiPublicActionsStreamRoute: ApiPublicActionsStreamRoute,
+  ApiPublicBulkStreamRoute: ApiPublicBulkStreamRoute,
   ApiPublicCleanupStreamRoute: ApiPublicCleanupStreamRoute,
   ApiPublicHooksAutoLeaveRoute: ApiPublicHooksAutoLeaveRoute,
   ApiPublicHooksDailySummaryRoute: ApiPublicHooksDailySummaryRoute,
