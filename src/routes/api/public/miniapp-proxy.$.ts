@@ -354,7 +354,14 @@ function buildOverrideScript(accountId: string, upstreamUrl: string) {
       try { Object.defineProperty(obj, key, { get: () => val, configurable: true }); } catch (e) {}
     };
     const platformName = fp.platform.includes('iPhone') ? 'iOS' : fp.platform.includes('Mac') ? 'macOS' : fp.platform.includes('Win') ? 'Windows' : fp.mobile ? 'Android' : 'Linux';
-    const chromeVersion = (fp.userAgent.match(/Chrome\/(\d+)/) || [])[1] || '120';
+    const chromeVersion = (fp.userAgent.split('Chrome/')[1] || '').split('.')[0] || '120';
+    const mobileModel = (() => {
+      try {
+        const androidPart = fp.userAgent.split('; Android ')[1] || '';
+        const modelPart = androidPart.split(') AppleWebKit')[0].split(';').pop();
+        return (modelPart || 'Pixel 7').trim();
+      } catch { return 'Pixel 7'; }
+    })();
     const brands = Object.freeze([
       { brand: 'Chromium', version: chromeVersion },
       { brand: 'Google Chrome', version: chromeVersion },
@@ -371,7 +378,7 @@ function buildOverrideScript(accountId: string, upstreamUrl: string) {
           platform: platformName,
           architecture: fp.mobile ? '' : (fp.platform.includes('Win') ? 'x86' : 'arm'),
           bitness: fp.mobile ? '' : '64',
-          model: fp.mobile ? (fp.userAgent.match(/;\s*([^;)]+)\) AppleWebKit/) || [])[1] || 'Pixel 7' : '',
+          model: fp.mobile ? mobileModel : '',
           platformVersion: fp.mobile ? '14.0.0' : fp.platform.includes('Win') ? '15.0.0' : '14.0.0',
           uaFullVersion: chromeVersion + '.0.0.0',
           fullVersionList: brands.map((b) => ({ brand: b.brand, version: b.brand === 'Not:A-Brand' ? '99.0.0.0' : chromeVersion + '.0.0.0' })),
