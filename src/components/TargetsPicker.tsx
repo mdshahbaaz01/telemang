@@ -194,8 +194,12 @@ export function TargetsPicker({
               })}
             </div>
             <div className="flex items-center justify-between pt-2">
-              <div className="text-xs text-muted-foreground">
-                {selected.size} selected
+              <div className="text-xs text-muted-foreground" aria-live="polite">
+                <span className="font-medium text-foreground">{selected.size}</span> selected
+                {" · "}
+                {filtered.filter((d) => selected.has(d.peerKey)).length} in view
+                {" · "}
+                {filtered.length}/{dialogs.length} shown
               </div>
               <div className="flex gap-2">
                 <Button
