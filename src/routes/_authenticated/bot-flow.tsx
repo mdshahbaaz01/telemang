@@ -323,35 +323,72 @@ function BotFlowPage() {
             )}
           </div>
 
-          {parsed?.username && (selectedIds.length > 0 || totals) && (
-            <div className="space-y-2 rounded-md border border-border bg-muted/20 p-3">
-              <div className="flex items-center gap-2 text-sm font-medium">
+          {parsed?.username && (
+            <div className="space-y-3 rounded-md border border-border bg-muted/20 p-3">
+              <div className="flex items-center gap-2">
                 <MessageSquare className="h-4 w-4" />
-                Open <span className="font-mono">@{parsed.username}</span> chat per account
+                <div className="text-sm font-medium">
+                  Open <span className="font-mono">@{parsed.username}</span> chat per account
+                </div>
+                <div className="ml-auto flex gap-2">
+                  <Button size="sm" onClick={openChats}>
+                    <Play className="mr-1 h-4 w-4" /> Open chats
+                  </Button>
+                  {chatOpen.length > 0 && (
+                    <Button size="sm" variant="outline" onClick={clearChats}>
+                      Close all
+                    </Button>
+                  )}
+                </div>
               </div>
               <p className="text-[11px] text-muted-foreground">
-                Opens the bot's chat for that account in the mini-Telegram viewer — tap
-                inline buttons, reply to messages, or launch its mini app there.
+                Each selected account gets its own live mini-Telegram box below — reply,
+                tap inline buttons, launch mini apps, all inline (no redirect).
               </p>
-              <div className="grid grid-cols-2 gap-1.5 sm:grid-cols-3 lg:grid-cols-4">
-                {(selectedIds.length ? selectedIds : allIds).map((id) => {
-                  const a = accountList.find((x) => x.id === id);
-                  const who = a?.first_name || a?.username || a?.phone || id.slice(0, 8);
-                  return (
-                    <Link
-                      key={id}
-                      to="/accounts/$id"
-                      params={{ id }}
-                      search={{ peer: `@${parsed.username}` }}
-                      target="_blank"
-                      className="flex items-center gap-1.5 truncate rounded border border-border bg-background px-2 py-1.5 text-xs hover:bg-muted"
-                    >
-                      <MessageSquare className="h-3 w-3 shrink-0 text-muted-foreground" />
-                      <span className="truncate">{who}</span>
-                    </Link>
-                  );
-                })}
-              </div>
+
+              {chatOpen.length > 0 && (
+                <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3">
+                  {chatOpen.map((id) => {
+                    const a = accountList.find((x) => x.id === id);
+                    const who = a?.first_name || a?.username || a?.phone || id.slice(0, 8);
+                    const src = `/accounts/${id}?peer=${encodeURIComponent(`@${parsed.username}`)}`;
+                    return (
+                      <div key={id} className="flex h-[560px] flex-col overflow-hidden rounded-md border border-border bg-background">
+                        <div className="flex items-center gap-2 border-b px-2 py-1.5">
+                          <div className="min-w-0 flex-1 text-xs">
+                            <div className="truncate font-semibold">{who}</div>
+                            <div className="truncate text-[10px] text-muted-foreground">
+                              @{parsed.username}
+                            </div>
+                          </div>
+                          <a
+                            href={src}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="rounded p-1 hover:bg-muted"
+                            title="Open in new tab"
+                          >
+                            <ExternalLink className="h-3.5 w-3.5" />
+                          </a>
+                          <button
+                            type="button"
+                            className="rounded p-1 hover:bg-muted"
+                            title="Close"
+                            onClick={() => closeChat(id)}
+                          >
+                            <X className="h-3.5 w-3.5" />
+                          </button>
+                        </div>
+                        <iframe
+                          src={src}
+                          title={`${who} — @${parsed.username}`}
+                          className="h-full w-full flex-1 border-0"
+                        />
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
             </div>
           )}
         </section>
