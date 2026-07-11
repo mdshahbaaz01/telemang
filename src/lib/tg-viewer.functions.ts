@@ -502,21 +502,16 @@ export const openMiniApp = createServerFn({ method: "POST" })
     await assertAdmin(context.supabase);
     const { openClientForAccount } = await import("./cleanup.server");
     const { Api } = await import("telegram");
+    const { deriveMiniAppIdentity } = await import("./mini-app-identity.server");
     const client = await openClientForAccount(context.supabase, data.accountId);
+    const identity = deriveMiniAppIdentity(data.accountId);
     try {
       const peer = await resolvePeerFromKey(client, Api, data.peerKey);
       const bot = data.botKey
         ? await resolvePeerFromKey(client, Api, data.botKey)
         : peer;
       const themeJson = JSON.stringify(
-        data.themeParams ?? {
-          bg_color: "#ffffff",
-          text_color: "#000000",
-          hint_color: "#707579",
-          link_color: "#3390ec",
-          button_color: "#3390ec",
-          button_text_color: "#ffffff",
-        },
+        data.themeParams ?? identity.themeParams,
       );
       const themeParams = new Api.DataJSON({ data: themeJson });
       try {
@@ -525,7 +520,7 @@ export const openMiniApp = createServerFn({ method: "POST" })
               new Api.messages.RequestSimpleWebView({
                 bot,
                 url: data.url,
-                platform: "web",
+                platform: identity.platform,
                 themeParams,
               } as any),
             )
@@ -534,7 +529,7 @@ export const openMiniApp = createServerFn({ method: "POST" })
                 peer,
                 bot,
                 url: data.url,
-                platform: "web",
+                platform: identity.platform,
                 themeParams,
                 fromBotMenu: !data.url,
               } as any),
@@ -542,6 +537,7 @@ export const openMiniApp = createServerFn({ method: "POST" })
         return {
           url: String(res?.url ?? ""),
           queryId: res?.queryId ? String(res.queryId) : null,
+          platform: identity.platform,
         };
       } catch (e) {
         const em = (e as Error).message || String(e);
@@ -585,18 +581,13 @@ export const openStartAppLink = createServerFn({ method: "POST" })
     await assertAdmin(context.supabase);
     const { openClientForAccount } = await import("./cleanup.server");
     const { Api } = await import("telegram");
+    const { deriveMiniAppIdentity } = await import("./mini-app-identity.server");
     const client = await openClientForAccount(context.supabase, data.accountId);
+    const identity = deriveMiniAppIdentity(data.accountId);
     try {
       const bot: any = await client.getEntity(data.botUsername.replace(/^@/, ""));
       const themeJson = JSON.stringify(
-        data.themeParams ?? {
-          bg_color: "#ffffff",
-          text_color: "#000000",
-          hint_color: "#707579",
-          link_color: "#3390ec",
-          button_color: "#3390ec",
-          button_text_color: "#ffffff",
-        },
+        data.themeParams ?? identity.themeParams,
       );
       const themeParams = new Api.DataJSON({ data: themeJson });
       const tryInvoke = async () => {
@@ -609,7 +600,7 @@ export const openStartAppLink = createServerFn({ method: "POST" })
                 peer: bot,
                 bot,
                 startParam: data.startParam,
-                platform: "web",
+                platform: identity.platform,
                 themeParams,
               } as any),
             );
@@ -620,7 +611,7 @@ export const openStartAppLink = createServerFn({ method: "POST" })
         return await client.invoke(
           new Api.messages.RequestSimpleWebView({
             bot,
-            platform: "web",
+            platform: identity.platform,
             themeParams,
             startParam: data.startParam,
             fromSwitchWebview: false,
@@ -632,6 +623,7 @@ export const openStartAppLink = createServerFn({ method: "POST" })
         return {
           url: String(res?.url ?? ""),
           queryId: res?.queryId ? String(res.queryId) : null,
+          platform: identity.platform,
         };
       } catch (e) {
         const em = (e as Error).message || String(e);
