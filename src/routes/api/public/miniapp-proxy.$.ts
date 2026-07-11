@@ -29,6 +29,121 @@ function buildOverrideScript(accountId: string) {
   return `(() => {
   try {
     const fp = ${JSON.stringify(fp)};
+    const ACCT = ${JSON.stringify(accountId)};
+    const PROXY_PREFIX = '/api/public/miniapp-proxy/';
+    const UPSTREAM = (document.querySelector('base') && document.querySelector('base').href) || location.href;
+    const upstreamOrigin = (() => { try { return new URL(UPSTREAM).origin; } catch { return null; } })();
+    const proxify = (raw) => {
+      if (!raw) return raw;
+      const s = String(raw);
+      if (s.startsWith('data:') || s.startsWith('blob:') || s.startsWith('mailto:') || s.startsWith('tel:') || s.startsWith('javascript:') || s.startsWith('#')) return s;
+      try {
+        // Resolve against upstream base so /foo → upstream/foo, not our origin.
+        const abs = new URL(s, UPSTREAM);
+        if (abs.protocol !== 'http:' && abs.protocol !== 'https:') return s;
+        // Already proxied? leave alone.
+        if (abs.origin === location.origin && abs.pathname.startsWith(PROXY_PREFIX)) return s;
+        // If it points at our origin (mini-app used location.href/fetch with a path), rewrite to upstream host.
+        const target = (abs.origin === location.origin && upstreamOrigin)
+          ? upstreamOrigin + abs.pathname + abs.search + abs.hash
+          : abs.toString();
+        const hashIdx = target.indexOf('#');
+        const bare = hashIdx === -1 ? target : target.slice(0, hashIdx);
+        const hash = hashIdx === -1 ? '' : target.slice(hashIdx);
+        return PROXY_PREFIX + encodeURIComponent(bare) + '?a=' + encodeURIComponent(ACCT) + hash;
+      } catch { return s; }
+    };
+
+    // Patch fetch
+    try {
+      const origFetch = window.fetch.bind(window);
+      window.fetch = function(input, init) {
+        try {
+          if (typeof input === 'string') input = proxify(input);
+          else if (input && input.url) input = new Request(proxify(input.url), input);
+        } catch {}
+        return origFetch(input, init);
+      };
+    } catch {}
+
+    // Patch XHR
+    try {
+      const origOpen = XMLHttpRequest.prototype.open;
+      XMLHttpRequest.prototype.open = function(method, url) {
+        try { arguments[1] = proxify(url); } catch {}
+        return origOpen.apply(this, arguments);
+      };
+    } catch {}
+
+    // Patch WebSocket / EventSource to upstream host
+    try {
+      const OrigWS = window.WebSocket;
+      if (OrigWS && upstreamOrigin) {
+        window.WebSocket = function(url, protocols) {
+          try {
+            const u = new URL(url, UPSTREAM);
+            if (u.origin === location.origin) {
+              u.protocol = u.protocol.replace('ws', location.protocol === 'https:' ? 'wss' : 'ws');
+              const up = new URL(upstreamOrigin);
+              u.host = up.host; u.protocol = up.protocol === 'https:' ? 'wss:' : 'ws:';
+              url = u.toString();
+            }
+          } catch {}
+          return protocols ? new OrigWS(url, protocols) : new OrigWS(url);
+        };
+        window.WebSocket.prototype = OrigWS.prototype;
+      }
+    } catch {}
+
+    // Patch history + location assignments
+    try {
+      const origAssign = location.assign.bind(location);
+      const origReplace = location.replace.bind(location);
+      location.assign = (u) => origAssign(proxify(u));
+      location.replace = (u) => origReplace(proxify(u));
+      // location.href setter
+      try {
+        const desc = Object.getOwnPropertyDescriptor(Location.prototype, 'href') || Object.getOwnPropertyDescriptor(window.location, 'href');
+        if (desc && desc.set) {
+          Object.defineProperty(window.location, 'href', {
+            configurable: true,
+            get: desc.get ? desc.get.bind(window.location) : () => UPSTREAM,
+            set: (v) => desc.set.call(window.location, proxify(v)),
+          });
+        }
+      } catch {}
+      const origPush = history.pushState.bind(history);
+      const origRepl = history.replaceState.bind(history);
+      history.pushState = function(s, t, u) { return origPush(s, t, u ? proxify(u) : u); };
+      history.replaceState = function(s, t, u) { return origRepl(s, t, u ? proxify(u) : u); };
+    } catch {}
+
+    // Patch window.open
+    try {
+      const origOpen = window.open.bind(window);
+      window.open = function(u, ...rest) { return origOpen(u ? proxify(u) : u, ...rest); };
+    } catch {}
+
+    // Intercept anchor clicks & form submits (catches links added dynamically)
+    try {
+      document.addEventListener('click', (e) => {
+        const a = e.target && (e.target.closest ? e.target.closest('a[href]') : null);
+        if (!a) return;
+        const href = a.getAttribute('href');
+        if (!href) return;
+        const proxied = proxify(href);
+        if (proxied !== href) a.setAttribute('href', proxied);
+      }, true);
+      document.addEventListener('submit', (e) => {
+        const f = e.target;
+        if (!f || !f.getAttribute) return;
+        const action = f.getAttribute('action');
+        if (!action) return;
+        const proxied = proxify(action);
+        if (proxied !== action) f.setAttribute('action', proxied);
+      }, true);
+    } catch {}
+
     const nav = Object.getPrototypeOf(navigator);
     const set = (obj, key, val) => {
       try { Object.defineProperty(obj, key, { get: () => val, configurable: true }); } catch (e) {}
