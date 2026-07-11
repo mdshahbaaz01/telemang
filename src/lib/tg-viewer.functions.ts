@@ -212,6 +212,7 @@ export const listDialogs = createServerFn({ method: "GET" })
           title: extractName(entity),
           username: entity.username ?? null,
           kind,
+          isBot: kind === "user" && !!entity.bot,
           unread: Number(d.unreadCount ?? 0),
           pinned: !!d.pinned,
           lastMessagePreview: messagePreview(d.message),

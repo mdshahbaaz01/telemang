@@ -13,6 +13,7 @@ type DialogItem = {
   title: string;
   username: string | null;
   kind: "user" | "group" | "channel";
+  isBot?: boolean;
   photoDataUrl?: string | null;
 };
 
@@ -41,7 +42,7 @@ export function TargetsPicker({
   const [dialogs, setDialogs] = useState<DialogItem[]>([]);
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [search, setSearch] = useState("");
-  const [filter, setFilter] = useState<"all" | "user" | "group" | "channel">("all");
+  const [filter, setFilter] = useState<"all" | "user" | "bot" | "group" | "channel">("all");
   const listDialogsFn = useServerFn(listDialogs);
 
   useEffect(() => {
@@ -71,7 +72,13 @@ export function TargetsPicker({
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();
     return dialogs.filter((d) => {
-      if (filter !== "all" && d.kind !== filter) return false;
+      if (filter === "bot") {
+        if (!d.isBot) return false;
+      } else if (filter === "user") {
+        if (d.kind !== "user" || d.isBot) return false;
+      } else if (filter !== "all" && d.kind !== filter) {
+        return false;
+      }
       if (!q) return true;
       return (
         d.title.toLowerCase().includes(q) ||
@@ -133,7 +140,7 @@ export function TargetsPicker({
                 {loading ? <Loader2 className="h-3 w-3 animate-spin" /> : "Reload"}
               </Button>
               <div className="flex gap-1 ml-auto text-xs">
-                {(["all", "user", "group", "channel"] as const).map((k) => (
+                {(["all", "user", "bot", "group", "channel"] as const).map((k) => (
                   <button
                     key={k}
                     type="button"
@@ -179,7 +186,7 @@ export function TargetsPicker({
                     <div className="min-w-0 flex-1">
                       <div className="text-sm font-medium truncate">{d.title}</div>
                       <div className="text-xs text-muted-foreground truncate">
-                        {d.username ? "@" + d.username : dialogToTarget(d) ?? "—"} · {d.kind}
+                        {d.username ? "@" + d.username : dialogToTarget(d) ?? "—"} · {d.isBot ? "bot" : d.kind}
                       </div>
                     </div>
                   </label>
