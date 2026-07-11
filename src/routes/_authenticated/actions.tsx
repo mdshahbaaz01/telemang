@@ -34,6 +34,70 @@ import { ChatIdChip } from "@/components/chat/ChatIdChip";
 import { MessagePreview } from "@/components/MessagePreview";
 import { TargetsPicker } from "@/components/TargetsPicker";
 
+function RangeApply({
+  label,
+  accountsCount,
+  onApply,
+}: {
+  label: string;
+  accountsCount: number;
+  onApply: (start: number, end: number, template: string, appendNumbers: boolean) => void;
+}) {
+  const [range, setRange] = useState("");
+  const [template, setTemplate] = useState("");
+  const [appendNumbers, setAppendNumbers] = useState(true);
+  const parsed = (() => {
+    const m = range.trim().match(/^(\d+)\s*[-,\s]\s*(\d+)$/);
+    if (!m) return null;
+    const a = Math.max(1, parseInt(m[1], 10));
+    const b = Math.max(a, parseInt(m[2], 10));
+    return { start: a, end: Math.min(b, accountsCount) };
+  })();
+  return (
+    <div className="rounded-md border border-dashed border-border p-3 space-y-2 bg-muted/20">
+      <div className="flex items-center gap-2">
+        <Label className="text-xs">Range auto-fill (optional)</Label>
+        <span className="text-[10px] text-muted-foreground ml-auto">{accountsCount} account(s) available</span>
+      </div>
+      <div className="flex flex-wrap items-center gap-2">
+        <Input
+          className="w-28"
+          placeholder="e.g. 1-6"
+          value={range}
+          onChange={(e) => setRange(e.target.value)}
+        />
+        <Input
+          className="flex-1 min-w-[180px]"
+          placeholder='Message template (use "{n}" for the number, or leave blank)'
+          value={template}
+          onChange={(e) => setTemplate(e.target.value)}
+        />
+        <label className="flex items-center gap-1 text-xs text-muted-foreground">
+          <input
+            type="checkbox"
+            checked={appendNumbers}
+            onChange={(e) => setAppendNumbers(e.target.checked)}
+          />
+          Append number
+        </label>
+        <Button
+          type="button"
+          size="sm"
+          variant="secondary"
+          disabled={!parsed}
+          onClick={() => parsed && onApply(parsed.start, parsed.end, template, appendNumbers)}
+        >
+          Apply
+        </Button>
+      </div>
+      <p className="text-[11px] text-muted-foreground">
+        {label}. Example: <code>1-6</code> picks accounts #1..#6 and creates 6 rows. If the template contains <code>{"{n}"}</code> it is replaced with the account number; otherwise the number is appended (e.g. "Hi 1", "Hi 2", …).
+        {parsed && ` — will create ${parsed.end - parsed.start + 1} row(s) (accounts #${parsed.start}..#${parsed.end}). Replaces current rows.`}
+      </p>
+    </div>
+  );
+}
+
 export const Route = createFileRoute("/_authenticated/actions")({
   validateSearch: (s: Record<string, unknown>) =>
     z
@@ -1503,6 +1567,35 @@ function ActionsPageInner() {
                     ? "Each row: the chosen account sends its message to all listed targets. Rows run in parallel — multiple accounts can post different messages into the same group at the same time, or one account can spray one message across many groups."
                     : "Every row is sent from every selected account. Same message goes out from all picked IDs in parallel."}
                 </p>
+                {broadcastMode === "per-account" && (
+                  <RangeApply
+                    label="Auto-fill rows from account range"
+                    accountsCount={accountList.length}
+                    onApply={(start, end, template, appendNumbers) => {
+                      const slice = accountList.slice(start - 1, end);
+                      if (!slice.length) return;
+                      const sharedTargets = rows[0]?.targets ?? "";
+                      const sharedFiles = rows[0]?.files;
+                      setRows(
+                        slice.map((acc, i) => {
+                          const n = start + i;
+                          const msg = template.includes("{n}")
+                            ? template.replaceAll("{n}", String(n))
+                            : appendNumbers
+                              ? `${template} ${n}`.trim()
+                              : template;
+                          return {
+                            id: crypto.randomUUID(),
+                            accountId: acc.id,
+                            message: msg,
+                            targets: sharedTargets,
+                            files: sharedFiles,
+                          };
+                        }),
+                      );
+                    }}
+                  />
+                )}
                 {broadcastMode === "all-ids" && (
                   <div className="rounded-md border border-border p-3 space-y-2">
                     <div className="flex items-center gap-2">
@@ -1523,7 +1616,7 @@ function ActionsPageInner() {
                       </button>
                     </div>
                     <div className="max-h-48 overflow-auto grid grid-cols-1 sm:grid-cols-2 gap-1">
-                      {accountList.map((a) => {
+                      {accountList.map((a, i) => {
                         const checked = broadcastSelectedIds.includes(a.id);
                         return (
                           <label key={a.id} className="flex items-center gap-2 text-sm rounded px-2 py-1 hover:bg-muted/40">
@@ -1536,7 +1629,7 @@ function ActionsPageInner() {
                                 )
                               }
                             />
-                            <span className="truncate">{a.first_name || a.username || a.phone}</span>
+                            <span className="truncate"><span className="text-muted-foreground mr-1">#{i + 1}</span>{a.first_name || a.username || a.phone}</span>
                           </label>
                         );
                       })}
@@ -1578,9 +1671,9 @@ function ActionsPageInner() {
                           }
                         >
                           <option value="">— Pick account —</option>
-                          {accountList.map((a) => (
+                          {accountList.map((a, i) => (
                             <option key={a.id} value={a.id}>
-                              {a.first_name || a.username || a.phone}
+                              #{i + 1} — {a.first_name || a.username || a.phone}
                             </option>
                           ))}
                         </select>
@@ -1786,6 +1879,33 @@ function ActionsPageInner() {
                     ? `Each row: the chosen account sends this ${tab}. Rows run in parallel — different accounts can post different ${tab}s on the same post.`
                     : `Same ${tab} text goes out from every selected account (round-robin if you add multiple rows).`}
                 </p>
+                {replyMode === "per-account" && (
+                  <RangeApply
+                    label="Auto-fill rows from account range"
+                    accountsCount={accountList.length}
+                    onApply={(start, end, template, appendNumbers) => {
+                      const slice = accountList.slice(start - 1, end);
+                      if (!slice.length) return;
+                      const sharedFiles = replyRows[0]?.files;
+                      setReplyRows(
+                        slice.map((acc, i) => {
+                          const n = start + i;
+                          const msg = template.includes("{n}")
+                            ? template.replaceAll("{n}", String(n))
+                            : appendNumbers
+                              ? `${template} ${n}`.trim()
+                              : template;
+                          return {
+                            id: crypto.randomUUID(),
+                            accountId: acc.id,
+                            message: msg,
+                            files: sharedFiles,
+                          };
+                        }),
+                      );
+                    }}
+                  />
+                )}
                 {replyMode === "all-ids" && (
                   <div className="rounded-md border border-border p-3 space-y-2">
                     <div className="flex items-center gap-2">
@@ -1806,7 +1926,7 @@ function ActionsPageInner() {
                       </button>
                     </div>
                     <div className="max-h-48 overflow-auto grid grid-cols-1 sm:grid-cols-2 gap-1">
-                      {accountList.map((a) => {
+                      {accountList.map((a, i) => {
                         const checked = replySelectedIds.includes(a.id);
                         return (
                           <label key={a.id} className="flex items-center gap-2 text-sm rounded px-2 py-1 hover:bg-muted/40">
@@ -1819,7 +1939,7 @@ function ActionsPageInner() {
                                 )
                               }
                             />
-                            <span className="truncate">{a.first_name || a.username || a.phone}</span>
+                            <span className="truncate"><span className="text-muted-foreground mr-1">#{i + 1}</span>{a.first_name || a.username || a.phone}</span>
                           </label>
                         );
                       })}
@@ -1861,9 +1981,9 @@ function ActionsPageInner() {
                           }
                         >
                           <option value="">— Pick account —</option>
-                          {accountList.map((a) => (
+                          {accountList.map((a, i) => (
                             <option key={a.id} value={a.id}>
-                              {a.first_name || a.username || a.phone}
+                              #{i + 1} — {a.first_name || a.username || a.phone}
                             </option>
                           ))}
                         </select>
