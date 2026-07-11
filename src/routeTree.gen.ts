@@ -13,13 +13,16 @@ import { Route as AuthRouteImport } from './routes/auth'
 import { Route as AuthenticatedRouteRouteImport } from './routes/_authenticated/route'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as AuthenticatedSearchRouteImport } from './routes/_authenticated/search'
+import { Route as AuthenticatedReferralsRouteImport } from './routes/_authenticated/referrals'
 import { Route as AuthenticatedProfileUpdaterRouteImport } from './routes/_authenticated/profile-updater'
 import { Route as AuthenticatedOwnerRouteImport } from './routes/_authenticated/owner'
 import { Route as AuthenticatedDashboardRouteImport } from './routes/_authenticated/dashboard'
 import { Route as AuthenticatedCleanupRouteImport } from './routes/_authenticated/cleanup'
 import { Route as AuthenticatedButtonsRouteImport } from './routes/_authenticated/buttons'
 import { Route as AuthenticatedBulkMixRouteImport } from './routes/_authenticated/bulk-mix'
+import { Route as AuthenticatedBotParserRouteImport } from './routes/_authenticated/bot-parser'
 import { Route as AuthenticatedBotFlowRouteImport } from './routes/_authenticated/bot-flow'
+import { Route as AuthenticatedAnalyticsRouteImport } from './routes/_authenticated/analytics'
 import { Route as AuthenticatedAlertsRouteImport } from './routes/_authenticated/alerts'
 import { Route as AuthenticatedActionsRouteImport } from './routes/_authenticated/actions'
 import { Route as ApiPublicCleanupStreamRouteImport } from './routes/api/public/cleanup-stream'
@@ -50,6 +53,11 @@ const IndexRoute = IndexRouteImport.update({
 const AuthenticatedSearchRoute = AuthenticatedSearchRouteImport.update({
   id: '/search',
   path: '/search',
+  getParentRoute: () => AuthenticatedRouteRoute,
+} as any)
+const AuthenticatedReferralsRoute = AuthenticatedReferralsRouteImport.update({
+  id: '/referrals',
+  path: '/referrals',
   getParentRoute: () => AuthenticatedRouteRoute,
 } as any)
 const AuthenticatedProfileUpdaterRoute =
@@ -83,9 +91,19 @@ const AuthenticatedBulkMixRoute = AuthenticatedBulkMixRouteImport.update({
   path: '/bulk-mix',
   getParentRoute: () => AuthenticatedRouteRoute,
 } as any)
+const AuthenticatedBotParserRoute = AuthenticatedBotParserRouteImport.update({
+  id: '/bot-parser',
+  path: '/bot-parser',
+  getParentRoute: () => AuthenticatedRouteRoute,
+} as any)
 const AuthenticatedBotFlowRoute = AuthenticatedBotFlowRouteImport.update({
   id: '/bot-flow',
   path: '/bot-flow',
+  getParentRoute: () => AuthenticatedRouteRoute,
+} as any)
+const AuthenticatedAnalyticsRoute = AuthenticatedAnalyticsRouteImport.update({
+  id: '/analytics',
+  path: '/analytics',
   getParentRoute: () => AuthenticatedRouteRoute,
 } as any)
 const AuthenticatedAlertsRoute = AuthenticatedAlertsRouteImport.update({
@@ -157,13 +175,16 @@ export interface FileRoutesByFullPath {
   '/auth': typeof AuthRoute
   '/actions': typeof AuthenticatedActionsRoute
   '/alerts': typeof AuthenticatedAlertsRoute
+  '/analytics': typeof AuthenticatedAnalyticsRoute
   '/bot-flow': typeof AuthenticatedBotFlowRoute
+  '/bot-parser': typeof AuthenticatedBotParserRoute
   '/bulk-mix': typeof AuthenticatedBulkMixRoute
   '/buttons': typeof AuthenticatedButtonsRoute
   '/cleanup': typeof AuthenticatedCleanupRoute
   '/dashboard': typeof AuthenticatedDashboardRoute
   '/owner': typeof AuthenticatedOwnerRoute
   '/profile-updater': typeof AuthenticatedProfileUpdaterRoute
+  '/referrals': typeof AuthenticatedReferralsRoute
   '/search': typeof AuthenticatedSearchRoute
   '/accounts/$id': typeof AuthenticatedAccountsIdRoute
   '/groups/$id': typeof AuthenticatedGroupsIdRoute
@@ -181,13 +202,16 @@ export interface FileRoutesByTo {
   '/auth': typeof AuthRoute
   '/actions': typeof AuthenticatedActionsRoute
   '/alerts': typeof AuthenticatedAlertsRoute
+  '/analytics': typeof AuthenticatedAnalyticsRoute
   '/bot-flow': typeof AuthenticatedBotFlowRoute
+  '/bot-parser': typeof AuthenticatedBotParserRoute
   '/bulk-mix': typeof AuthenticatedBulkMixRoute
   '/buttons': typeof AuthenticatedButtonsRoute
   '/cleanup': typeof AuthenticatedCleanupRoute
   '/dashboard': typeof AuthenticatedDashboardRoute
   '/owner': typeof AuthenticatedOwnerRoute
   '/profile-updater': typeof AuthenticatedProfileUpdaterRoute
+  '/referrals': typeof AuthenticatedReferralsRoute
   '/search': typeof AuthenticatedSearchRoute
   '/accounts/$id': typeof AuthenticatedAccountsIdRoute
   '/groups/$id': typeof AuthenticatedGroupsIdRoute
@@ -207,13 +231,16 @@ export interface FileRoutesById {
   '/auth': typeof AuthRoute
   '/_authenticated/actions': typeof AuthenticatedActionsRoute
   '/_authenticated/alerts': typeof AuthenticatedAlertsRoute
+  '/_authenticated/analytics': typeof AuthenticatedAnalyticsRoute
   '/_authenticated/bot-flow': typeof AuthenticatedBotFlowRoute
+  '/_authenticated/bot-parser': typeof AuthenticatedBotParserRoute
   '/_authenticated/bulk-mix': typeof AuthenticatedBulkMixRoute
   '/_authenticated/buttons': typeof AuthenticatedButtonsRoute
   '/_authenticated/cleanup': typeof AuthenticatedCleanupRoute
   '/_authenticated/dashboard': typeof AuthenticatedDashboardRoute
   '/_authenticated/owner': typeof AuthenticatedOwnerRoute
   '/_authenticated/profile-updater': typeof AuthenticatedProfileUpdaterRoute
+  '/_authenticated/referrals': typeof AuthenticatedReferralsRoute
   '/_authenticated/search': typeof AuthenticatedSearchRoute
   '/_authenticated/accounts/$id': typeof AuthenticatedAccountsIdRoute
   '/_authenticated/groups/$id': typeof AuthenticatedGroupsIdRoute
@@ -233,13 +260,16 @@ export interface FileRouteTypes {
     | '/auth'
     | '/actions'
     | '/alerts'
+    | '/analytics'
     | '/bot-flow'
+    | '/bot-parser'
     | '/bulk-mix'
     | '/buttons'
     | '/cleanup'
     | '/dashboard'
     | '/owner'
     | '/profile-updater'
+    | '/referrals'
     | '/search'
     | '/accounts/$id'
     | '/groups/$id'
@@ -257,13 +287,16 @@ export interface FileRouteTypes {
     | '/auth'
     | '/actions'
     | '/alerts'
+    | '/analytics'
     | '/bot-flow'
+    | '/bot-parser'
     | '/bulk-mix'
     | '/buttons'
     | '/cleanup'
     | '/dashboard'
     | '/owner'
     | '/profile-updater'
+    | '/referrals'
     | '/search'
     | '/accounts/$id'
     | '/groups/$id'
@@ -282,13 +315,16 @@ export interface FileRouteTypes {
     | '/auth'
     | '/_authenticated/actions'
     | '/_authenticated/alerts'
+    | '/_authenticated/analytics'
     | '/_authenticated/bot-flow'
+    | '/_authenticated/bot-parser'
     | '/_authenticated/bulk-mix'
     | '/_authenticated/buttons'
     | '/_authenticated/cleanup'
     | '/_authenticated/dashboard'
     | '/_authenticated/owner'
     | '/_authenticated/profile-updater'
+    | '/_authenticated/referrals'
     | '/_authenticated/search'
     | '/_authenticated/accounts/$id'
     | '/_authenticated/groups/$id'
@@ -344,6 +380,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedSearchRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
+    '/_authenticated/referrals': {
+      id: '/_authenticated/referrals'
+      path: '/referrals'
+      fullPath: '/referrals'
+      preLoaderRoute: typeof AuthenticatedReferralsRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
     '/_authenticated/profile-updater': {
       id: '/_authenticated/profile-updater'
       path: '/profile-updater'
@@ -386,11 +429,25 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedBulkMixRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
+    '/_authenticated/bot-parser': {
+      id: '/_authenticated/bot-parser'
+      path: '/bot-parser'
+      fullPath: '/bot-parser'
+      preLoaderRoute: typeof AuthenticatedBotParserRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
     '/_authenticated/bot-flow': {
       id: '/_authenticated/bot-flow'
       path: '/bot-flow'
       fullPath: '/bot-flow'
       preLoaderRoute: typeof AuthenticatedBotFlowRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
+    '/_authenticated/analytics': {
+      id: '/_authenticated/analytics'
+      path: '/analytics'
+      fullPath: '/analytics'
+      preLoaderRoute: typeof AuthenticatedAnalyticsRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
     '/_authenticated/alerts': {
@@ -483,13 +540,16 @@ declare module '@tanstack/react-router' {
 interface AuthenticatedRouteRouteChildren {
   AuthenticatedActionsRoute: typeof AuthenticatedActionsRoute
   AuthenticatedAlertsRoute: typeof AuthenticatedAlertsRoute
+  AuthenticatedAnalyticsRoute: typeof AuthenticatedAnalyticsRoute
   AuthenticatedBotFlowRoute: typeof AuthenticatedBotFlowRoute
+  AuthenticatedBotParserRoute: typeof AuthenticatedBotParserRoute
   AuthenticatedBulkMixRoute: typeof AuthenticatedBulkMixRoute
   AuthenticatedButtonsRoute: typeof AuthenticatedButtonsRoute
   AuthenticatedCleanupRoute: typeof AuthenticatedCleanupRoute
   AuthenticatedDashboardRoute: typeof AuthenticatedDashboardRoute
   AuthenticatedOwnerRoute: typeof AuthenticatedOwnerRoute
   AuthenticatedProfileUpdaterRoute: typeof AuthenticatedProfileUpdaterRoute
+  AuthenticatedReferralsRoute: typeof AuthenticatedReferralsRoute
   AuthenticatedSearchRoute: typeof AuthenticatedSearchRoute
   AuthenticatedAccountsIdRoute: typeof AuthenticatedAccountsIdRoute
   AuthenticatedGroupsIdRoute: typeof AuthenticatedGroupsIdRoute
@@ -500,13 +560,16 @@ interface AuthenticatedRouteRouteChildren {
 const AuthenticatedRouteRouteChildren: AuthenticatedRouteRouteChildren = {
   AuthenticatedActionsRoute: AuthenticatedActionsRoute,
   AuthenticatedAlertsRoute: AuthenticatedAlertsRoute,
+  AuthenticatedAnalyticsRoute: AuthenticatedAnalyticsRoute,
   AuthenticatedBotFlowRoute: AuthenticatedBotFlowRoute,
+  AuthenticatedBotParserRoute: AuthenticatedBotParserRoute,
   AuthenticatedBulkMixRoute: AuthenticatedBulkMixRoute,
   AuthenticatedButtonsRoute: AuthenticatedButtonsRoute,
   AuthenticatedCleanupRoute: AuthenticatedCleanupRoute,
   AuthenticatedDashboardRoute: AuthenticatedDashboardRoute,
   AuthenticatedOwnerRoute: AuthenticatedOwnerRoute,
   AuthenticatedProfileUpdaterRoute: AuthenticatedProfileUpdaterRoute,
+  AuthenticatedReferralsRoute: AuthenticatedReferralsRoute,
   AuthenticatedSearchRoute: AuthenticatedSearchRoute,
   AuthenticatedAccountsIdRoute: AuthenticatedAccountsIdRoute,
   AuthenticatedGroupsIdRoute: AuthenticatedGroupsIdRoute,
