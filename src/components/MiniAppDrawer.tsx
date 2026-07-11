@@ -1,5 +1,5 @@
-import { useEffect, useRef, useState } from "react";
-import { X, ExternalLink, Loader2, AlertTriangle } from "lucide-react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { X, ExternalLink, Loader2, RefreshCw } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useTelegramWebviewBridge } from "@/lib/telegram-webview-bridge";
 import { proxifyMiniAppUrl } from "@/lib/miniapp-proxy-url";
@@ -28,13 +28,20 @@ export function MiniAppDrawer({
   const [loading, setLoading] = useState(false);
   const [resolvedUrl, setResolvedUrl] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [reloadNonce, setReloadNonce] = useState(0);
   const iframeRef = useRef<HTMLIFrameElement | null>(null);
   useTelegramWebviewBridge(iframeRef);
+
+  const iframeUrl = useMemo(
+    () => (resolvedUrl ? proxifyMiniAppUrl(resolvedUrl, request?.accountId ?? "anon") : null),
+    [resolvedUrl, request?.accountId],
+  );
 
   useEffect(() => {
     if (!open || !request) {
       setResolvedUrl(null);
       setError(null);
+      setReloadNonce(0);
       return;
     }
     let cancelled = false;
@@ -44,7 +51,10 @@ export function MiniAppDrawer({
       .then((res) => {
         if (cancelled) return;
         if (!res.url) setError("Telegram returned no mini app URL.");
-        else setResolvedUrl(res.url);
+        else {
+          setResolvedUrl(res.url);
+          setReloadNonce((n) => n + 1);
+        }
       })
       .catch((e) => {
         if (!cancelled) setError((e as Error).message || "Failed to open mini app");
@@ -83,15 +93,22 @@ export function MiniAppDrawer({
               <ExternalLink className="h-4 w-4" />
             </a>
           )}
+          {resolvedUrl && (
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              className="h-8 gap-1 px-2 text-xs"
+              onClick={() => setReloadNonce((n) => n + 1)}
+              title="Refresh mini app"
+            >
+              <RefreshCw className="h-3.5 w-3.5" />
+              Refresh
+            </Button>
+          )}
           <Button variant="ghost" size="icon" onClick={onClose}>
             <X className="h-4 w-4" />
           </Button>
-        </div>
-
-        <div className="border-b bg-amber-500/10 px-3 py-1.5 text-[10px] text-amber-700 dark:text-amber-400">
-          <AlertTriangle className="mr-1 inline h-3 w-3" />
-          Best-effort preview. Some Telegram features (haptics, MainButton, payments) only
-          work inside the native Telegram client.
         </div>
 
         <div className="relative flex-1">
@@ -106,11 +123,11 @@ export function MiniAppDrawer({
               <p className="text-xs">{error}</p>
             </div>
           )}
-          {resolvedUrl && !error && (
+          {iframeUrl && !error && (
             <iframe
-              key={resolvedUrl}
+              key={`${iframeUrl}:${reloadNonce}`}
               ref={iframeRef}
-              src={proxifyMiniAppUrl(resolvedUrl, request?.accountId ?? "anon")}
+              src={iframeUrl}
               title={request?.buttonText || "Telegram Mini App"}
               name={`tgminiapp-${request?.accountId ?? "drawer"}`}
               {...({ credentialless: "true" } as any)}
