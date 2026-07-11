@@ -240,8 +240,46 @@ function buildOverrideScript(accountId: string) {
         return origToDataURL.apply(this, arguments);
       };
     } catch (e) {}
-    // Stable unique storage namespace
-    try { window.name = 'acct-' + fp.hashKey; } catch (e) {}
+    // Stable unique storage namespace without credentialless iframes. This keeps
+    // Lovable preview/auth cookies available for the proxy route, while each
+    // Telegram account still gets isolated mini-app localStorage/sessionStorage.
+    try {
+      window.name = 'acct-' + fp.hashKey;
+      const ns = 'tgmini:' + fp.hashKey + ':' + (upstreamOrigin || 'unknown') + ':';
+      const wrapStorage = (store) => ({
+        get length() {
+          let n = 0;
+          for (let i = 0; i < store.length; i++) {
+            const k = store.key(i);
+            if (k && k.startsWith(ns)) n++;
+          }
+          return n;
+        },
+        key(i) {
+          let n = 0;
+          for (let x = 0; x < store.length; x++) {
+            const k = store.key(x);
+            if (!k || !k.startsWith(ns)) continue;
+            if (n === i) return k.slice(ns.length);
+            n++;
+          }
+          return null;
+        },
+        getItem(k) { return store.getItem(ns + String(k)); },
+        setItem(k, v) { return store.setItem(ns + String(k), String(v)); },
+        removeItem(k) { return store.removeItem(ns + String(k)); },
+        clear() {
+          const keys = [];
+          for (let i = 0; i < store.length; i++) {
+            const k = store.key(i);
+            if (k && k.startsWith(ns)) keys.push(k);
+          }
+          keys.forEach((k) => store.removeItem(k));
+        },
+      });
+      Object.defineProperty(window, 'localStorage', { configurable: true, get: () => wrapStorage(localStorage) });
+      Object.defineProperty(window, 'sessionStorage', { configurable: true, get: () => wrapStorage(sessionStorage) });
+    } catch (e) {}
   } catch (err) { console.warn('[fingerprint override failed]', err); }
 })();`;
 }
