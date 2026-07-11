@@ -655,6 +655,7 @@ export const processNextJoin = createServerFn({ method: "POST" })
           const match = msg.match(/FLOOD_WAIT_?(\d+)/i);
           const seconds = err.seconds ?? (match ? Number(match[1]) : 60);
           const pausedUntil = new Date(Date.now() + seconds * 1000).toISOString();
+          const acctLabel = acct.phone ?? acct.id.slice(0, 8);
           await supabase
             .from("telegram_accounts")
             .update({ paused_until: pausedUntil, last_error: msg })
@@ -668,15 +669,19 @@ export const processNextJoin = createServerFn({ method: "POST" })
             error: `FloodWait ${seconds}s`,
             processed_at: new Date().toISOString(),
           };
+          const untilTime = new Date(pausedUntil).toLocaleTimeString();
           await log(
             task.id,
             "warn",
-            `FloodWait ${seconds}s — Telegram rate limited this account until ${pausedUntil}`,
+            `FloodWait ${seconds}s on @${item.target} — account [${acctLabel}] paused until ${untilTime}. Reason: Telegram rate limit (${msg.trim()}). Will auto-resume.`,
           );
           return {
             done: false,
             paused: true,
             message: `FloodWait ${seconds}s`,
+            seconds,
+            pausedUntil,
+            target: item.target,
           };
         } else {
           statusUpdate = {
@@ -801,7 +806,7 @@ export const processBatchJoin = createServerFn({ method: "POST" })
     const sessionStr = await decryptString(acct.session_enc);
     const client = await createTgClient(acct.api_id, apiHash, sessionStr, acct.id);
 
-    let floodPaused = null as { seconds: number } | null;
+    let floodPaused = null as { seconds: number; target: string; reason: string } | null;
 
     const processOne = async (item: { id: string; target: string }) => {
       let statusUpdate: {
@@ -879,16 +884,17 @@ export const processBatchJoin = createServerFn({ method: "POST" })
         } else if (msg.includes("FLOOD_WAIT") || err.seconds) {
           const match = msg.match(/FLOOD_WAIT_?(\d+)/i);
           const seconds = err.seconds ?? (match ? Number(match[1]) : 60);
-          floodPaused = { seconds };
+          floodPaused = { seconds, target: item.target, reason: msg.trim() };
           statusUpdate = {
             status: "pending",
             error: `FloodWait ${seconds}s`,
             processed_at: new Date().toISOString(),
           };
+          const acctLabel = acct.phone ?? acct.id.slice(0, 8);
           await log(
             task.id,
             "warn",
-            `FloodWait ${seconds}s — Telegram rate limited this account`,
+            `FloodWait ${seconds}s on @${item.target} — account [${acctLabel}] rate limited. Reason: ${msg.trim()}. Will auto-resume.`,
           );
         } else {
           statusUpdate = {
@@ -931,6 +937,9 @@ export const processBatchJoin = createServerFn({ method: "POST" })
         paused: true,
         processed: items.length,
         message: `FloodWait ${floodPaused.seconds}s`,
+        seconds: floodPaused.seconds,
+        pausedUntil,
+        target: floodPaused.target,
       };
     }
 

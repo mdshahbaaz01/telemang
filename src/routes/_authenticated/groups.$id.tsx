@@ -15,6 +15,12 @@ import { Button } from "@/components/ui/button";
 import { AdminGate } from "@/components/AdminGate";
 import { toast } from "sonner";
 
+// Simple fleet-wide state shared across TaskColumn instances.
+type FleetCtx = {
+  acquire: () => Promise<() => void>; // returns release()
+  autoResume: boolean;
+};
+
 export const Route = createFileRoute("/_authenticated/groups/$id")({
   component: () => (
     <AdminGate>
@@ -43,12 +49,78 @@ function GroupRunner() {
   const runAllRef = useRef<Map<string, () => void>>(new Map());
   const startAllRef = useRef<Map<string, () => void>>(new Map());
 
+  // Fleet settings (persisted in localStorage)
+  const [maxParallel, setMaxParallel] = useState<number>(() => {
+    if (typeof window === "undefined") return 5;
+    const v = Number(window.localStorage.getItem("fleet.maxParallelJoins") || 5);
+    return Number.isFinite(v) && v >= 1 ? v : 5;
+  });
+  const [autoResume, setAutoResume] = useState<boolean>(() => {
+    if (typeof window === "undefined") return true;
+    return window.localStorage.getItem("fleet.autoResume") !== "0";
+  });
+  useEffect(() => {
+    window.localStorage.setItem("fleet.maxParallelJoins", String(maxParallel));
+  }, [maxParallel]);
+  useEffect(() => {
+    window.localStorage.setItem("fleet.autoResume", autoResume ? "1" : "0");
+  }, [autoResume]);
+
+  // Semaphore that caps concurrent active task loops fleet-wide.
+  const semRef = useRef<{
+    limit: number;
+    active: number;
+    queue: Array<() => void>;
+  }>({ limit: maxParallel, active: 0, queue: [] });
+  useEffect(() => {
+    semRef.current.limit = maxParallel;
+    // Wake queued waiters if the limit grew.
+    while (
+      semRef.current.active < semRef.current.limit &&
+      semRef.current.queue.length
+    ) {
+      const next = semRef.current.queue.shift();
+      if (next) {
+        semRef.current.active++;
+        next();
+      }
+    }
+  }, [maxParallel]);
+  const fleetCtx = useMemo<FleetCtx>(
+    () => ({
+      autoResume,
+      acquire: () =>
+        new Promise((resolve) => {
+          const sem = semRef.current;
+          const grant = () =>
+            resolve(() => {
+              sem.active = Math.max(0, sem.active - 1);
+              const next = sem.queue.shift();
+              if (next) {
+                sem.active++;
+                next();
+              }
+            });
+          if (sem.active < sem.limit) {
+            sem.active++;
+            grant();
+          } else {
+            sem.queue.push(grant);
+          }
+        }),
+    }),
+    [autoResume],
+  );
+
   const startAll = () => {
     setAllRunning(true);
     startAllRef.current.forEach((fn) => fn());
   };
   const stopAll = () => {
     setAllRunning(false);
+    // Drain queued waiters so nothing kicks in after Pause.
+    semRef.current.queue.length = 0;
+    semRef.current.active = 0;
     runAllRef.current.forEach((fn) => fn());
   };
 
@@ -130,6 +202,34 @@ function GroupRunner() {
           </div>
         </header>
 
+        <section className="mb-4 flex flex-wrap items-center gap-4 rounded-lg border border-border bg-card px-4 py-3 text-sm">
+          <label className="flex items-center gap-2">
+            <span className="text-muted-foreground">Max parallel accounts</span>
+            <input
+              type="number"
+              min={1}
+              max={100}
+              value={maxParallel}
+              onChange={(e) =>
+                setMaxParallel(Math.max(1, Math.min(100, Number(e.target.value) || 1)))
+              }
+              className="h-8 w-20 rounded border border-border bg-background px-2"
+            />
+          </label>
+          <label className="flex items-center gap-2">
+            <input
+              type="checkbox"
+              checked={autoResume}
+              onChange={(e) => setAutoResume(e.target.checked)}
+            />
+            <span>Auto-resume after FloodWait</span>
+          </label>
+          <span className="ml-auto text-xs text-muted-foreground">
+            Running now: {Math.min(semRef.current.active, tasks.length)} · queued:{" "}
+            {semRef.current.queue.length}
+          </span>
+        </section>
+
         {groupQ.isLoading ? (
           <Loader size="sm" />
         ) : (
@@ -147,6 +247,7 @@ function GroupRunner() {
                 registerStart={(fn) => startAllRef.current.set(t.id, fn)}
                 registerStop={(fn) => runAllRef.current.set(t.id, fn)}
                 onStats={reportStats}
+                fleet={fleetCtx}
               />
             ))}
           </div>
@@ -237,6 +338,7 @@ function TaskColumn({
   registerStart,
   registerStop,
   onStats,
+  fleet,
 }: {
   taskId: string;
   accountLabel: string;
@@ -246,6 +348,7 @@ function TaskColumn({
     taskId: string,
     stats: { total: number; done: number },
   ) => void;
+  fleet: FleetCtx;
 }) {
   const qc = useQueryClient();
   const getT = useServerFn(getTask);
@@ -260,12 +363,24 @@ function TaskColumn({
   const [running, setRunning] = useState(false);
   const cancelRef = useRef(false);
   const runningRef = useRef(false);
+  const resumeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const [waitingSlot, setWaitingSlot] = useState(false);
+  const [floodUntil, setFloodUntil] = useState<number | null>(null);
 
   const loop = async () => {
     if (runningRef.current) return;
     runningRef.current = true;
     cancelRef.current = false;
     setRunning(true);
+    setWaitingSlot(true);
+    const release = await fleet.acquire();
+    setWaitingSlot(false);
+    if (cancelRef.current) {
+      release();
+      runningRef.current = false;
+      setRunning(false);
+      return;
+    }
     await setStatus({ data: { id: taskId, status: "running" } }).catch(() => {});
     try {
       while (!cancelRef.current) {
@@ -276,7 +391,24 @@ function TaskColumn({
           break;
         }
         if (r.paused) {
-          toast.warning(`${accountLabel}: ${r.message ?? "paused"}`);
+          const secs = (r as { seconds?: number }).seconds;
+          const untilIso = (r as { pausedUntil?: string }).pausedUntil;
+          const target = (r as { target?: string }).target;
+          if (fleet.autoResume && secs && secs > 0) {
+            const untilTs = untilIso ? new Date(untilIso).getTime() : Date.now() + secs * 1000;
+            setFloodUntil(untilTs);
+            toast.warning(
+              `${accountLabel}: FloodWait ${secs}s${target ? ` on @${target}` : ""} — auto-resume scheduled`,
+            );
+            const delay = Math.max(1000, untilTs - Date.now() + 500);
+            resumeTimerRef.current = setTimeout(() => {
+              resumeTimerRef.current = null;
+              setFloodUntil(null);
+              loop();
+            }, delay);
+          } else {
+            toast.warning(`${accountLabel}: ${r.message ?? "paused"}`);
+          }
           break;
         }
         const min = taskQ.data?.task?.min_delay ?? 1;
@@ -287,6 +419,7 @@ function TaskColumn({
     } catch (err) {
       toast.error(`${accountLabel}: ${(err as Error).message}`);
     } finally {
+      release();
       runningRef.current = false;
       setRunning(false);
       await setStatus({ data: { id: taskId, status: "paused" } }).catch(() => {});
@@ -295,6 +428,11 @@ function TaskColumn({
   };
   const stop = () => {
     cancelRef.current = true;
+    if (resumeTimerRef.current) {
+      clearTimeout(resumeTimerRef.current);
+      resumeTimerRef.current = null;
+      setFloodUntil(null);
+    }
   };
 
   useEffect(() => {
@@ -306,6 +444,15 @@ function TaskColumn({
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [taskId]);
+
+  // Live countdown when parked for FloodWait auto-resume.
+  const [now, setNow] = useState(Date.now());
+  useEffect(() => {
+    if (!floodUntil) return;
+    const t = setInterval(() => setNow(Date.now()), 1000);
+    return () => clearInterval(t);
+  }, [floodUntil]);
+  const secsLeft = floodUntil ? Math.max(0, Math.ceil((floodUntil - now) / 1000)) : 0;
 
   useEffect(() => {
     const ch = supabase
@@ -360,6 +507,14 @@ function TaskColumn({
           ) : null}
         </div>
       </header>
+      {waitingSlot ? (
+        <div className="mb-2 text-xs text-muted-foreground">Waiting for a free slot…</div>
+      ) : null}
+      {floodUntil ? (
+        <div className="mb-2 text-xs text-yellow-500">
+          FloodWait — auto-resume in {secsLeft}s
+        </div>
+      ) : null}
       <div className="mb-2 text-sm text-muted-foreground">
         {done}/{total} processed
         {failed > 0 ? (
