@@ -22,6 +22,7 @@ import { toast } from "sonner";
 import { AdminGate } from "@/components/AdminGate";
 import { ArrowLeft, RefreshCw, Square, Play } from "lucide-react";
 import { AccountIdPaste } from "@/components/AccountIdPaste";
+import { Textarea } from "@/components/ui/textarea";
 
 export const Route = createFileRoute("/_authenticated/cleanup")({
   component: () => (
@@ -73,12 +74,16 @@ function Cleanup() {
           <TabsList>
             <TabsTrigger value="chats">Chats, Groups & Bots</TabsTrigger>
             <TabsTrigger value="personal">Personal Chats</TabsTrigger>
+            <TabsTrigger value="links">Leave by link</TabsTrigger>
           </TabsList>
           <TabsContent value="chats" className="mt-4">
             <CleanupPanel mode="chats" />
           </TabsContent>
           <TabsContent value="personal" className="mt-4">
             <CleanupPanel mode="personal" />
+          </TabsContent>
+          <TabsContent value="links" className="mt-4">
+            <LeaveByLinksPanel />
           </TabsContent>
         </Tabs>
       </div>
@@ -87,6 +92,191 @@ function Cleanup() {
 }
 
 function CleanupPanel({ mode }: { mode: "chats" | "personal" }) {
+  return <CleanupPanelInner mode={mode} />;
+}
+
+function LeaveByLinksPanel() {
+  const listAcc = useServerFn(listAccounts);
+  const accountsQ = useQuery({ queryKey: ["accounts"], queryFn: () => listAcc() });
+  const [accountIds, setAccountIds] = useState<Set<string>>(new Set());
+  const [linksText, setLinksText] = useState("");
+  const [logs, setLogs] = useState<LogEntry[]>([]);
+  const [running, setRunning] = useState(false);
+  const [doneByAcc, setDoneByAcc] = useState<Record<string, { ok: number; fail: number }>>({});
+  const abortRef = useRef<AbortController | null>(null);
+
+  const toggleAccount = (id: string) => {
+    setAccountIds((s) => {
+      const n = new Set(s);
+      n.has(id) ? n.delete(id) : n.add(id);
+      return n;
+    });
+  };
+  const toggleAllAccounts = () => {
+    const all = accountsQ.data ?? [];
+    if (accountIds.size === all.length) setAccountIds(new Set());
+    else setAccountIds(new Set(all.map((a) => a.id)));
+  };
+  const appendLog = useCallback((e: Omit<LogEntry, "time">) => {
+    setLogs((prev) => {
+      const next = [...prev, { ...e, time: new Date().toLocaleTimeString() }];
+      return next.length > 500 ? next.slice(-500) : next;
+    });
+  }, []);
+
+  const parseLinks = (text: string) =>
+    Array.from(
+      new Set(
+        text
+          .split(/[\s,]+/)
+          .map((l) => l.trim())
+          .filter(Boolean),
+      ),
+    );
+
+  const run = async () => {
+    if (!accountIds.size) return toast.error("Pick at least one account");
+    const links = parseLinks(linksText);
+    if (!links.length) return toast.error("Paste at least one link");
+    setLogs([]);
+    setDoneByAcc({});
+    setRunning(true);
+    const ac = new AbortController();
+    abortRef.current = ac;
+    try {
+      const { data } = await supabase.auth.getSession();
+      const token = data.session?.access_token;
+      if (!token) throw new Error("No session");
+      const jobs = Array.from(accountIds).map((accountId) => ({ accountId, targets: [], links }));
+      const res = await fetch("/api/public/cleanup-stream", {
+        method: "POST",
+        headers: { "content-type": "application/json", authorization: `Bearer ${token}` },
+        body: JSON.stringify({ action: "leaveByLinks", jobs }),
+        signal: ac.signal,
+      });
+      if (!res.ok || !res.body) throw new Error(`Stream failed (${res.status}): ${await res.text().catch(() => "")}`);
+      const reader = res.body.getReader();
+      const decoder = new TextDecoder();
+      let buf = "";
+      while (true) {
+        const { value, done } = await reader.read();
+        if (done) break;
+        buf += decoder.decode(value, { stream: true });
+        const chunks = buf.split("\n\n");
+        buf = chunks.pop() ?? "";
+        for (const chunk of chunks) {
+          const ev = chunk.match(/^event: (.+)$/m)?.[1];
+          const dt = chunk.match(/^data: (.+)$/m)?.[1];
+          if (!ev || !dt) continue;
+          let payload: any = {};
+          try { payload = JSON.parse(dt); } catch {}
+          if (ev === "log") {
+            appendLog({ accountId: payload.accountId, kind: payload.kind ?? "info", target: payload.target, message: payload.message ?? "" });
+          } else if (ev === "done") {
+            setDoneByAcc((p) => ({ ...p, [payload.accountId]: { ok: payload.ok, fail: payload.fail } }));
+            appendLog({ accountId: payload.accountId, kind: "info", message: `Finished: ${payload.ok} ok / ${payload.fail} failed` });
+          } else if (ev === "end") {
+            appendLog({ kind: "info", message: payload.aborted ? "Stopped." : "All accounts finished." });
+          }
+        }
+      }
+    } catch (e) {
+      if ((e as Error).name !== "AbortError") {
+        appendLog({ kind: "error", message: (e as Error).message });
+        toast.error((e as Error).message);
+      }
+    } finally {
+      setRunning(false);
+      abortRef.current = null;
+    }
+  };
+  const stop = () => { abortRef.current?.abort(); appendLog({ kind: "info", message: "Stop requested." }); };
+
+  const linkCount = parseLinks(linksText).length;
+
+  return (
+    <div className="space-y-4">
+      <div className="rounded-lg border border-border bg-card p-4">
+        <div className="mb-2 flex items-center justify-between">
+          <h2 className="font-semibold">Accounts</h2>
+          <Button variant="outline" size="sm" onClick={toggleAllAccounts}>
+            {accountIds.size === (accountsQ.data?.length ?? 0) && (accountsQ.data?.length ?? 0) > 0 ? "Deselect all" : "Select all"}
+          </Button>
+        </div>
+        <div className="grid grid-cols-2 gap-2 md:grid-cols-4">
+          {(accountsQ.data ?? []).map((a, i) => (
+            <label key={a.id} className="flex cursor-pointer items-center gap-2 rounded border border-border p-2 text-sm">
+              <Checkbox checked={accountIds.has(a.id)} onCheckedChange={() => toggleAccount(a.id)} />
+              <div className="min-w-0">
+                <div className="truncate"><span className="text-muted-foreground mr-1">#{i + 1}</span>{a.first_name || a.username || a.phone}</div>
+                <div className="truncate text-xs text-muted-foreground">{a.phone}</div>
+              </div>
+            </label>
+          ))}
+        </div>
+        <AccountIdPaste
+          className="mt-3"
+          accounts={accountsQ.data ?? []}
+          onSelect={(ids) => setAccountIds((prev) => { const n = new Set(prev); for (const id of ids) n.add(id); return n; })}
+        />
+      </div>
+
+      <div className="rounded-lg border border-border bg-card p-4 space-y-2">
+        <div className="flex items-center justify-between">
+          <label className="text-sm font-medium">Links to leave</label>
+          <span className="text-xs text-muted-foreground">{linkCount} link(s) · {accountIds.size} account(s)</span>
+        </div>
+        <Textarea
+          rows={6}
+          placeholder={"Paste one link per line. Supports:\nhttps://t.me/somechannel\n@somechannel\nhttps://t.me/+abcDEF123hash\nhttps://t.me/joinchat/abcDEF123hash\nhttps://t.me/c/1234567890"}
+          value={linksText}
+          onChange={(e) => setLinksText(e.target.value)}
+          disabled={running}
+        />
+        <p className="text-xs text-muted-foreground">
+          For each account, the app resolves each link and leaves the channel/group. Invite links (+HASH) are resolved without joining first.
+        </p>
+      </div>
+
+      <div className="flex flex-wrap items-center gap-2">
+        <Button onClick={run} disabled={running || !accountIds.size || !linkCount} variant="destructive">
+          <Play className="mr-1 h-4 w-4" /> {running ? "Running…" : "Leave on selected accounts"}
+        </Button>
+        <Button onClick={stop} disabled={!running} variant="outline">
+          <Square className="mr-1 h-4 w-4" /> Stop
+        </Button>
+      </div>
+
+      <div className="rounded-lg border border-border bg-card">
+        <div className="flex items-center justify-between border-b border-border px-4 py-2">
+          <h3 className="font-semibold">Live logs</h3>
+          <Button size="sm" variant="ghost" onClick={() => setLogs([])} disabled={!logs.length}>Clear</Button>
+        </div>
+        <ScrollArea className="h-72">
+          <div className="p-3 font-mono text-xs">
+            {logs.length === 0 ? (
+              <p className="text-muted-foreground">No events yet.</p>
+            ) : (
+              logs.map((l, i) => {
+                const acc = l.accountId ? (accountsQ.data?.find((a) => a.id === l.accountId)?.first_name || accountsQ.data?.find((a) => a.id === l.accountId)?.username || accountsQ.data?.find((a) => a.id === l.accountId)?.phone) : "";
+                return (
+                  <div key={i} className={l.kind === "error" ? "text-destructive" : l.kind === "ok" ? "text-foreground" : "text-muted-foreground"}>
+                    <span className="opacity-60">[{l.time}]</span>{" "}
+                    {acc && <span className="opacity-80">[{acc}]</span>}{" "}
+                    {l.kind === "ok" ? "✓" : l.kind === "error" ? "✗" : "•"}{" "}
+                    {l.target ? <span className="font-semibold">{l.target}</span> : null}{l.target ? " — " : ""}{l.message}
+                  </div>
+                );
+              })
+            )}
+          </div>
+        </ScrollArea>
+      </div>
+    </div>
+  );
+}
+
+function CleanupPanelInner({ mode }: { mode: "chats" | "personal" }) {
   const listAcc = useServerFn(listAccounts);
   const queryClient = useQueryClient();
   const accountsQ = useQuery({ queryKey: ["accounts"], queryFn: () => listAcc() });
