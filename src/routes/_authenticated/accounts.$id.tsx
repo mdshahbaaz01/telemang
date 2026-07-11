@@ -22,7 +22,15 @@ import { MiniAppDrawer, type MiniAppRequest } from "@/components/MiniAppDrawer";
 
 const searchSchema = z.object({
   peer: z.string().optional(),
-  solo: z.union([z.literal("1"), z.literal("0"), z.boolean()]).optional(),
+  solo: z
+    .union([
+      z.literal("1"),
+      z.literal("0"),
+      z.literal(1),
+      z.literal(0),
+      z.boolean(),
+    ])
+    .optional(),
 });
 
 export const Route = createFileRoute("/_authenticated/accounts/$id")({
@@ -147,7 +155,7 @@ function fmtDialogTime(ms: number | null) {
 function AccountViewerPage() {
   const { id: accountId } = Route.useParams();
   const { peer: activePeer, solo: soloRaw } = Route.useSearch();
-  const solo = soloRaw === "1" || soloRaw === true;
+  const solo = soloRaw === "1" || soloRaw === 1 || soloRaw === true;
   const navigate = Route.useNavigate();
 
   const listDialogsFn = useServerFn(listDialogs);
