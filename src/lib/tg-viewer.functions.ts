@@ -647,3 +647,96 @@ export const openStartAppLink = createServerFn({ method: "POST" })
       await client.disconnect().catch(() => {});
     }
   });
+
+// ── joinFromLink — resolve any t.me link with a given account, join if
+// needed, and return a peerKey the Account Viewer can open. Used by the
+// mini-app iframe's "Join channel" interception so the user stays inside
+// the same account's tile instead of being sent to a new tab.
+export const joinFromLink = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((d: unknown) =>
+    z
+      .object({
+        accountId: z.string().uuid(),
+        url: z.string().min(3).max(2048),
+      })
+      .parse(d),
+  )
+  .handler(async ({ data, context }) => {
+    await assertAdmin(context.supabase);
+    const { openClientForAccount } = await import("./cleanup.server");
+    const { Api } = await import("telegram");
+    const client = await openClientForAccount(context.supabase, data.accountId);
+    try {
+      const raw = data.url.trim();
+      // Extract path from tg:// or https://t.me/...
+      let path = raw
+        .replace(/^tg:\/\/(join|resolve)\?/, "")
+        .replace(/^https?:\/\/(t\.me|telegram\.me|telegram\.dog)\//i, "");
+      // Handle tg://resolve?domain=xxx style
+      if (path.startsWith("domain=")) {
+        const uname = new URLSearchParams(path).get("domain");
+        path = uname || path;
+      } else if (path.startsWith("invite=")) {
+        const hash = new URLSearchParams(path).get("invite");
+        path = `+${hash || ""}`;
+      }
+      const inviteMatch = path.match(/^(?:joinchat\/|\+)([A-Za-z0-9_-]+)/);
+      let entity: any = null;
+      let joined = false;
+      let alreadyMember = false;
+      if (inviteMatch) {
+        const hash = inviteMatch[1];
+        try {
+          const upd: any = await client.invoke(new Api.messages.ImportChatInvite({ hash }));
+          joined = true;
+          const chat = upd?.chats?.[0];
+          if (chat) entity = chat;
+        } catch (e) {
+          const em = (e as Error).message || "";
+          if (em.includes("USER_ALREADY_PARTICIPANT")) {
+            alreadyMember = true;
+            try {
+              const info: any = await client.invoke(new Api.messages.CheckChatInvite({ hash }));
+              entity = info?.chat ?? info?.channel ?? null;
+            } catch {}
+          } else {
+            throw new Error(em);
+          }
+        }
+      } else {
+        // Public username or username/msgId path
+        const uname = path.split(/[/?#]/)[0].replace(/^@/, "");
+        if (!uname) throw new Error("Unrecognized Telegram link");
+        entity = await client.getEntity(uname);
+        const cn = entity?.className || "";
+        if (cn === "Channel" || cn.includes("Channel")) {
+          try {
+            await client.invoke(new Api.channels.JoinChannel({ channel: entity }));
+            joined = true;
+          } catch (e) {
+            const em = (e as Error).message || "";
+            if (em.includes("USER_ALREADY_PARTICIPANT")) alreadyMember = true;
+            else if (!em.includes("CHANNELS_TOO_MUCH")) {
+              // Ignore other join errors — user can still view public channels
+            }
+          }
+        }
+      }
+      if (!entity) throw new Error("Could not resolve entity from link");
+      const username = entity?.username ? `@${entity.username}` : null;
+      const idStr = String(entity?.id ?? "");
+      const cn = entity?.className || "";
+      const peerKey =
+        username ||
+        (cn.includes("Channel") ? `c:${idStr}` : cn.includes("Chat") ? `g:${idStr}` : `u:${idStr}`);
+      return {
+        peerKey,
+        title: extractName(entity),
+        joined,
+        alreadyMember,
+      };
+    } finally {
+      await client.disconnect().catch(() => {});
+    }
+  });

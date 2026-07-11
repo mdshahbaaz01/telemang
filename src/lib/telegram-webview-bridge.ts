@@ -25,12 +25,18 @@ const DEFAULT_THEME: ThemeParams = {
 
 export function useTelegramWebviewBridge(
   iframeRef: React.RefObject<HTMLIFrameElement | null>,
-  opts: { theme?: ThemeParams; viewportHeight?: number } = {},
+  opts: {
+    theme?: ThemeParams;
+    viewportHeight?: number;
+    onOpenTgLink?: (url: string) => boolean | void; // return true to intercept
+  } = {},
 ) {
   const theme = opts.theme ?? DEFAULT_THEME;
   const viewportHeight = opts.viewportHeight;
   const themeRef = useRef(theme);
   themeRef.current = theme;
+  const onOpenTgLinkRef = useRef(opts.onOpenTgLink);
+  onOpenTgLinkRef.current = opts.onOpenTgLink;
 
   useEffect(() => {
     function post(target: Window, eventType: string, eventData: unknown = {}) {
@@ -102,6 +108,19 @@ export function useTelegramWebviewBridge(
         case "web_app_open_tg_link": {
           const url = eventData?.url;
           if (typeof url === "string") {
+            // Detect Telegram deep links / t.me URLs and hand them to the
+            // consumer first so the host tile can render an in-tile chat
+            // instead of opening a new tab.
+            const isTgLink =
+              eventType === "web_app_open_tg_link" ||
+              /^tg:\/\//i.test(url) ||
+              /^https?:\/\/(t\.me|telegram\.me|telegram\.dog)\//i.test(url);
+            if (isTgLink && onOpenTgLinkRef.current) {
+              try {
+                const handled = onOpenTgLinkRef.current(url);
+                if (handled !== false) break;
+              } catch {}
+            }
             try {
               window.open(url, "_blank", "noopener,noreferrer");
             } catch {}

@@ -511,7 +511,7 @@ export const processNextJoin = createServerFn({ method: "POST" })
 
     const apiHash = await decryptString(acct.api_hash_enc);
     const sessionStr = await decryptString(acct.session_enc);
-    const client = await createTgClient(acct.api_id, apiHash, sessionStr);
+    const client = await createTgClient(acct.api_id, apiHash, sessionStr, acct.id);
     let statusUpdate: {
       status: string;
       error: string | null;
@@ -755,7 +755,7 @@ export const processBatchJoin = createServerFn({ method: "POST" })
 
     const apiHash = await decryptString(acct.api_hash_enc);
     const sessionStr = await decryptString(acct.session_enc);
-    const client = await createTgClient(acct.api_id, apiHash, sessionStr);
+    const client = await createTgClient(acct.api_id, apiHash, sessionStr, acct.id);
 
     let floodPaused = null as { seconds: number } | null;
 

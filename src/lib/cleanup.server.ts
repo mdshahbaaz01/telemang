@@ -16,5 +16,5 @@ export async function openClientForAccount(
   if (!acct.session_enc) throw new Error("Account not logged in");
   const apiHash = await decryptString(acct.api_hash_enc);
   const sessionStr = await decryptString(acct.session_enc);
-  return createTgClient(acct.api_id, apiHash, sessionStr);
+  return createTgClient(acct.api_id, apiHash, sessionStr, acct.id);
 }
