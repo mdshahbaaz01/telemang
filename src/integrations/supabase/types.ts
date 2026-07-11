@@ -145,6 +145,89 @@ export type Database = {
         }
         Relationships: []
       }
+      bot_parse_results: {
+        Row: {
+          account_id: string
+          bot_username: string
+          captured_at: string
+          field_name: string
+          id: string
+          raw_text: string | null
+          rule_id: string | null
+          user_id: string
+          value_numeric: number | null
+          value_text: string | null
+        }
+        Insert: {
+          account_id: string
+          bot_username: string
+          captured_at?: string
+          field_name: string
+          id?: string
+          raw_text?: string | null
+          rule_id?: string | null
+          user_id: string
+          value_numeric?: number | null
+          value_text?: string | null
+        }
+        Update: {
+          account_id?: string
+          bot_username?: string
+          captured_at?: string
+          field_name?: string
+          id?: string
+          raw_text?: string | null
+          rule_id?: string | null
+          user_id?: string
+          value_numeric?: number | null
+          value_text?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "bot_parse_results_rule_id_fkey"
+            columns: ["rule_id"]
+            isOneToOne: false
+            referencedRelation: "bot_parse_rules"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      bot_parse_rules: {
+        Row: {
+          bot_username: string
+          created_at: string
+          field_name: string
+          id: string
+          name: string
+          regex: string
+          unit: string | null
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          bot_username: string
+          created_at?: string
+          field_name: string
+          id?: string
+          name: string
+          regex: string
+          unit?: string | null
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          bot_username?: string
+          created_at?: string
+          field_name?: string
+          id?: string
+          name?: string
+          regex?: string
+          unit?: string | null
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       join_task_items: {
         Row: {
           error: string | null
@@ -396,6 +479,95 @@ export type Database = {
           email_to?: string | null
           telegram_chat?: string | null
           telegram_enabled?: boolean
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
+      referral_joins: {
+        Row: {
+          account_id: string
+          created_at: string
+          id: string
+          joined_at: string | null
+          last_balance_numeric: number | null
+          last_balance_text: string | null
+          last_checked_at: string | null
+          last_error: string | null
+          referral_link_id: string
+          status: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          account_id: string
+          created_at?: string
+          id?: string
+          joined_at?: string | null
+          last_balance_numeric?: number | null
+          last_balance_text?: string | null
+          last_checked_at?: string | null
+          last_error?: string | null
+          referral_link_id: string
+          status?: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          account_id?: string
+          created_at?: string
+          id?: string
+          joined_at?: string | null
+          last_balance_numeric?: number | null
+          last_balance_text?: string | null
+          last_checked_at?: string | null
+          last_error?: string | null
+          referral_link_id?: string
+          status?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "referral_joins_referral_link_id_fkey"
+            columns: ["referral_link_id"]
+            isOneToOne: false
+            referencedRelation: "referral_links"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      referral_links: {
+        Row: {
+          balance_field: string | null
+          base_link: string
+          bot_username: string
+          created_at: string
+          id: string
+          my_ref_code: string | null
+          note: string | null
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          balance_field?: string | null
+          base_link: string
+          bot_username: string
+          created_at?: string
+          id?: string
+          my_ref_code?: string | null
+          note?: string | null
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          balance_field?: string | null
+          base_link?: string
+          bot_username?: string
+          created_at?: string
+          id?: string
+          my_ref_code?: string | null
+          note?: string | null
           updated_at?: string
           user_id?: string
         }
