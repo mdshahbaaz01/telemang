@@ -97,6 +97,7 @@ const bodySchema = z.object({
   accountIds: z.array(z.string().uuid()).min(0).max(200).default([]),
   minDelay: z.number().int().min(0).max(60).default(1),
   maxDelay: z.number().int().min(0).max(60).default(2),
+  concurrency: z.number().int().min(1).max(20).default(5),
   op: z.discriminatedUnion("kind", [reactSchema, forwardSchema, voteSchema, broadcastSchema, replySchema, botFlowSchema, editSchema, deleteMessagesSchema]),
 });
 
@@ -984,11 +985,11 @@ export const Route = createFileRoute("/api/public/actions-stream")({
               };
               const results =
                 body.op.kind === "broadcast"
-                  ? await runWithConcurrency(groupByAccount(body.op.rows), 5, ([accountId, rows]) => runBroadcastRowsForAccount(accountId, rows))
+                  ? await runWithConcurrency(groupByAccount(body.op.rows), body.concurrency, ([accountId, rows]) => runBroadcastRowsForAccount(accountId, rows))
                   : body.op.kind === "reply"
                     ? await runWithConcurrency(
                         groupByAccount(body.op.rows),
-                        5,
+                        body.concurrency,
                         async ([, rows]) => {
                           let ok = 0;
                           let fail = 0;
@@ -1002,8 +1003,8 @@ export const Route = createFileRoute("/api/public/actions-stream")({
                         },
                       )
                     : body.op.kind === "botflow"
-                      ? await runWithConcurrency(body.accountIds, 5, (id) => runBotFlowForAccount(id, body.op as any))
-                      : await runWithConcurrency(body.accountIds, 8, (id) => runOne(id));
+                      ? await runWithConcurrency(body.accountIds, body.concurrency, (id) => runBotFlowForAccount(id, body.op as any))
+                      : await runWithConcurrency(body.accountIds, Math.max(body.concurrency, 1), (id) => runOne(id));
               for (const r of results) {
                 totalOk += r.ok;
                 totalFail += r.fail;
