@@ -489,11 +489,13 @@ function BotFlowPage() {
                       )}
                       <button
                         type="button"
-                        className="rounded p-1 hover:bg-muted"
-                        title="Reload"
+                        className="inline-flex items-center gap-1 rounded border border-border px-2 py-1 text-[11px] hover:bg-muted disabled:opacity-50"
+                        title="Resolve and refresh this mini app"
+                        disabled={r.status === "loading"}
                         onClick={() => miniParsed && resolveOne(r.accountId, miniParsed.username, miniParsed.startParam)}
                       >
-                        <RefreshCw className="h-3.5 w-3.5" />
+                        <RefreshCw className={`h-3.5 w-3.5 ${r.status === "loading" ? "animate-spin" : ""}`} />
+                        Refresh
                       </button>
                       <button
                         type="button"
@@ -591,14 +593,6 @@ function MiniAppFrame({ url, title, accountId }: { url: string; title: string; a
   });
   return (
     <div className="relative h-full w-full">
-      <button
-        type="button"
-        className="absolute right-1 top-1 z-10 rounded bg-background/80 p-1 text-muted-foreground shadow hover:bg-background"
-        title="Refresh this mini app"
-        onClick={() => setNonce((n) => n + 1)}
-      >
-        <RefreshCw className="h-3.5 w-3.5" />
-      </button>
       <iframe
         key={`${url}#${nonce}`}
         ref={ref}
