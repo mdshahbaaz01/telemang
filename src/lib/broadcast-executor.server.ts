@@ -1,5 +1,6 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Database } from "@/integrations/supabase/types";
+import { resolveTargetEntity } from "./telegram-target-resolver.server";
 
 export type Attachment = { path: string; filename: string; mimeType?: string; isVoice?: boolean };
 
@@ -62,64 +63,6 @@ function errorText(error: unknown) {
 }
 
 import { formatMessage } from "./message-format";
-
-async function resolveTargetEntity(client: any, Api: any, t: string) {
-  const cleaned = t.trim().replace(/^https?:\/\/(t\.me|telegram\.me)\//i, "").replace(/^@/, "");
-  // Numeric user / chat ID (e.g. "123456789", "user:123", "-1001234567890")
-  const numMatch = cleaned.match(/^(?:user:|id:)?(-?\d+)$/i);
-  if (numMatch) {
-    const idStr = numMatch[1];
-    const n = Number(idStr);
-    try {
-      return await client.getInputEntity(n);
-    } catch {
-      try { await client.getDialogs({ limit: 500 }); } catch {}
-      try {
-        return await client.getInputEntity(n);
-      } catch {
-        throw new Error(
-          `ID ${idStr} not reachable from this account (no prior interaction — Telegram requires an access_hash for this user/chat).`,
-        );
-      }
-    }
-  }
-  // Private invite links: t.me/+HASH or t.me/joinchat/HASH
-  const inviteMatch = cleaned.match(/^(?:joinchat\/)?\+?([A-Za-z0-9_-]{16,})$/);
-  if (cleaned.startsWith("+") || cleaned.startsWith("joinchat/")) {
-    const hash = inviteMatch ? inviteMatch[1] : cleaned.replace(/^\+/, "").replace(/^joinchat\//, "");
-    try {
-      const info: any = await client.invoke(new Api.messages.CheckChatInvite({ hash }));
-      // Already joined → info.chat exists
-      if (info?.chat) return info.chat;
-      // Not joined yet → import (join)
-      const upd: any = await client.invoke(new Api.messages.ImportChatInvite({ hash }));
-      const chat = upd?.chats?.[0];
-      if (chat) return chat;
-    } catch (e: any) {
-      const msg = String(e?.errorMessage || e?.message || e);
-      if (msg.includes("INVITE_HASH_EXPIRED") || msg.includes("INVITE_HASH_INVALID")) {
-        throw new Error(`Invite link expired or invalid: ${t}`);
-      }
-      if (msg.includes("USER_ALREADY_PARTICIPANT")) {
-        // Re-check to get the entity now that we're a member.
-        const info: any = await client.invoke(new Api.messages.CheckChatInvite({ hash }));
-        if (info?.chat) return info.chat;
-      }
-      throw e;
-    }
-    throw new Error(`Could not resolve invite link: ${t}`);
-  }
-  if (/^c\/\d+/.test(cleaned)) {
-    const raw = cleaned.split("/")[1];
-    const { default: bigInt } = await import("big-integer");
-    try {
-      return await client.getEntity(new Api.PeerChannel({ channelId: bigInt(raw) }));
-    } catch {
-      return await client.getEntity(`https://t.me/${cleaned}`);
-    }
-  }
-  return await client.getEntity(cleaned);
-}
 
 async function resolveSourcePeer(client: any, Api: any, src: SourceRef) {
   if (src.chat.startsWith("c/")) {
