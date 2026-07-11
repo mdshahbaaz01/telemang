@@ -143,7 +143,7 @@ function AccountViewerPage() {
 
   const dialogsQ = useQuery({
     queryKey: ["tg-dialogs", accountId],
-    queryFn: () => listDialogsFn({ data: { accountId, limit: 100 } }),
+    queryFn: () => listDialogsFn({ data: { accountId, limit: 1000 } }),
     refetchInterval: 15_000,
     staleTime: 10_000,
   });
