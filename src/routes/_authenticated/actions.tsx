@@ -1138,6 +1138,20 @@ function ActionsPageInner() {
                     onChange={(e) => setTargets(e.target.value)}
                     placeholder="@mychannel&#10;@friend_username&#10;https://t.me/other"
                   />
+                  <div className="mt-2">
+                    <TargetsPicker
+                      accounts={accountList}
+                      defaultAccountId={actionSelectedIds[0] || allAccountIds[0]}
+                      onAdd={(picked) => {
+                        const existing = targets
+                          .split(/[\r\n,]+/)
+                          .map((s) => s.trim())
+                          .filter(Boolean);
+                        const merged = Array.from(new Set([...existing, ...picked]));
+                        setTargets(merged.join("\n"));
+                      }}
+                    />
+                  </div>
                 </div>
                 <div className="grid grid-cols-2 gap-3">
                   <div>
@@ -1157,6 +1171,12 @@ function ActionsPageInner() {
                     />
                   </div>
                 </div>
+                <AccountMultiPicker
+                  accountList={accountList}
+                  selectedIds={actionSelectedIds}
+                  setSelectedIds={setActionSelectedIds}
+                  allAccountIds={allAccountIds}
+                />
               </>
             )}
 
