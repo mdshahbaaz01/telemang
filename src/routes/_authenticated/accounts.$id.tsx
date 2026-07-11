@@ -80,8 +80,14 @@ type Message = {
   photoDataUrl: string | null;
   reactions: { emoji: string; count: number; chosen: boolean }[];
   views: number | null;
-  replyMarkup?: InlineButton[][] | null;
+  replyMarkup?: ReplyMarkup | null;
 };
+
+type ReplyMarkup =
+  | { kind: "inline"; rows: InlineButton[][] }
+  | { kind: "keyboard"; rows: InlineButton[][]; oneTime?: boolean; resize?: boolean; placeholder?: string }
+  | { kind: "hide" }
+  | { kind: "forceReply"; placeholder?: string };
 
 type InlineButton =
   | { kind: "callback"; text: string; data: string; requiresPassword?: boolean }
@@ -195,9 +201,9 @@ function AccountViewerPage() {
     for (let i = messages.length - 1; i >= 0; i--) {
       const m = messages[i];
       if (m.out) continue;
-      if (!m.replyMarkup || m.replyMarkup.length === 0) continue;
-      const isReplyKb = m.replyMarkup.every((row) => row.every((b) => b.kind === "reply"));
-      if (isReplyKb) return { msg: m, rows: m.replyMarkup };
+      const rm = m.replyMarkup;
+      if (!rm || rm.kind !== "keyboard" || !rm.rows?.length) continue;
+      return { msg: m, rows: rm.rows };
     }
     return null;
   }, [messages]);
