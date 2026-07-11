@@ -1234,15 +1234,67 @@ function ActionsPageInner() {
 
             {tab === "deleteMessages" && (
               <div className="space-y-3">
-                <div>
-                  <Label>Message IDs to delete</Label>
-                  <Textarea
-                    rows={3}
-                    value={deleteIds}
-                    onChange={(e) => setDeleteIds(e.target.value)}
-                    placeholder="Leave empty to delete the linked message, or enter IDs: 1201, 1202, 1203"
-                  />
+                <div className="flex gap-2">
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant={deleteMode === "list" ? "default" : "outline"}
+                    onClick={() => setDeleteMode("list")}
+                  >
+                    IDs / single
+                  </Button>
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant={deleteMode === "range" ? "default" : "outline"}
+                    onClick={() => setDeleteMode("range")}
+                  >
+                    Link range
+                  </Button>
                 </div>
+                {deleteMode === "list" ? (
+                  <div>
+                    <Label>Message IDs to delete</Label>
+                    <Textarea
+                      rows={3}
+                      value={deleteIds}
+                      onChange={(e) => setDeleteIds(e.target.value)}
+                      placeholder="Leave empty to delete the linked message, or enter IDs: 1201, 1202, 1203"
+                    />
+                  </div>
+                ) : (
+                  <div className="space-y-2">
+                    <div>
+                      <Label>Start message link</Label>
+                      <Input
+                        value={deleteRangeStart}
+                        onChange={(e) => setDeleteRangeStart(e.target.value)}
+                        placeholder="https://t.me/<chat>/1200"
+                      />
+                    </div>
+                    <div>
+                      <Label>End message link</Label>
+                      <Input
+                        value={deleteRangeEnd}
+                        onChange={(e) => setDeleteRangeEnd(e.target.value)}
+                        placeholder="https://t.me/<chat>/1350"
+                      />
+                    </div>
+                    {(() => {
+                      const a = parseMessageLink(deleteRangeStart);
+                      const b = parseMessageLink(deleteRangeEnd);
+                      if (!a || !b) return null;
+                      if (a.chat !== b.chat)
+                        return <p className="text-xs text-destructive">Both links must be from the same chat.</p>;
+                      const span = Math.abs(b.msgId - a.msgId) + 1;
+                      return (
+                        <p className="text-xs text-muted-foreground">
+                          Will delete {span} message{span === 1 ? "" : "s"} (IDs {Math.min(a.msgId, b.msgId)}–{Math.max(a.msgId, b.msgId)}).
+                        </p>
+                      );
+                    })()}
+                  </div>
+                )}
                 <DelayFields minDelay={minDelay} maxDelay={maxDelay} setMin={setMinDelay} setMax={setMaxDelay} />
                 <AccountMultiPicker
                   accountList={accountList}
