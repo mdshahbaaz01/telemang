@@ -298,6 +298,7 @@ export async function executeReply(
       }
       try {
         const sourcePeer = await resolveSourcePeer(client, Api, input.source);
+        await ensureJoined(client, Api, sourcePeer);
         let replyPeer: any = sourcePeer;
         let replyToId = input.source.msgId;
         let topMsgId: number | undefined;
@@ -310,6 +311,7 @@ export async function executeReply(
           replyPeer = await client.getEntity(dt.chat);
           replyToId = dt.msgId;
           topMsgId = dt.msgId;
+          await ensureJoined(client, Api, replyPeer);
         }
         for (const row of rows) {
           try {
