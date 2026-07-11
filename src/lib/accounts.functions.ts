@@ -69,7 +69,7 @@ export const verifyAccountLogin = createServerFn({ method: "POST" })
 
     const apiHash = await decryptString(att.api_hash_enc);
     const sessionStr = att.session_enc ? await decryptString(att.session_enc) : "";
-    const client = await createTgClient(att.api_id, apiHash, sessionStr);
+    const client = await createTgClient(att.api_id, apiHash, sessionStr, att.id);
 
     try {
       try {
@@ -190,7 +190,7 @@ export const backfillTelegramIds = createServerFn({ method: "POST" })
       try {
         const apiHash = await decryptString(row.api_hash_enc);
         const sessionStr = await decryptString(row.session_enc);
-        const client = await createTgClient(row.api_id, apiHash, sessionStr);
+        const client = await createTgClient(row.api_id, apiHash, sessionStr, row.id);
         try {
           const me = (await client.getMe()) as {
             id?: { toString: () => string } | string | number | bigint;
