@@ -1503,6 +1503,35 @@ function ActionsPageInner() {
                     ? "Each row: the chosen account sends its message to all listed targets. Rows run in parallel — multiple accounts can post different messages into the same group at the same time, or one account can spray one message across many groups."
                     : "Every row is sent from every selected account. Same message goes out from all picked IDs in parallel."}
                 </p>
+                {broadcastMode === "per-account" && (
+                  <RangeApply
+                    label="Auto-fill rows from account range"
+                    accountsCount={accountList.length}
+                    onApply={(start, end, template, appendNumbers) => {
+                      const slice = accountList.slice(start - 1, end);
+                      if (!slice.length) return;
+                      const sharedTargets = rows[0]?.targets ?? "";
+                      const sharedFiles = rows[0]?.files;
+                      setRows(
+                        slice.map((acc, i) => {
+                          const n = start + i;
+                          const msg = template.includes("{n}")
+                            ? template.replaceAll("{n}", String(n))
+                            : appendNumbers
+                              ? `${template} ${n}`.trim()
+                              : template;
+                          return {
+                            id: crypto.randomUUID(),
+                            accountId: acc.id,
+                            message: msg,
+                            targets: sharedTargets,
+                            files: sharedFiles,
+                          };
+                        }),
+                      );
+                    }}
+                  />
+                )}
                 {broadcastMode === "all-ids" && (
                   <div className="rounded-md border border-border p-3 space-y-2">
                     <div className="flex items-center gap-2">
