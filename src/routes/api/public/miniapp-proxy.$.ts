@@ -483,6 +483,8 @@ function rewriteHtmlUrls(html: string, baseUrl: string, accountId: string) {
   };
 
   return html
+    .replace(/<meta\s+[^>]*http-equiv=(['"])content-security-policy\1[^>]*>/gi, "")
+    .replace(/\s(?:integrity|nonce)=(['"])[\s\S]*?\1/gi, "")
     .replace(/\b(src|href|action)=(['"])(.*?)\2/gi, (_m, attr, quote, value) => `${attr}=${quote}${toProxy(value)}${quote}`)
     .replace(/\bsrcset=(['"])(.*?)\1/gi, (_m, quote, value) => {
       const rewritten = String(value)
