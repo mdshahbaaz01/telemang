@@ -6,12 +6,13 @@ import { listAccounts } from "@/lib/accounts.functions";
 import {
   listReferralLinks, upsertReferralLink, deleteReferralLink,
   listReferralJoins, joinReferralFromAccounts, refreshReferralBalances,
+  summarizeReferralsByBot,
 } from "@/lib/referrals.functions";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Checkbox } from "@/components/ui/checkbox";
 import { AdminGate } from "@/components/AdminGate";
-import { ArrowLeft, Plus, Trash2, Play, RefreshCw, Download } from "lucide-react";
+import { ArrowLeft, Plus, Trash2, Play, RefreshCw, Download, ChevronDown, ChevronRight } from "lucide-react";
 import { toast } from "sonner";
 
 function downloadCsv(filename: string, rows: (string | number | null | undefined)[][]) {
@@ -59,6 +60,8 @@ function Page() {
         </div>
       </header>
       <div className="mx-auto max-w-7xl space-y-4 px-4 py-6 md:px-8">
+        <BotSummaryPanel />
+
         <div className="rounded-lg border border-border bg-card p-4">
           <h3 className="mb-3 font-semibold">Add referral link</h3>
           <div className="grid gap-2 md:grid-cols-4">
@@ -196,6 +199,95 @@ function JoinsPanel({ linkId }: { linkId: string }) {
           </tbody>
         </table>
         {!joins.data?.length && <div className="p-3 text-sm text-muted-foreground">No joins yet.</div>}
+      </div>
+    </div>
+  );
+}
+
+function BotSummaryPanel() {
+  const fn = useServerFn(summarizeReferralsByBot);
+  const q = useQuery({ queryKey: ["referrals-by-bot"], queryFn: () => fn() });
+  const [open, setOpen] = useState<Set<string>>(new Set());
+
+  const toggle = (bot: string) => {
+    const n = new Set(open); n.has(bot) ? n.delete(bot) : n.add(bot); setOpen(n);
+  };
+
+  const exportCsv = () => {
+    const rows: (string | number | null)[][] = [["bot_username", "account", "account_id", "status", "joined_at", "ref_code", "balance"]];
+    for (const b of q.data ?? []) {
+      for (const a of b.accounts) {
+        rows.push([b.bot_username, a.name, a.account_id, a.status, a.joined_at, a.ref_code, a.balance_text ?? a.balance_numeric]);
+      }
+    }
+    downloadCsv("referrals-by-bot.csv", rows);
+  };
+
+  return (
+    <div className="rounded-lg border border-border bg-card">
+      <div className="flex items-center justify-between border-b border-border p-3">
+        <span className="font-semibold">By bot ({q.data?.length ?? 0})</span>
+        <Button size="sm" variant="outline" onClick={exportCsv} disabled={!q.data?.length}>
+          <Download className="mr-1 h-4 w-4" />CSV
+        </Button>
+      </div>
+      {q.isLoading && <div className="p-3 text-sm text-muted-foreground">Loading…</div>}
+      <div className="divide-y divide-border">
+        {(q.data ?? []).map((b) => {
+          const isOpen = open.has(b.bot_username);
+          return (
+            <div key={b.bot_username}>
+              <button
+                onClick={() => toggle(b.bot_username)}
+                className="flex w-full items-center gap-2 p-3 text-left hover:bg-muted/30"
+              >
+                {isOpen ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
+                <span className="text-sm font-medium">@{b.bot_username}</span>
+                <span className="ml-auto flex items-center gap-3 text-xs">
+                  <span className="text-muted-foreground">{b.links} link{b.links === 1 ? "" : "s"}</span>
+                  <span className="rounded bg-green-500/15 px-2 py-0.5 text-green-600 dark:text-green-400">{b.joined} joined</span>
+                  {b.errors > 0 && <span className="rounded bg-destructive/15 px-2 py-0.5 text-destructive">{b.errors} err</span>}
+                  {b.pending > 0 && <span className="rounded bg-yellow-500/15 px-2 py-0.5 text-yellow-600 dark:text-yellow-400">{b.pending} pending</span>}
+                  {b.totalBalance > 0 && <span className="text-muted-foreground">Σ {b.totalBalance.toLocaleString()}</span>}
+                </span>
+              </button>
+              {isOpen && (
+                <div className="overflow-x-auto border-t border-border bg-muted/10">
+                  <table className="w-full text-xs">
+                    <thead className="text-left text-muted-foreground">
+                      <tr>
+                        <th className="p-2">Account</th>
+                        <th className="p-2">Account ID</th>
+                        <th className="p-2">Status</th>
+                        <th className="p-2">Joined at</th>
+                        <th className="p-2">Ref code</th>
+                        <th className="p-2">Balance</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {b.accounts.length === 0 && (
+                        <tr><td className="p-2 text-muted-foreground" colSpan={6}>No joins yet for this bot.</td></tr>
+                      )}
+                      {b.accounts.map((a, i) => (
+                        <tr key={`${a.account_id}-${i}`} className="border-t border-border">
+                          <td className="p-2">{a.name}</td>
+                          <td className="p-2 font-mono text-[10px] text-muted-foreground">{a.account_id.slice(0, 8)}…</td>
+                          <td className="p-2">{a.status}</td>
+                          <td className="p-2">{a.joined_at ? new Date(a.joined_at).toLocaleString() : "—"}</td>
+                          <td className="p-2 font-mono">{a.ref_code ?? "—"}</td>
+                          <td className="p-2 font-mono">{a.balance_text ?? a.balance_numeric ?? "—"}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </div>
+          );
+        })}
+        {q.data && q.data.length === 0 && (
+          <div className="p-3 text-sm text-muted-foreground">Add a referral link and run "Join with accounts" to see per-bot stats here.</div>
+        )}
       </div>
     </div>
   );

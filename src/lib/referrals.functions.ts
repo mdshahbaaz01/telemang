@@ -24,6 +24,80 @@ export const listReferralLinks = createServerFn({ method: "GET" })
     return data ?? [];
   });
 
+// Aggregate joins grouped by bot username. For each bot: total links,
+// total joined accounts, error count, and the list of joined accounts
+// (with human-readable names) so the user can see which IDs referred.
+export const summarizeReferralsByBot = createServerFn({ method: "GET" })
+  .middleware([requireSupabaseAuth])
+  .handler(async ({ context }) => {
+    const [linksRes, joinsRes, accsRes] = await Promise.all([
+      context.supabase.from("referral_links").select("id, bot_username, my_ref_code, note"),
+      context.supabase.from("referral_joins").select("account_id, status, joined_at, referral_link_id, last_balance_numeric, last_balance_text"),
+      context.supabase.from("telegram_accounts").select("id, first_name, username, phone"),
+    ]);
+    if (linksRes.error) throw linksRes.error;
+    if (joinsRes.error) throw joinsRes.error;
+
+    const nameFor = new Map<string, string>();
+    for (const a of accsRes.data ?? []) {
+      nameFor.set(a.id as string, (a.first_name || a.username || a.phone || (a.id as string).slice(0, 6)) as string);
+    }
+    const linkById = new Map<string, { bot_username: string; my_ref_code: string | null; note: string | null }>();
+    for (const l of linksRes.data ?? []) linkById.set(l.id as string, l as any);
+
+    type BotRow = {
+      bot_username: string;
+      links: number;
+      joined: number;
+      errors: number;
+      pending: number;
+      totalBalance: number;
+      accounts: Array<{
+        account_id: string;
+        name: string;
+        status: string;
+        joined_at: string | null;
+        ref_code: string | null;
+        note: string | null;
+        balance_numeric: number | null;
+        balance_text: string | null;
+      }>;
+    };
+    const map = new Map<string, BotRow>();
+
+    // Ensure every bot with a link appears even if it has 0 joins
+    for (const l of linksRes.data ?? []) {
+      const bot = String(l.bot_username);
+      const cur = map.get(bot) ?? { bot_username: bot, links: 0, joined: 0, errors: 0, pending: 0, totalBalance: 0, accounts: [] };
+      cur.links += 1;
+      map.set(bot, cur);
+    }
+
+    for (const j of joinsRes.data ?? []) {
+      const link = linkById.get(j.referral_link_id as string);
+      if (!link) continue;
+      const cur = map.get(link.bot_username) ?? { bot_username: link.bot_username, links: 0, joined: 0, errors: 0, pending: 0, totalBalance: 0, accounts: [] };
+      const status = String(j.status ?? "pending");
+      if (status === "joined") cur.joined += 1;
+      else if (status === "error") cur.errors += 1;
+      else cur.pending += 1;
+      if (typeof j.last_balance_numeric === "number") cur.totalBalance += j.last_balance_numeric;
+      cur.accounts.push({
+        account_id: j.account_id as string,
+        name: nameFor.get(j.account_id as string) ?? String(j.account_id).slice(0, 6),
+        status,
+        joined_at: (j.joined_at as string) ?? null,
+        ref_code: link.my_ref_code,
+        note: link.note,
+        balance_numeric: (j.last_balance_numeric as number) ?? null,
+        balance_text: (j.last_balance_text as string) ?? null,
+      });
+      map.set(link.bot_username, cur);
+    }
+
+    return [...map.values()].sort((a, b) => b.joined - a.joined);
+  });
+
 export const upsertReferralLink = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .inputValidator((d: unknown) =>
