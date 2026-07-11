@@ -168,6 +168,18 @@ function AccountViewerPage() {
   const activeDialog = dialogs.find((d) => d.peerKey === activePeer);
   const messages: Message[] = historyQ.data?.messages ?? [];
 
+  // Latest persistent reply-keyboard from an incoming bot message
+  const latestReplyKeyboard = useMemo(() => {
+    for (let i = messages.length - 1; i >= 0; i--) {
+      const m = messages[i];
+      if (m.out) continue;
+      if (!m.replyMarkup || m.replyMarkup.length === 0) continue;
+      const isReplyKb = m.replyMarkup.every((row) => row.every((b) => b.kind === "reply"));
+      if (isReplyKb) return { msg: m, rows: m.replyMarkup };
+    }
+    return null;
+  }, [messages]);
+
   // Mark read when opening
   useEffect(() => {
     if (!activePeer) return;
