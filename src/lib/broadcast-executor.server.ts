@@ -90,6 +90,21 @@ async function resolveSourcePeer(client: any, Api: any, src: SourceRef) {
   }
 }
 
+// Auto-join a channel/supergroup if the account isn't already a member.
+// Skips plain groups (no invite hash here) and private c/<id> without link.
+async function ensureJoined(client: any, Api: any, entity: any) {
+  try {
+    if (!entity || !entity.className) return;
+    if (!/^Channel$/i.test(entity.className)) return;
+    if (entity.left === false || entity.creator || entity.adminRights) return;
+    await client.invoke(new Api.channels.JoinChannel({ channel: entity }));
+  } catch (e) {
+    const em = e instanceof Error ? e.message : String(e);
+    if (/ALREADY_PARTICIPANT|USER_ALREADY/i.test(em)) return;
+    // swallow — reply/comment will surface a clear error if permission is still missing
+  }
+}
+
 function pickDiscussionTarget(disc: any) {
   const chats = (disc?.chats ?? []) as any[];
   const messages = (disc?.messages ?? []) as any[];
@@ -283,6 +298,7 @@ export async function executeReply(
       }
       try {
         const sourcePeer = await resolveSourcePeer(client, Api, input.source);
+        await ensureJoined(client, Api, sourcePeer);
         let replyPeer: any = sourcePeer;
         let replyToId = input.source.msgId;
         let topMsgId: number | undefined;
@@ -295,6 +311,7 @@ export async function executeReply(
           replyPeer = await client.getEntity(dt.chat);
           replyToId = dt.msgId;
           topMsgId = dt.msgId;
+          await ensureJoined(client, Api, replyPeer);
         }
         for (const row of rows) {
           try {

@@ -345,6 +345,25 @@ export const Route = createFileRoute("/api/public/actions-stream")({
               return peer;
             };
 
+            // Auto-join a channel/supergroup if the account isn't already a member.
+            // Safe to call for any entity: broadcasts return early, private c/<id>
+            // sources cannot be joined without an invite link so we skip those, and
+            // an already-joined channel throws USER_ALREADY_PARTICIPANT which we swallow.
+            const ensureJoined = async (client: any, entity: any, label: string, accountId: string) => {
+              try {
+                if (!entity || !entity.className) return;
+                if (!/^Channel$/i.test(entity.className)) return; // plain groups: can't join via link
+                if (entity.left === false || entity.creator || entity.adminRights) return; // already in
+                await client.invoke(new Api.channels.JoinChannel({ channel: entity }));
+                send("log", { accountId, level: "info", message: `Joined ${label}` });
+                await logDb(accountId, label, "info", `Joined ${label} before commenting/replying`);
+              } catch (e) {
+                const em = errorText(e);
+                if (/ALREADY_PARTICIPANT|USER_ALREADY/i.test(em)) return;
+                send("log", { accountId, level: "warn", message: `Auto-join ${label} failed: ${em}` });
+              }
+            };
+
             const resolveTarget = async (client: any, t: string) => {
               return resolveTargetEntity(client, Api, t);
             };
@@ -712,6 +731,8 @@ export const Route = createFileRoute("/api/public/actions-stream")({
                   setTimeout(r, jitter(body.minDelay, body.maxDelay)),
                 );
                 const sourcePeer = await resolveSource(client, src);
+                // Auto-join channel first if the account is not a member.
+                await ensureJoined(client, sourcePeer, src.chat, accountId);
                 let replyPeer: any = sourcePeer;
                 let replyToId = src.msgId;
                 let topMsgId: number | undefined;
@@ -728,6 +749,8 @@ export const Route = createFileRoute("/api/public/actions-stream")({
                   replyPeer = await client.getEntity(discussionTarget.chat);
                   replyToId = discussionTarget.msgId;
                   topMsgId = discussionTarget.msgId;
+                  // Also join the linked discussion group so comments can be posted.
+                  await ensureJoined(client, replyPeer, `${src.chat} (discussion)`, accountId);
                   // View the post like a real reader before commenting
                   try {
                     await client.invoke(
