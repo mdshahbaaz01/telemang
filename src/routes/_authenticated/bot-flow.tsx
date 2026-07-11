@@ -558,6 +558,7 @@ function BotFlowPage() {
 function MiniAppFrame({ url, title, accountId }: { url: string; title: string; accountId: string }) {
   const ref = useRef<HTMLIFrameElement | null>(null);
   const joinFn = useServerFn(joinFromLink);
+  const [nonce, setNonce] = useState(0);
   const [overlay, setOverlay] = useState<
     | { status: "loading"; url: string }
     | { status: "ready"; url: string; peerKey: string; title: string; note: string }
@@ -590,8 +591,16 @@ function MiniAppFrame({ url, title, accountId }: { url: string; title: string; a
   });
   return (
     <div className="relative h-full w-full">
+      <button
+        type="button"
+        className="absolute right-1 top-1 z-10 rounded bg-background/80 p-1 text-muted-foreground shadow hover:bg-background"
+        title="Refresh this mini app"
+        onClick={() => setNonce((n) => n + 1)}
+      >
+        <RefreshCw className="h-3.5 w-3.5" />
+      </button>
       <iframe
-        key={url}
+        key={`${url}#${nonce}`}
         ref={ref}
         src={proxifyMiniAppUrl(url, accountId)}
         title={title}
