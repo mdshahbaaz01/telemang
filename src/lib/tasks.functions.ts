@@ -655,6 +655,7 @@ export const processNextJoin = createServerFn({ method: "POST" })
           const match = msg.match(/FLOOD_WAIT_?(\d+)/i);
           const seconds = err.seconds ?? (match ? Number(match[1]) : 60);
           const pausedUntil = new Date(Date.now() + seconds * 1000).toISOString();
+          const acctLabel = acct.phone ?? acct.id.slice(0, 8);
           await supabase
             .from("telegram_accounts")
             .update({ paused_until: pausedUntil, last_error: msg })
@@ -668,15 +669,19 @@ export const processNextJoin = createServerFn({ method: "POST" })
             error: `FloodWait ${seconds}s`,
             processed_at: new Date().toISOString(),
           };
+          const untilTime = new Date(pausedUntil).toLocaleTimeString();
           await log(
             task.id,
             "warn",
-            `FloodWait ${seconds}s — Telegram rate limited this account until ${pausedUntil}`,
+            `FloodWait ${seconds}s on @${item.target} — account [${acctLabel}] paused until ${untilTime}. Reason: Telegram rate limit (${msg.trim()}). Will auto-resume.`,
           );
           return {
             done: false,
             paused: true,
             message: `FloodWait ${seconds}s`,
+            seconds,
+            pausedUntil,
+            target: item.target,
           };
         } else {
           statusUpdate = {
