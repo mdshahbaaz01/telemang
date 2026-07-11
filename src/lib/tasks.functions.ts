@@ -266,6 +266,8 @@ export const updateGroup = createServerFn({ method: "POST" })
       .parse(d),
   )
   .handler(async ({ data, context }) => {
+    // Dedupe target list up-front so every account gets the same clean set.
+    data.targets = dedupeTargets(data.targets);
     const { data: tasks, error } = await context.supabase
       .from("join_tasks")
       .select("id, account_id")
