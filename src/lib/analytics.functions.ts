@@ -22,7 +22,7 @@ export const getAnalytics = createServerFn({ method: "POST" })
 
     // Load runs + logs in parallel
     const [runsRes, logsRes, accsRes] = await Promise.all([
-      context.supabase.from("action_runs").select("id, kind, created_at, ok, fail").gte("created_at", from),
+      context.supabase.from("action_runs").select("id, kind, created_at, totals").gte("created_at", from),
       context.supabase.from("action_logs").select("account_id, target, level, created_at").gte("created_at", from).limit(20000),
       context.supabase.from("telegram_accounts").select("id, first_name, username, phone"),
     ]);
@@ -66,8 +66,9 @@ export const getAnalytics = createServerFn({ method: "POST" })
     for (const r of runs) {
       const k = String(r.kind ?? "unknown");
       const cur = perKindMap.get(k) ?? { ok: 0, error: 0 };
-      cur.ok += Number(r.ok ?? 0);
-      cur.error += Number(r.fail ?? 0);
+      const t = (r.totals ?? {}) as { ok?: number; fail?: number };
+      cur.ok += Number(t.ok ?? 0);
+      cur.error += Number(t.fail ?? 0);
       perKindMap.set(k, cur);
     }
 
