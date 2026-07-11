@@ -449,7 +449,20 @@ function ActionsPageInner() {
   };
 
   const run = async (mode: "apply" | "clear" = "apply") => {
-    const src = parseMessageLink(source);
+    let src = parseMessageLink(source);
+    if (tab === "deleteMessages" && deleteMode === "range") {
+      const a = parseMessageLink(deleteRangeStart);
+      const b = parseMessageLink(deleteRangeEnd);
+      if (!a || !b) {
+        toast.error("Enter valid start and end message links");
+        return;
+      }
+      if (a.chat !== b.chat) {
+        toast.error("Start and end links must be from the same chat");
+        return;
+      }
+      src = a;
+    }
     if (!src) {
       toast.error("Enter a valid message link (https://t.me/<chat>/<id>)");
       return;
@@ -494,11 +507,25 @@ function ActionsPageInner() {
       if (!editText.trim()) return toast.error("Enter replacement text");
       op = { kind: "edit", source: src, message: editText.trim(), format: textFormat };
     } else if (tab === "deleteMessages") {
-      const ids = deleteIds
-        .split(/[\s,]+/)
-        .map((s) => Number(s.trim()))
-        .filter((n) => Number.isInteger(n) && n > 0);
-      const messageIds = ids.length ? ids : [src.msgId];
+      let messageIds: number[];
+      if (deleteMode === "range") {
+        const a = parseMessageLink(deleteRangeStart)!;
+        const b = parseMessageLink(deleteRangeEnd)!;
+        const lo = Math.min(a.msgId, b.msgId);
+        const hi = Math.max(a.msgId, b.msgId);
+        const span = hi - lo + 1;
+        if (span > 2000) {
+          toast.error(`Range too large (${span}). Max 2000 messages per run.`);
+          return;
+        }
+        messageIds = Array.from({ length: span }, (_, i) => lo + i);
+      } else {
+        const ids = deleteIds
+          .split(/[\s,]+/)
+          .map((s) => Number(s.trim()))
+          .filter((n) => Number.isInteger(n) && n > 0);
+        messageIds = ids.length ? ids : [src.msgId];
+      }
       op = { kind: "deleteMessages", chat: src.chat, messageIds, revoke: true };
     } else {
       // handled below in runBroadcast
