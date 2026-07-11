@@ -15,6 +15,12 @@ import { Button } from "@/components/ui/button";
 import { AdminGate } from "@/components/AdminGate";
 import { toast } from "sonner";
 
+// Simple fleet-wide state shared across TaskColumn instances.
+type FleetCtx = {
+  acquire: () => Promise<() => void>; // returns release()
+  autoResume: boolean;
+};
+
 export const Route = createFileRoute("/_authenticated/groups/$id")({
   component: () => (
     <AdminGate>
@@ -43,12 +49,78 @@ function GroupRunner() {
   const runAllRef = useRef<Map<string, () => void>>(new Map());
   const startAllRef = useRef<Map<string, () => void>>(new Map());
 
+  // Fleet settings (persisted in localStorage)
+  const [maxParallel, setMaxParallel] = useState<number>(() => {
+    if (typeof window === "undefined") return 5;
+    const v = Number(window.localStorage.getItem("fleet.maxParallelJoins") || 5);
+    return Number.isFinite(v) && v >= 1 ? v : 5;
+  });
+  const [autoResume, setAutoResume] = useState<boolean>(() => {
+    if (typeof window === "undefined") return true;
+    return window.localStorage.getItem("fleet.autoResume") !== "0";
+  });
+  useEffect(() => {
+    window.localStorage.setItem("fleet.maxParallelJoins", String(maxParallel));
+  }, [maxParallel]);
+  useEffect(() => {
+    window.localStorage.setItem("fleet.autoResume", autoResume ? "1" : "0");
+  }, [autoResume]);
+
+  // Semaphore that caps concurrent active task loops fleet-wide.
+  const semRef = useRef<{
+    limit: number;
+    active: number;
+    queue: Array<() => void>;
+  }>({ limit: maxParallel, active: 0, queue: [] });
+  useEffect(() => {
+    semRef.current.limit = maxParallel;
+    // Wake queued waiters if the limit grew.
+    while (
+      semRef.current.active < semRef.current.limit &&
+      semRef.current.queue.length
+    ) {
+      const next = semRef.current.queue.shift();
+      if (next) {
+        semRef.current.active++;
+        next();
+      }
+    }
+  }, [maxParallel]);
+  const fleetCtx = useMemo<FleetCtx>(
+    () => ({
+      autoResume,
+      acquire: () =>
+        new Promise((resolve) => {
+          const sem = semRef.current;
+          const grant = () =>
+            resolve(() => {
+              sem.active = Math.max(0, sem.active - 1);
+              const next = sem.queue.shift();
+              if (next) {
+                sem.active++;
+                next();
+              }
+            });
+          if (sem.active < sem.limit) {
+            sem.active++;
+            grant();
+          } else {
+            sem.queue.push(grant);
+          }
+        }),
+    }),
+    [autoResume],
+  );
+
   const startAll = () => {
     setAllRunning(true);
     startAllRef.current.forEach((fn) => fn());
   };
   const stopAll = () => {
     setAllRunning(false);
+    // Drain queued waiters so nothing kicks in after Pause.
+    semRef.current.queue.length = 0;
+    semRef.current.active = 0;
     runAllRef.current.forEach((fn) => fn());
   };
 
@@ -130,6 +202,34 @@ function GroupRunner() {
           </div>
         </header>
 
+        <section className="mb-4 flex flex-wrap items-center gap-4 rounded-lg border border-border bg-card px-4 py-3 text-sm">
+          <label className="flex items-center gap-2">
+            <span className="text-muted-foreground">Max parallel accounts</span>
+            <input
+              type="number"
+              min={1}
+              max={100}
+              value={maxParallel}
+              onChange={(e) =>
+                setMaxParallel(Math.max(1, Math.min(100, Number(e.target.value) || 1)))
+              }
+              className="h-8 w-20 rounded border border-border bg-background px-2"
+            />
+          </label>
+          <label className="flex items-center gap-2">
+            <input
+              type="checkbox"
+              checked={autoResume}
+              onChange={(e) => setAutoResume(e.target.checked)}
+            />
+            <span>Auto-resume after FloodWait</span>
+          </label>
+          <span className="ml-auto text-xs text-muted-foreground">
+            Running now: {Math.min(semRef.current.active, tasks.length)} · queued:{" "}
+            {semRef.current.queue.length}
+          </span>
+        </section>
+
         {groupQ.isLoading ? (
           <Loader size="sm" />
         ) : (
@@ -147,6 +247,7 @@ function GroupRunner() {
                 registerStart={(fn) => startAllRef.current.set(t.id, fn)}
                 registerStop={(fn) => runAllRef.current.set(t.id, fn)}
                 onStats={reportStats}
+                fleet={fleetCtx}
               />
             ))}
           </div>
