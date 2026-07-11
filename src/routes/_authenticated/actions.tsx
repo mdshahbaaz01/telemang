@@ -475,7 +475,7 @@ function ActionsPageInner() {
       return;
     }
     const runAccountIds =
-      (tab === "react" || tab === "vote" || tab === "edit" || tab === "deleteMessages") && actionSelectedIds.length
+      (tab === "react" || tab === "vote" || tab === "edit" || tab === "deleteMessages" || tab === "forward") && actionSelectedIds.length
         ? actionSelectedIds
         : allAccountIds;
 
