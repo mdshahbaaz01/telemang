@@ -746,6 +746,7 @@ function ActionsPageInner() {
       accountIds: [],
       minDelay,
       maxDelay,
+      concurrency,
       op: { kind: "reply", source: src, viaDiscussion: tab === "comment", rows: cleaned },
     });
   };
@@ -830,6 +831,7 @@ function ActionsPageInner() {
           accountIds: [],
           minDelay,
           maxDelay,
+          concurrency,
           op: { kind: "broadcast", rows: cleaned },
         }),
         signal: ac.signal,
