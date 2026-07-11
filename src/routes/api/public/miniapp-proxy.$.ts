@@ -36,7 +36,7 @@ function buildOverrideScript(accountId: string, upstreamUrl: string) {
     try {
       const u = new URL(UPSTREAM);
       if (location.pathname.startsWith(PROXY_PREFIX)) {
-        history.replaceState(history.state, '', u.pathname + u.search + location.hash);
+        history.replaceState(history.state, '', location.origin + u.pathname + u.search + location.hash);
       }
     } catch {}
     const hostPost = (eventType, eventData) => {
@@ -233,7 +233,7 @@ function buildOverrideScript(accountId: string, upstreamUrl: string) {
         const hashIdx = target.indexOf('#');
         const bare = hashIdx === -1 ? target : target.slice(0, hashIdx);
         const hash = hashIdx === -1 ? '' : target.slice(hashIdx);
-        return PROXY_PREFIX + encodeURIComponent(bare) + '?a=' + encodeURIComponent(ACCT) + hash;
+        return location.origin + PROXY_PREFIX + encodeURIComponent(bare) + '?a=' + encodeURIComponent(ACCT) + hash;
       } catch { return s; }
     };
     const isTgLink = (raw) => {
@@ -469,11 +469,11 @@ function buildOverrideScript(accountId: string, upstreamUrl: string) {
 })();`;
 }
 
-function proxyUrl(target: string, accountId: string) {
-  return `/api/public/miniapp-proxy/${encodeURIComponent(target)}?a=${encodeURIComponent(accountId)}`;
+function proxyUrl(target: string, accountId: string, proxyOrigin = "") {
+  return `${proxyOrigin}/api/public/miniapp-proxy/${encodeURIComponent(target)}?a=${encodeURIComponent(accountId)}`;
 }
 
-function rewriteHtmlUrls(html: string, baseUrl: string, accountId: string) {
+function rewriteHtmlUrls(html: string, baseUrl: string, accountId: string, proxyOrigin: string) {
   const base = new URL(baseUrl);
   const toProxy = (raw: string) => {
     if (!raw || raw.startsWith("#") || raw.startsWith("data:") || raw.startsWith("blob:") || raw.startsWith("mailto:") || raw.startsWith("tel:")) {
@@ -482,7 +482,7 @@ function rewriteHtmlUrls(html: string, baseUrl: string, accountId: string) {
     try {
       const absolute = new URL(raw, base).toString();
       if (!/^https?:\/\//i.test(absolute)) return raw;
-      return proxyUrl(absolute, accountId);
+      return proxyUrl(absolute, accountId, proxyOrigin);
     } catch {
       return raw;
     }
@@ -505,12 +505,12 @@ function rewriteHtmlUrls(html: string, baseUrl: string, accountId: string) {
     });
 }
 
-function rewriteCssUrls(css: string, baseUrl: string, accountId: string) {
+function rewriteCssUrls(css: string, baseUrl: string, accountId: string, proxyOrigin: string) {
   const base = new URL(baseUrl);
   return css.replace(/url\((['"]?)(.*?)\1\)/gi, (_m, quote, value) => {
     if (!value || value.startsWith("data:") || value.startsWith("blob:")) return `url(${quote}${value}${quote})`;
     try {
-      return `url(${quote}${proxyUrl(new URL(value, base).toString(), accountId)}${quote})`;
+      return `url(${quote}${proxyUrl(new URL(value, base).toString(), accountId, proxyOrigin)}${quote})`;
     } catch {
       return `url(${quote}${value}${quote})`;
     }
@@ -523,6 +523,7 @@ async function handle(request: Request, params: { _splat?: string }) {
     return new Response("Missing target URL", { status: 400 });
   }
   const proxyReqUrl = new URL(request.url);
+  const proxyOrigin = proxyReqUrl.origin;
   const accountId = proxyReqUrl.searchParams.get("a") || "anon";
 
   const upstreamHeaders = new Headers();
@@ -559,9 +560,9 @@ async function handle(request: Request, params: { _splat?: string }) {
     const upstreamDir = new URL(".", finalUrl).toString();
     const script = `<script>${buildOverrideScript(accountId, finalUrl)}</script>`;
     const base = `<base href="${upstreamDir}">`;
-    html = rewriteHtmlUrls(html, finalUrl, accountId);
+    html = rewriteHtmlUrls(html, finalUrl, accountId, proxyOrigin);
     if (/<head[^>]*>/i.test(html)) {
-      html = html.replace(/<head([^>]*)>/i, `<head$1>${base}${script}`);
+      html = html.replace(/<head([^>]*)>/i, `<head$1>${script}${base}`);
     } else {
       html = `${base}${script}${html}`;
     }
@@ -569,7 +570,7 @@ async function handle(request: Request, params: { _splat?: string }) {
     return new Response(html, { status: upstream.status, headers: outHeaders });
   }
   if (ctype.includes("text/css")) {
-    const css = rewriteCssUrls(await upstream.text(), upstream.url || target, accountId);
+    const css = rewriteCssUrls(await upstream.text(), upstream.url || target, accountId, proxyOrigin);
     outHeaders.set("content-type", "text/css; charset=utf-8");
     return new Response(css, { status: upstream.status, headers: outHeaders });
   }
