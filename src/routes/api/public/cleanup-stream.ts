@@ -112,7 +112,11 @@ export const Route = createFileRoute("/api/public/cleanup-stream")({
             const { Api } = await import("telegram");
             const { default: bigInt } = await import("big-integer");
 
-            const runOne = async (accountId: string, targets: typeof body.jobs[number]["targets"]) => {
+            const runOne = async (
+              accountId: string,
+              targets: typeof body.jobs[number]["targets"],
+              links: string[] | undefined,
+            ) => {
               send("log", { accountId, kind: "info", message: "Connecting…" });
               let client;
               try {
@@ -123,12 +127,83 @@ export const Route = createFileRoute("/api/public/cleanup-stream")({
                   kind: "error",
                   message: `Connect failed: ${(e as Error).message}`,
                 });
-                send("done", { accountId, ok: 0, fail: targets.length });
+                send("done", { accountId, ok: 0, fail: (targets.length || (links?.length ?? 0)) });
                 return;
               }
               let ok = 0;
               let fail = 0;
               try {
+                if (body.action === "leaveByLinks") {
+                  for (const raw of links ?? []) {
+                    if (abortSignal.aborted) break;
+                    const label = raw;
+                    try {
+                      const link = raw.trim().replace(/^https?:\/\//i, "").replace(/^t\.me\//i, "").replace(/^telegram\.me\//i, "");
+                      // Private invite: +HASH or joinchat/HASH
+                      const inviteMatch = link.match(/^(?:joinchat\/)?\+?([A-Za-z0-9_-]{16,})$/);
+                      const isInvite = link.startsWith("+") || link.startsWith("joinchat/");
+                      if (isInvite && inviteMatch) {
+                        const hash = inviteMatch[1];
+                        // Resolve invite → channel id, then leave (import not needed).
+                        try {
+                          const info: any = await client.invoke(new Api.messages.CheckChatInvite({ hash }));
+                          const chat = info?.chat;
+                          if (chat?.id && chat?.accessHash) {
+                            const peer = new Api.InputPeerChannel({
+                              channelId: bigInt(String(chat.id)),
+                              accessHash: bigInt(String(chat.accessHash)),
+                            });
+                            await client.invoke(new Api.channels.LeaveChannel({ channel: peer }));
+                            ok++;
+                            send("log", { accountId, kind: "ok", target: label, message: "left (invite)" });
+                            continue;
+                          }
+                          // Already a member — CheckChatInvite returns ChatInviteAlready with `chat`; handled above.
+                          throw new Error("Invite not resolvable (not a channel/supergroup)");
+                        } catch (e) {
+                          const em = (e as Error).message || String(e);
+                          if (/INVITE_HASH_EXPIRED|INVITE_HASH_INVALID/i.test(em)) {
+                            throw new Error(em + " — link expired or revoked");
+                          }
+                          throw e;
+                        }
+                      }
+                      // Private numeric link: t.me/c/<id>/...
+                      const cMatch = link.match(/^c\/(\d+)/i);
+                      if (cMatch) {
+                        const entity: any = await client.getEntity(new Api.PeerChannel({ channelId: bigInt(cMatch[1]) }));
+                        await client.invoke(new Api.channels.LeaveChannel({ channel: entity }));
+                        ok++;
+                        send("log", { accountId, kind: "ok", target: label, message: "left" });
+                        continue;
+                      }
+                      // Public @username or t.me/username[/msg]
+                      const uname = link.replace(/^@/, "").split("/")[0];
+                      if (!uname) throw new Error("Empty username");
+                      const entity: any = await client.getEntity(uname);
+                      if (entity?.className === "Channel") {
+                        await client.invoke(new Api.channels.LeaveChannel({ channel: entity }));
+                      } else if (entity?.className === "Chat") {
+                        await client.invoke(
+                          new Api.messages.DeleteChatUser({
+                            chatId: bigInt(String(entity.id)),
+                            userId: new Api.InputUserSelf(),
+                            revokeHistory: false,
+                          }),
+                        );
+                      } else {
+                        throw new Error(`Not a channel/group (${entity?.className ?? "unknown"})`);
+                      }
+                      ok++;
+                      send("log", { accountId, kind: "ok", target: label, message: "left" });
+                    } catch (err) {
+                      fail++;
+                      send("log", { accountId, kind: "error", target: label, message: (err as Error).message || String(err) });
+                    }
+                    await new Promise((r) => setTimeout(r, 350));
+                  }
+                  return;
+                }
                 for (const t of targets) {
                   if (abortSignal.aborted) break;
                   const label = t.title;
