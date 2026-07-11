@@ -11,6 +11,7 @@ import {
   MousePointerClick,
   UserCog,
   Sparkles,
+  Search,
 } from "lucide-react";
 import {
   Sidebar,
@@ -54,6 +55,7 @@ const items: Item[] = [
   { title: "Buttons", to: "/buttons", icon: MousePointerClick },
   { title: "Bulk Mix", to: "/bulk-mix", icon: Sparkles },
   { title: "Profile Updater", to: "/profile-updater", icon: UserCog },
+  { title: "Global Search", to: "/search", icon: Search },
 ];
 
 export function AppSidebar() {
