@@ -7,6 +7,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { listAccounts } from "@/lib/accounts.functions";
 import { loadPoll, listActionRuns, deleteActionRun, clearActionRuns } from "@/lib/actions.functions";
+import { precheckBroadcastTargets, type PrecheckResult } from "@/lib/precheck-targets.functions";
 import {
   getBroadcastReplies,
   refreshReplyThread,
@@ -339,6 +340,8 @@ function ActionsPageInner() {
   const [rows, setRows] = useState<BroadcastRow[]>([
     { id: "broadcast-row-1", message: "", targets: "" },
   ]);
+  const precheckFn = useServerFn(precheckBroadcastTargets);
+  const [precheckByRow, setPrecheckByRow] = useState<Record<string, { loading: boolean; error?: string; data?: PrecheckResult[] }>>({});
   const [replyRows, setReplyRows] = useState<ReplyRow[]>([
     { id: "reply-row-1", message: "" },
   ]);
@@ -1633,6 +1636,100 @@ function ActionsPageInner() {
                         />
                       </div>
                     </div>
+                    {(() => {
+                      const pc = precheckByRow[row.id];
+                      const runPrecheck = async () => {
+                        const rowTargets = row.targets
+                          .split(/\r?\n/)
+                          .map((s) => s.trim())
+                          .filter(Boolean);
+                        if (!rowTargets.length) {
+                          setPrecheckByRow((m) => ({ ...m, [row.id]: { loading: false, error: "No targets to check" } }));
+                          return;
+                        }
+                        const accountIds =
+                          broadcastMode === "per-account"
+                            ? row.accountId
+                              ? [row.accountId]
+                              : []
+                            : broadcastSelectedIds.length
+                            ? broadcastSelectedIds
+                            : allAccountIds;
+                        if (!accountIds.length) {
+                          setPrecheckByRow((m) => ({ ...m, [row.id]: { loading: false, error: "Pick at least one account first" } }));
+                          return;
+                        }
+                        setPrecheckByRow((m) => ({ ...m, [row.id]: { loading: true } }));
+                        try {
+                          const res = await precheckFn({ data: { accountIds, targets: rowTargets, deep: true } });
+                          setPrecheckByRow((m) => ({ ...m, [row.id]: { loading: false, data: res } }));
+                        } catch (e: any) {
+                          setPrecheckByRow((m) => ({ ...m, [row.id]: { loading: false, error: e?.message || "Precheck failed" } }));
+                        }
+                      };
+                      return (
+                        <div className="rounded-md border border-dashed border-border p-2 space-y-2">
+                          <div className="flex items-center gap-2">
+                            <Button type="button" size="sm" variant="outline" onClick={runPrecheck} disabled={pc?.loading}>
+                              {pc?.loading ? "Prechecking…" : "Precheck targets"}
+                            </Button>
+                            <p className="text-xs text-muted-foreground">
+                              Verifies each ID resolves from the sending account(s) before broadcasting. Deep scan checks dialogs + visible group members.
+                            </p>
+                            {pc?.data && (
+                              <button
+                                type="button"
+                                className="ml-auto text-xs underline text-muted-foreground"
+                                onClick={() => setPrecheckByRow((m) => { const n = { ...m }; delete n[row.id]; return n; })}
+                              >
+                                Clear
+                              </button>
+                            )}
+                          </div>
+                          {pc?.error && <p className="text-xs text-destructive">{pc.error}</p>}
+                          {pc?.data && (
+                            <div className="space-y-2 max-h-64 overflow-auto text-xs">
+                              {pc.data.map((acc) => {
+                                const ok = acc.results.filter((r) => r.ok).length;
+                                const bad = acc.results.length - ok;
+                                return (
+                                  <div key={acc.accountId} className="rounded border border-border p-2">
+                                    <div className="flex items-center gap-2 mb-1">
+                                      <span className="font-medium truncate">{acc.accountLabel}</span>
+                                      <span className="text-green-600">✓ {ok}</span>
+                                      <span className="text-destructive">✗ {bad}</span>
+                                      {bad > 0 && (
+                                        <button
+                                          type="button"
+                                          className="ml-auto underline text-muted-foreground"
+                                          onClick={() => {
+                                            const keep = acc.results.filter((r) => r.ok).map((r) => r.target);
+                                            setRows((rs) => rs.map((r) => (r.id === row.id ? { ...r, targets: keep.join("\n") } : r)));
+                                          }}
+                                        >
+                                          Keep only reachable
+                                        </button>
+                                      )}
+                                    </div>
+                                    <ul className="space-y-0.5">
+                                      {acc.results.map((r, i) => (
+                                        <li key={i} className="flex items-start gap-2">
+                                          <span className={r.ok ? "text-green-600" : "text-destructive"}>{r.ok ? "✓" : "✗"}</span>
+                                          <span className="font-mono truncate max-w-[40%]">{r.target}</span>
+                                          <span className="text-muted-foreground truncate">
+                                            {r.ok ? r.kind : r.reason}
+                                          </span>
+                                        </li>
+                                      ))}
+                                    </ul>
+                                  </div>
+                                );
+                              })}
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })()}
                     <MultiAttachmentField
                       files={row.files ?? []}
                       onChange={(fs) =>
