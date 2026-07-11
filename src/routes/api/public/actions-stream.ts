@@ -323,11 +323,21 @@ export const Route = createFileRoute("/api/public/actions-stream")({
                 // user id and produces "Could not find the input entity … PeerUser").
                 const raw = src.chat.slice(2);
                 const { default: bigInt } = await import("big-integer");
+                const tryResolve = async () => {
+                  try {
+                    return await client.getEntity(new Api.PeerChannel({ channelId: bigInt(raw) }));
+                  } catch {
+                    return await client.getEntity(`https://t.me/c/${raw}/${src.msgId}`);
+                  }
+                };
                 try {
-                  peer = await client.getEntity(new Api.PeerChannel({ channelId: bigInt(raw) }));
-                } catch {
-                  // Fallback: try the full t.me link so gramjs can resolve the invite/join state.
-                  peer = await client.getEntity(`https://t.me/c/${raw}/${src.msgId}`);
+                  peer = await tryResolve();
+                } catch (e) {
+                  // Prime gramjs entity cache by walking dialogs, then retry once.
+                  try {
+                    await client.getDialogs({ limit: 1000 });
+                  } catch {}
+                  peer = await tryResolve();
                 }
               } else {
                 peer = await client.getEntity(src.chat.replace(/^@/, ""));
