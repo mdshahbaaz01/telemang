@@ -731,6 +731,8 @@ export const Route = createFileRoute("/api/public/actions-stream")({
                   setTimeout(r, jitter(body.minDelay, body.maxDelay)),
                 );
                 const sourcePeer = await resolveSource(client, src);
+                // Auto-join channel first if the account is not a member.
+                await ensureJoined(client, sourcePeer, src.chat, accountId);
                 let replyPeer: any = sourcePeer;
                 let replyToId = src.msgId;
                 let topMsgId: number | undefined;
@@ -747,6 +749,8 @@ export const Route = createFileRoute("/api/public/actions-stream")({
                   replyPeer = await client.getEntity(discussionTarget.chat);
                   replyToId = discussionTarget.msgId;
                   topMsgId = discussionTarget.msgId;
+                  // Also join the linked discussion group so comments can be posted.
+                  await ensureJoined(client, replyPeer, `${src.chat} (discussion)`, accountId);
                   // View the post like a real reader before commenting
                   try {
                     await client.invoke(
