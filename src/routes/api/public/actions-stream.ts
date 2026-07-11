@@ -336,6 +336,23 @@ export const Route = createFileRoute("/api/public/actions-stream")({
 
             const resolveTarget = async (client: any, t: string) => {
               const cleaned = t.trim().replace(/^https?:\/\/(t\.me|telegram\.me)\//i, "").replace(/^@/, "");
+              const numMatch = cleaned.match(/^(?:user:|id:)?(-?\d+)$/i);
+              if (numMatch) {
+                const idStr = numMatch[1];
+                const n = Number(idStr);
+                try {
+                  return await client.getInputEntity(n);
+                } catch {
+                  try { await client.getDialogs({ limit: 500 }); } catch {}
+                  try {
+                    return await client.getInputEntity(n);
+                  } catch {
+                    throw new Error(
+                      `ID ${idStr} not reachable from this account (no prior interaction — Telegram requires an access_hash).`,
+                    );
+                  }
+                }
+              }
               if (/^c\/\d+/.test(cleaned)) {
                 const raw = cleaned.split("/")[1];
                 const { default: bigInt } = await import("big-integer");
