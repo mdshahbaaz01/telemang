@@ -556,10 +556,10 @@ function rewriteCssUrls(css: string, baseUrl: string, accountId: string, proxyOr
   });
 }
 
-function rewriteJsUrls(js: string, baseUrl: string, proxyOrigin: string) {
+function rewriteJsUrls(js: string, baseUrl: string, accountId: string, proxyOrigin: string) {
   try {
     const upstream = new URL(baseUrl);
-    const proxyBase = `${proxyOrigin}/api/public/miniapp-proxy/${encodeURIComponent(upstream.origin)}`;
+    const proxyBase = `${proxyOrigin}/api/public/miniapp-proxy/${encodeURIComponent(upstream.origin)}?a=${encodeURIComponent(accountId)}&u=`;
     return js.replaceAll(upstream.origin, proxyBase);
   } catch {
     return js;
@@ -624,7 +624,7 @@ async function handle(request: Request, params: { _splat?: string }) {
     return new Response(css, { status: upstream.status, headers: outHeaders });
   }
   if (ctype.includes("javascript") || ctype.includes("ecmascript") || /\.m?js(?:$|\?)/i.test(target)) {
-    const js = rewriteJsUrls(await upstream.text(), upstream.url || target, proxyOrigin);
+    const js = rewriteJsUrls(await upstream.text(), upstream.url || target, accountId, proxyOrigin);
     outHeaders.set("content-type", ctype || "application/javascript; charset=utf-8");
     return new Response(js, { status: upstream.status, headers: outHeaders });
   }
