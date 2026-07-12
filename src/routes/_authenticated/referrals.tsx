@@ -8,6 +8,7 @@ import {
   listReferralJoins, joinReferralFromAccounts, refreshReferralBalances,
   summarizeReferralsByBot, listBotFlowHistory, listBotFlowRunLogs,
 } from "@/lib/referrals.functions";
+import { listInlineButtonClicks } from "@/lib/button-clicks.functions";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -298,11 +299,17 @@ function BotSummaryPanel() {
 function BotFlowHistoryPanel() {
   const listFn = useServerFn(listBotFlowHistory);
   const logsFn = useServerFn(listBotFlowRunLogs);
+  const clicksFn = useServerFn(listInlineButtonClicks);
   const q = useQuery({ queryKey: ["botflow-history"], queryFn: () => listFn(), refetchInterval: 15000 });
   const [openId, setOpenId] = useState<string | null>(null);
   const logsQ = useQuery({
     queryKey: ["botflow-run-logs", openId],
     queryFn: () => logsFn({ data: { run_id: openId! } }),
+    enabled: !!openId,
+  });
+  const clicksQ = useQuery({
+    queryKey: ["botflow-run-clicks", openId],
+    queryFn: () => clicksFn({ data: { runId: openId!, limit: 100 } }),
     enabled: !!openId,
   });
 
