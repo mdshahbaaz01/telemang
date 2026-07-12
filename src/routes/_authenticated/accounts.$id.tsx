@@ -524,6 +524,14 @@ function AccountViewerPage() {
                 </div>
                 <div className="ml-auto flex items-center gap-2">
                   {historyQ.isFetching && <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />}
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    onClick={() => { historyQ.refetch(); dialogsQ.refetch(); }}
+                    title="Refresh chat"
+                  >
+                    <RefreshCw className={cn("h-4 w-4", historyQ.isFetching && "animate-spin")} />
+                  </Button>
                 </div>
               </div>
 
