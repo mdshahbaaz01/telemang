@@ -258,6 +258,104 @@ export type Database = {
         }
         Relationships: []
       }
+      captcha_solve_log: {
+        Row: {
+          account_id: string | null
+          answer_preview: string | null
+          context: Json
+          cost_usd: number | null
+          created_at: string
+          error: string | null
+          id: string
+          kind: string
+          latency_ms: number | null
+          provider: string
+          success: boolean
+          user_id: string
+        }
+        Insert: {
+          account_id?: string | null
+          answer_preview?: string | null
+          context?: Json
+          cost_usd?: number | null
+          created_at?: string
+          error?: string | null
+          id?: string
+          kind: string
+          latency_ms?: number | null
+          provider: string
+          success: boolean
+          user_id: string
+        }
+        Update: {
+          account_id?: string | null
+          answer_preview?: string | null
+          context?: Json
+          cost_usd?: number | null
+          created_at?: string
+          error?: string | null
+          id?: string
+          kind?: string
+          latency_ms?: number | null
+          provider?: string
+          success?: boolean
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "captcha_solve_log_account_id_fkey"
+            columns: ["account_id"]
+            isOneToOne: false
+            referencedRelation: "telegram_accounts"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      captcha_solvers: {
+        Row: {
+          api_key_encrypted: string
+          balance_cached: number | null
+          balance_checked_at: string | null
+          created_at: string
+          enabled: boolean
+          id: string
+          label: string
+          priority: number
+          provider: string
+          settings: Json
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          api_key_encrypted: string
+          balance_cached?: number | null
+          balance_checked_at?: string | null
+          created_at?: string
+          enabled?: boolean
+          id?: string
+          label?: string
+          priority?: number
+          provider: string
+          settings?: Json
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          api_key_encrypted?: string
+          balance_cached?: number | null
+          balance_checked_at?: string | null
+          created_at?: string
+          enabled?: boolean
+          id?: string
+          label?: string
+          priority?: number
+          provider?: string
+          settings?: Json
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       inline_button_clicks: {
         Row: {
           account_id: string | null
