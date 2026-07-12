@@ -3,10 +3,51 @@ import { z } from "zod";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
 import { runWithLimit } from "./p-limit";
 
+// --- ReDoS hardening ---------------------------------------------------------
+// JavaScript regex is synchronous & single-threaded; a catastrophic-backtracking
+// pattern can freeze the whole worker. We defend in depth:
+//  1) Reject obviously dangerous constructs (nested quantifiers on groups).
+//  2) Hard-cap pattern length.
+//  3) Hard-cap the input string length before .match().
+//  4) Wrap execution in a wall-clock budget and abort further rule evaluation
+//     for that account if a single match exceeds it.
+const MAX_PATTERN_LEN = 500;
+const MAX_INPUT_LEN = 2000;
+const MATCH_BUDGET_MS = 50;
+
+const DANGEROUS_PATTERNS: RegExp[] = [
+  /\([^)]*[+*][^)]*\)[+*]/,        // (a+)+ / (a*)* / (.+)+ style nested quantifiers
+  /\([^)]*\{\d+,?\d*\}[^)]*\)[+*]/, // (a{2,})+ style
+  /\([^)]+\|[^)]+\)[+*]/,           // (a|a)+ overlapping alternation
+];
+
+function assertSafeRegex(src: string): void {
+  if (src.length > MAX_PATTERN_LEN) {
+    throw new Error(`Regex too long (max ${MAX_PATTERN_LEN} chars)`);
+  }
+  for (const bad of DANGEROUS_PATTERNS) {
+    if (bad.test(src)) {
+      throw new Error("Regex rejected: potentially catastrophic backtracking pattern");
+    }
+  }
+  try { new RegExp(src); } catch (e) { throw new Error(`Bad regex: ${(e as Error).message}`); }
+}
+
+function safeMatch(text: string, re: RegExp): RegExpMatchArray | null {
+  const input = text.length > MAX_INPUT_LEN ? text.slice(0, MAX_INPUT_LEN) : text;
+  const start = Date.now();
+  const result = input.match(re);
+  if (Date.now() - start > MATCH_BUDGET_MS) {
+    // Signal so the caller can stop applying this rule further this run.
+    throw new Error(`Regex exceeded ${MATCH_BUDGET_MS}ms budget`);
+  }
+  return result;
+}
+
 const ruleSchema = z.object({
   name: z.string().min(1).max(80),
   bot_username: z.string().min(1).max(64),
-  regex: z.string().min(1).max(500),
+  regex: z.string().min(1).max(MAX_PATTERN_LEN),
   field_name: z.string().min(1).max(64),
   unit: z.string().max(20).optional().nullable(),
 });
@@ -26,8 +67,8 @@ export const upsertParseRule = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .inputValidator((d: unknown) => z.object({ id: z.string().uuid().optional(), rule: ruleSchema }).parse(d))
   .handler(async ({ data, context }) => {
-    // Validate regex compiles
-    try { new RegExp(data.rule.regex); } catch (e) { throw new Error(`Bad regex: ${(e as Error).message}`); }
+    // Validate regex compiles AND is not obviously catastrophic
+    assertSafeRegex(data.rule.regex);
     const payload = { ...data.rule, user_id: context.userId };
     const q = data.id
       ? context.supabase.from("bot_parse_rules").update(payload).eq("id", data.id).select().single()
@@ -87,7 +128,7 @@ export const runParseScan = createServerFn({ method: "POST" })
 
     // Compile regexes once
     const compiled = rules.map((r) => {
-      try { return { ...r, re: new RegExp(r.regex, "i") }; }
+      try { assertSafeRegex(r.regex); return { ...r, re: new RegExp(r.regex, "i"), disabled: false }; }
       catch { return { ...r, re: null as RegExp | null }; }
     });
 
@@ -118,7 +159,15 @@ export const runParseScan = createServerFn({ method: "POST" })
               if (!text) continue;
               for (const rule of botRules) {
                 if (!rule.re) continue;
-                const match = text.match(rule.re);
+                let match: RegExpMatchArray | null;
+                try {
+                  match = safeMatch(text, rule.re);
+                } catch (e) {
+                  // Disable this rule for the remainder of the scan and record.
+                  rule.re = null;
+                  errors.push({ accountId, message: `Rule "${rule.name}" disabled: ${(e as Error).message}` });
+                  continue;
+                }
                 if (!match) continue;
                 const raw = match[1] ?? match[0];
                 const num = Number(String(raw).replace(/[^0-9.\-]/g, ""));
