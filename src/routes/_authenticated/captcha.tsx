@@ -331,11 +331,12 @@ function SolversTab() {
         <CardHeader>
           <CardTitle className="text-base flex items-center gap-2">
             <Zap className="h-4 w-4 text-primary" />
-            Save all providers at once
+            Optional: add provider API keys (for reCAPTCHA / hCaptcha / Turnstile)
           </CardTitle>
           <p className="text-xs text-muted-foreground">
-            Paste any keys you have. Blank fields are skipped. Existing default rows are overwritten.
-            You can pick which one runs from Bot Flow / Watchlists.
+            Skip this entirely if you only face math / word / image captchas — the built-in AI
+            handles those free. Paste keys only if bots throw web-widget challenges. Blank fields
+            are skipped.
           </p>
         </CardHeader>
         <CardContent className="space-y-3">
