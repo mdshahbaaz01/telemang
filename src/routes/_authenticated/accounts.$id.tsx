@@ -832,6 +832,26 @@ function MessageRow({
                         <ExternalLink className="h-3 w-3" />
                       )}
                       <span className="max-w-[16rem] truncate">{btn.text}</span>
+                      {(btn.kind === "url" || btn.kind === "urlAuth") && (btn as any).url && (
+                        <span
+                          role="button"
+                          tabIndex={0}
+                          title="Copy link"
+                          className="ml-1 rounded p-0.5 hover:bg-background/40"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            copyWithToast((btn as any).url, toast);
+                          }}
+                          onKeyDown={(e) => {
+                            if (e.key === "Enter" || e.key === " ") {
+                              e.stopPropagation();
+                              copyWithToast((btn as any).url, toast);
+                            }
+                          }}
+                        >
+                          <Copy className="h-3 w-3" />
+                        </span>
+                      )}
                     </button>
                   );
                 })}
