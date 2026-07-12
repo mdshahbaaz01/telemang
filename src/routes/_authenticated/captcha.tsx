@@ -68,6 +68,7 @@ function CaptchaPage() {
           <TabsTrigger value="solvers">Solvers</TabsTrigger>
           <TabsTrigger value="playground">Playground</TabsTrigger>
           <TabsTrigger value="log">Solve log</TabsTrigger>
+          <TabsTrigger value="about">How it works</TabsTrigger>
         </TabsList>
 
         <TabsContent value="solvers" className="pt-4">
@@ -79,7 +80,130 @@ function CaptchaPage() {
         <TabsContent value="log" className="pt-4">
           <LogTab />
         </TabsContent>
+        <TabsContent value="about" className="pt-4">
+          <AboutTab />
+        </TabsContent>
       </Tabs>
+    </div>
+  );
+}
+
+function AboutTab() {
+  const rows: { kind: string; desc: string; who: string; auto: string }[] = [
+    {
+      kind: "Math / word puzzle",
+      desc: "Plain-text math or word question in bot reply (e.g. \"2 + 5 = ?\", \"type the third word: apple banana cherry\").",
+      who: "Built-in AI (Gemini 2.5 Flash via Lovable AI)",
+      auto: "Free — no external key needed",
+    },
+    {
+      kind: "Button-choice",
+      desc: "Bot asks to tap one specific inline button out of many (e.g. \"tap 🍎\", \"choose the number 7\").",
+      who: "Built-in AI (reads the question + button labels, picks the right one)",
+      auto: "Free — no external key needed",
+    },
+    {
+      kind: "Image captcha (distorted text)",
+      desc: "Bot sends a photo with letters/numbers to type back.",
+      who: "2Captcha → Anti-Captcha → CapSolver (priority order), then AI vision (OCR) fallback",
+      auto: "External provider key + small AI credits fallback",
+    },
+    {
+      kind: "reCAPTCHA v2 (checkbox)",
+      desc: "\"I'm not a robot\" tickbox inside a mini-app iframe.",
+      who: "2Captcha / Anti-Captcha / CapSolver",
+      auto: "Requires a provider API key",
+    },
+    {
+      kind: "reCAPTCHA v3 (invisible)",
+      desc: "Silent score-based check on page load in a mini-app.",
+      who: "2Captcha / Anti-Captcha / CapSolver",
+      auto: "Requires a provider API key",
+    },
+    {
+      kind: "hCaptcha",
+      desc: "hCaptcha challenge inside a mini-app iframe.",
+      who: "2Captcha / Anti-Captcha / CapSolver",
+      auto: "Requires a provider API key",
+    },
+    {
+      kind: "Cloudflare Turnstile",
+      desc: "Cloudflare's invisible / managed challenge inside a mini-app.",
+      who: "2Captcha / Anti-Captcha / CapSolver",
+      auto: "Requires a provider API key",
+    },
+  ];
+  return (
+    <div className="space-y-4">
+      <Card>
+        <CardHeader><CardTitle className="text-base">How the solver works</CardTitle></CardHeader>
+        <CardContent className="text-sm space-y-3 text-muted-foreground">
+          <p>
+            <strong className="text-foreground">1. Detection.</strong> Inside a Telegram mini-app iframe, the proxy scans for
+            captcha widgets (<code>data-sitekey</code>, reCAPTCHA / hCaptcha / Turnstile classes) and posts a
+            <code> captcha_detected</code> event to the app. In Bot Flow / Chat, plain-text puzzles (math, word choice)
+            and button-choice questions are read directly from the bot's reply.
+          </p>
+          <p>
+            <strong className="text-foreground">2. Dispatch.</strong> The dispatcher picks a solver by kind:
+            math &amp; button-choice go straight to the built-in AI; image / web challenges walk the enabled
+            external providers in priority order, then fall back to AI vision (OCR) for images if all providers
+            fail.
+          </p>
+          <p>
+            <strong className="text-foreground">3. Injection.</strong> The solved token is posted back into the mini-app iframe
+            and written into the correct hidden field (<code>g-recaptcha-response</code>, <code>h-captcha-response</code>,
+            <code>cf-turnstile-response</code>) plus any registered callback is fired — the widget goes green
+            without a click.
+          </p>
+          <p>
+            <strong className="text-foreground">4. Audit.</strong> Every solve (provider, kind, latency, cost, answer preview,
+            errors) is written to <em>Solve log</em>.
+          </p>
+          <p className="text-xs italic">
+            Auto-detect is <strong>off by default</strong> (toggle in the header). Turn it on only for bots that
+            actually use captchas — off means the bridge is not injected at all, keeping mini-apps light.
+          </p>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader><CardTitle className="text-base">Supported captcha types</CardTitle></CardHeader>
+        <CardContent className="p-0">
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead className="bg-muted/40 text-left">
+                <tr>
+                  <th className="px-3 py-2">Type</th>
+                  <th className="px-3 py-2">Description</th>
+                  <th className="px-3 py-2">Solved by</th>
+                  <th className="px-3 py-2">Cost</th>
+                </tr>
+              </thead>
+              <tbody>
+                {rows.map((r) => (
+                  <tr key={r.kind} className="border-t align-top">
+                    <td className="px-3 py-2 font-medium whitespace-nowrap">{r.kind}</td>
+                    <td className="px-3 py-2 text-muted-foreground">{r.desc}</td>
+                    <td className="px-3 py-2 text-muted-foreground">{r.who}</td>
+                    <td className="px-3 py-2 text-muted-foreground whitespace-nowrap">{r.auto}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader><CardTitle className="text-base">Not supported (by design)</CardTitle></CardHeader>
+        <CardContent className="text-sm text-muted-foreground space-y-1">
+          <p>• FunCaptcha / Arkose Labs (custom SDK, provider-only if you enable one).</p>
+          <p>• GeeTest slider (needs full browser automation).</p>
+          <p>• Audio captchas (rarely used inside Telegram bots).</p>
+          <p>• SMS / email OTP — those are account verification, not captchas.</p>
+        </CardContent>
+      </Card>
     </div>
   );
 }
