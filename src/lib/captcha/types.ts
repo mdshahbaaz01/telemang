@@ -66,7 +66,6 @@ export interface SolveResult {
   latencyMs: number;
   costUsd?: number;
   error?: string;
-  raw?: unknown;
 }
 
 export interface ProviderAdapter {

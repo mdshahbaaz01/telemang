@@ -30,7 +30,12 @@ export const saveSolver = createServerFn({ method: "POST" })
   .handler(async ({ data, context }) => {
     const { encryptString } = await import("@/lib/crypto.server");
     if (data.id) {
-      const patch: Record<string, unknown> = {
+      const patch: {
+        label: string;
+        enabled: boolean;
+        priority: number;
+        api_key_encrypted?: string;
+      } = {
         label: data.label,
         enabled: data.enabled,
         priority: data.priority,
