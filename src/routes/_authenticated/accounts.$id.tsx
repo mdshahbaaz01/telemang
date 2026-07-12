@@ -18,6 +18,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { ArrowLeft, Loader2, Send, Search, Reply, Trash2, Smile, RefreshCw, X, ExternalLink } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { getStealthSettings } from "./stealth";
 import { MiniAppDrawer, type MiniAppRequest } from "@/components/MiniAppDrawer";
 
 const searchSchema = z.object({
@@ -230,7 +231,6 @@ function AccountViewerPage() {
   // Mark read when opening — with optional random human-like delay
   useEffect(() => {
     if (!activePeer) return;
-    const { getStealthSettings } = require("./stealth") as typeof import("./stealth");
     const s = getStealthSettings();
     if (!s.readReceiptEnabled) {
       markReadFn({ data: { accountId, peerKey: activePeer } }).catch(() => {});
