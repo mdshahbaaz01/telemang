@@ -25,12 +25,13 @@ const STRIP_HEADERS = new Set([
   "connection",
 ]);
 
-function buildOverrideScript(accountId: string, upstreamUrl: string) {
+function buildOverrideScript(accountId: string, upstreamUrl: string, token: string) {
   const fp = deriveMiniAppIdentity(accountId).fingerprint;
   return `(() => {
   try {
     const fp = ${JSON.stringify(fp)};
     const ACCT = ${JSON.stringify(accountId)};
+    const TOKEN = ${JSON.stringify(token)};
     const UPSTREAM = ${JSON.stringify(upstreamUrl)};
     const PROXY_PREFIX = '/api/public/miniapp-proxy/';
     const upstreamOrigin = (() => { try { return new URL(UPSTREAM).origin; } catch { return null; } })();
@@ -229,6 +230,7 @@ function buildOverrideScript(accountId: string, upstreamUrl: string) {
         // identity survives hardcoded JS URLs rewritten by the server.
         if (abs.origin === location.origin && abs.pathname.startsWith(PROXY_PREFIX)) {
           if (!abs.searchParams.get('a')) abs.searchParams.set('a', ACCT);
+          if (!abs.searchParams.get('t')) abs.searchParams.set('t', TOKEN);
           return abs.toString();
         }
         // Rewrite both same-preview paths and absolute upstream calls through the proxy.
@@ -238,7 +240,7 @@ function buildOverrideScript(accountId: string, upstreamUrl: string) {
         const hashIdx = target.indexOf('#');
         const bare = hashIdx === -1 ? target : target.slice(0, hashIdx);
         const hash = hashIdx === -1 ? '' : target.slice(hashIdx);
-        return location.origin + PROXY_PREFIX + encodeURIComponent(bare) + '?a=' + encodeURIComponent(ACCT) + hash;
+        return location.origin + PROXY_PREFIX + encodeURIComponent(bare) + '?a=' + encodeURIComponent(ACCT) + '&t=' + encodeURIComponent(TOKEN) + hash;
       } catch { return s; }
     };
     const isTgLink = (raw) => {
