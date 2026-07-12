@@ -2215,6 +2215,18 @@ function ActionsPageInner() {
                         </span>
                         <span className={`text-xs uppercase tracking-wide ${statusColor}`}>{s.status}</span>
                         <span className="text-xs text-muted-foreground">· {s.summary}</span>
+                        {s.sourceId && (
+                          <span
+                            className="rounded bg-muted/60 px-1.5 py-0.5 text-[10px] text-muted-foreground"
+                            title={
+                              s.sourceScheduledAt
+                                ? `Reused from ${formatIst(new Date(s.sourceScheduledAt))}${s.sourceLabel ? ` · ${s.sourceLabel}` : ""}`
+                                : "Reused"
+                            }
+                          >
+                            ↩ reused{s.sourceLabel ? ` · ${s.sourceLabel}` : s.sourceScheduledAt ? ` · ${formatIst(new Date(s.sourceScheduledAt))}` : ""}
+                          </span>
+                        )}
                         {s.totalItems ? (
                           <span className="text-xs text-muted-foreground">
                             · {s.processedItems}/{s.totalItems}
