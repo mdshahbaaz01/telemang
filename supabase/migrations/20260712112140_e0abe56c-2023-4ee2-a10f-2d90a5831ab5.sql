@@ -1,0 +1,1 @@
+CREATE POLICY "Users can read their own inline_button_clicks" ON public.inline_button_clicks FOR SELECT USING (auth.uid() = user_id);
