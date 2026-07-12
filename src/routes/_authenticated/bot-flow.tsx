@@ -973,6 +973,7 @@ function BotFlowPage() {
 function MiniAppFrame({ url, title, accountId, botUsername }: { url: string; title: string; accountId: string; botUsername: string }) {
   const ref = useRef<HTMLIFrameElement | null>(null);
   const joinFn = useServerFn(joinFromLink);
+  const { url: proxiedUrl } = useMiniAppProxyUrl(url, accountId);
   const [nonce, setNonce] = useState(0);
   const [overlay, setOverlay] = useState<
     | { status: "loading"; url: string }
@@ -1020,7 +1021,7 @@ function MiniAppFrame({ url, title, accountId, botUsername }: { url: string; tit
       <iframe
         key={`${url}#${nonce}`}
         ref={ref}
-        src={proxifyMiniAppUrl(url, accountId)}
+        src={proxiedUrl ?? "about:blank"}
         title={title}
         name={`tgminiapp-${accountId}`}
         className="h-full w-full border-0"
