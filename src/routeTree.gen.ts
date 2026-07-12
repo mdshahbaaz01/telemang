@@ -13,10 +13,13 @@ import { Route as AuthRouteImport } from './routes/auth'
 import { Route as AuthenticatedRouteRouteImport } from './routes/_authenticated/route'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as AuthenticatedWorkspaceRouteImport } from './routes/_authenticated/workspace'
+import { Route as AuthenticatedWatchlistsRouteImport } from './routes/_authenticated/watchlists'
 import { Route as AuthenticatedSearchRouteImport } from './routes/_authenticated/search'
 import { Route as AuthenticatedReferralsRouteImport } from './routes/_authenticated/referrals'
+import { Route as AuthenticatedRecipesRouteImport } from './routes/_authenticated/recipes'
 import { Route as AuthenticatedProfileUpdaterRouteImport } from './routes/_authenticated/profile-updater'
 import { Route as AuthenticatedOwnerRouteImport } from './routes/_authenticated/owner'
+import { Route as AuthenticatedMediaRouteImport } from './routes/_authenticated/media'
 import { Route as AuthenticatedDashboardRouteImport } from './routes/_authenticated/dashboard'
 import { Route as AuthenticatedCleanupRouteImport } from './routes/_authenticated/cleanup'
 import { Route as AuthenticatedButtonsRouteImport } from './routes/_authenticated/buttons'
@@ -58,6 +61,11 @@ const AuthenticatedWorkspaceRoute = AuthenticatedWorkspaceRouteImport.update({
   path: '/workspace',
   getParentRoute: () => AuthenticatedRouteRoute,
 } as any)
+const AuthenticatedWatchlistsRoute = AuthenticatedWatchlistsRouteImport.update({
+  id: '/watchlists',
+  path: '/watchlists',
+  getParentRoute: () => AuthenticatedRouteRoute,
+} as any)
 const AuthenticatedSearchRoute = AuthenticatedSearchRouteImport.update({
   id: '/search',
   path: '/search',
@@ -66,6 +74,11 @@ const AuthenticatedSearchRoute = AuthenticatedSearchRouteImport.update({
 const AuthenticatedReferralsRoute = AuthenticatedReferralsRouteImport.update({
   id: '/referrals',
   path: '/referrals',
+  getParentRoute: () => AuthenticatedRouteRoute,
+} as any)
+const AuthenticatedRecipesRoute = AuthenticatedRecipesRouteImport.update({
+  id: '/recipes',
+  path: '/recipes',
   getParentRoute: () => AuthenticatedRouteRoute,
 } as any)
 const AuthenticatedProfileUpdaterRoute =
@@ -77,6 +90,11 @@ const AuthenticatedProfileUpdaterRoute =
 const AuthenticatedOwnerRoute = AuthenticatedOwnerRouteImport.update({
   id: '/owner',
   path: '/owner',
+  getParentRoute: () => AuthenticatedRouteRoute,
+} as any)
+const AuthenticatedMediaRoute = AuthenticatedMediaRouteImport.update({
+  id: '/media',
+  path: '/media',
   getParentRoute: () => AuthenticatedRouteRoute,
 } as any)
 const AuthenticatedDashboardRoute = AuthenticatedDashboardRouteImport.update({
@@ -201,10 +219,13 @@ export interface FileRoutesByFullPath {
   '/buttons': typeof AuthenticatedButtonsRoute
   '/cleanup': typeof AuthenticatedCleanupRoute
   '/dashboard': typeof AuthenticatedDashboardRoute
+  '/media': typeof AuthenticatedMediaRoute
   '/owner': typeof AuthenticatedOwnerRoute
   '/profile-updater': typeof AuthenticatedProfileUpdaterRoute
+  '/recipes': typeof AuthenticatedRecipesRoute
   '/referrals': typeof AuthenticatedReferralsRoute
   '/search': typeof AuthenticatedSearchRoute
+  '/watchlists': typeof AuthenticatedWatchlistsRoute
   '/workspace': typeof AuthenticatedWorkspaceRoute
   '/accounts/$id': typeof AuthenticatedAccountsIdRoute
   '/groups/$id': typeof AuthenticatedGroupsIdRoute
@@ -231,10 +252,13 @@ export interface FileRoutesByTo {
   '/buttons': typeof AuthenticatedButtonsRoute
   '/cleanup': typeof AuthenticatedCleanupRoute
   '/dashboard': typeof AuthenticatedDashboardRoute
+  '/media': typeof AuthenticatedMediaRoute
   '/owner': typeof AuthenticatedOwnerRoute
   '/profile-updater': typeof AuthenticatedProfileUpdaterRoute
+  '/recipes': typeof AuthenticatedRecipesRoute
   '/referrals': typeof AuthenticatedReferralsRoute
   '/search': typeof AuthenticatedSearchRoute
+  '/watchlists': typeof AuthenticatedWatchlistsRoute
   '/workspace': typeof AuthenticatedWorkspaceRoute
   '/accounts/$id': typeof AuthenticatedAccountsIdRoute
   '/groups/$id': typeof AuthenticatedGroupsIdRoute
@@ -263,10 +287,13 @@ export interface FileRoutesById {
   '/_authenticated/buttons': typeof AuthenticatedButtonsRoute
   '/_authenticated/cleanup': typeof AuthenticatedCleanupRoute
   '/_authenticated/dashboard': typeof AuthenticatedDashboardRoute
+  '/_authenticated/media': typeof AuthenticatedMediaRoute
   '/_authenticated/owner': typeof AuthenticatedOwnerRoute
   '/_authenticated/profile-updater': typeof AuthenticatedProfileUpdaterRoute
+  '/_authenticated/recipes': typeof AuthenticatedRecipesRoute
   '/_authenticated/referrals': typeof AuthenticatedReferralsRoute
   '/_authenticated/search': typeof AuthenticatedSearchRoute
+  '/_authenticated/watchlists': typeof AuthenticatedWatchlistsRoute
   '/_authenticated/workspace': typeof AuthenticatedWorkspaceRoute
   '/_authenticated/accounts/$id': typeof AuthenticatedAccountsIdRoute
   '/_authenticated/groups/$id': typeof AuthenticatedGroupsIdRoute
@@ -295,10 +322,13 @@ export interface FileRouteTypes {
     | '/buttons'
     | '/cleanup'
     | '/dashboard'
+    | '/media'
     | '/owner'
     | '/profile-updater'
+    | '/recipes'
     | '/referrals'
     | '/search'
+    | '/watchlists'
     | '/workspace'
     | '/accounts/$id'
     | '/groups/$id'
@@ -325,10 +355,13 @@ export interface FileRouteTypes {
     | '/buttons'
     | '/cleanup'
     | '/dashboard'
+    | '/media'
     | '/owner'
     | '/profile-updater'
+    | '/recipes'
     | '/referrals'
     | '/search'
+    | '/watchlists'
     | '/workspace'
     | '/accounts/$id'
     | '/groups/$id'
@@ -356,10 +389,13 @@ export interface FileRouteTypes {
     | '/_authenticated/buttons'
     | '/_authenticated/cleanup'
     | '/_authenticated/dashboard'
+    | '/_authenticated/media'
     | '/_authenticated/owner'
     | '/_authenticated/profile-updater'
+    | '/_authenticated/recipes'
     | '/_authenticated/referrals'
     | '/_authenticated/search'
+    | '/_authenticated/watchlists'
     | '/_authenticated/workspace'
     | '/_authenticated/accounts/$id'
     | '/_authenticated/groups/$id'
@@ -417,6 +453,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedWorkspaceRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
+    '/_authenticated/watchlists': {
+      id: '/_authenticated/watchlists'
+      path: '/watchlists'
+      fullPath: '/watchlists'
+      preLoaderRoute: typeof AuthenticatedWatchlistsRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
     '/_authenticated/search': {
       id: '/_authenticated/search'
       path: '/search'
@@ -431,6 +474,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedReferralsRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
+    '/_authenticated/recipes': {
+      id: '/_authenticated/recipes'
+      path: '/recipes'
+      fullPath: '/recipes'
+      preLoaderRoute: typeof AuthenticatedRecipesRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
     '/_authenticated/profile-updater': {
       id: '/_authenticated/profile-updater'
       path: '/profile-updater'
@@ -443,6 +493,13 @@ declare module '@tanstack/react-router' {
       path: '/owner'
       fullPath: '/owner'
       preLoaderRoute: typeof AuthenticatedOwnerRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
+    '/_authenticated/media': {
+      id: '/_authenticated/media'
+      path: '/media'
+      fullPath: '/media'
+      preLoaderRoute: typeof AuthenticatedMediaRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
     '/_authenticated/dashboard': {
@@ -606,10 +663,13 @@ interface AuthenticatedRouteRouteChildren {
   AuthenticatedButtonsRoute: typeof AuthenticatedButtonsRoute
   AuthenticatedCleanupRoute: typeof AuthenticatedCleanupRoute
   AuthenticatedDashboardRoute: typeof AuthenticatedDashboardRoute
+  AuthenticatedMediaRoute: typeof AuthenticatedMediaRoute
   AuthenticatedOwnerRoute: typeof AuthenticatedOwnerRoute
   AuthenticatedProfileUpdaterRoute: typeof AuthenticatedProfileUpdaterRoute
+  AuthenticatedRecipesRoute: typeof AuthenticatedRecipesRoute
   AuthenticatedReferralsRoute: typeof AuthenticatedReferralsRoute
   AuthenticatedSearchRoute: typeof AuthenticatedSearchRoute
+  AuthenticatedWatchlistsRoute: typeof AuthenticatedWatchlistsRoute
   AuthenticatedWorkspaceRoute: typeof AuthenticatedWorkspaceRoute
   AuthenticatedAccountsIdRoute: typeof AuthenticatedAccountsIdRoute
   AuthenticatedGroupsIdRoute: typeof AuthenticatedGroupsIdRoute
@@ -628,10 +688,13 @@ const AuthenticatedRouteRouteChildren: AuthenticatedRouteRouteChildren = {
   AuthenticatedButtonsRoute: AuthenticatedButtonsRoute,
   AuthenticatedCleanupRoute: AuthenticatedCleanupRoute,
   AuthenticatedDashboardRoute: AuthenticatedDashboardRoute,
+  AuthenticatedMediaRoute: AuthenticatedMediaRoute,
   AuthenticatedOwnerRoute: AuthenticatedOwnerRoute,
   AuthenticatedProfileUpdaterRoute: AuthenticatedProfileUpdaterRoute,
+  AuthenticatedRecipesRoute: AuthenticatedRecipesRoute,
   AuthenticatedReferralsRoute: AuthenticatedReferralsRoute,
   AuthenticatedSearchRoute: AuthenticatedSearchRoute,
+  AuthenticatedWatchlistsRoute: AuthenticatedWatchlistsRoute,
   AuthenticatedWorkspaceRoute: AuthenticatedWorkspaceRoute,
   AuthenticatedAccountsIdRoute: AuthenticatedAccountsIdRoute,
   AuthenticatedGroupsIdRoute: AuthenticatedGroupsIdRoute,

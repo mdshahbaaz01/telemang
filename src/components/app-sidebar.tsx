@@ -17,6 +17,9 @@ import {
   BarChart3,
   Columns,
   Rocket,
+  ChefHat,
+  Image as ImageIcon,
+  Eye,
 } from "lucide-react";
 import {
   Sidebar,
@@ -66,6 +69,9 @@ const items: Item[] = [
   { title: "Bot Parser", to: "/bot-parser", icon: Cpu },
   { title: "Referrals", to: "/referrals", icon: Users },
   { title: "Analytics", to: "/analytics", icon: BarChart3 },
+  { title: "Recipes", to: "/recipes", icon: ChefHat },
+  { title: "Media Library", to: "/media", icon: ImageIcon },
+  { title: "Watchlists", to: "/watchlists", icon: Eye },
 ];
 
 export function AppSidebar() {
