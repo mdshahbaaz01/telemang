@@ -78,7 +78,7 @@ const botFlowSchema = z.object({
   startParam: z.string().max(200).optional(),
   steps: z.array(z.string().min(1).max(4096)).min(1).max(50),
   autoJoinRequired: z.boolean().optional(),
-  maxJoinRounds: z.number().int().min(1).max(5).optional(),
+  maxJoinRounds: z.number().int().min(1).max(15).optional(),
 });
 
 const editSchema = z.object({
