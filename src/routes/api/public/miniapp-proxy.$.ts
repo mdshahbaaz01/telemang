@@ -585,10 +585,29 @@ async function handle(request: Request, params: { _splat?: string }) {
   const proxyReqUrl = new URL(request.url);
   const proxyOrigin = proxyReqUrl.origin;
   const accountId = proxyReqUrl.searchParams.get("a") || "anon";
+  const token = proxyReqUrl.searchParams.get("t") || readTokenCookie(request);
+
+  // Auth: require a valid short-lived HMAC token (minted by an authenticated
+  // server function). Blocks anonymous use of the proxy as an open relay.
+  if (!verifyMiniAppProxyToken(token)) {
+    return new Response("Unauthorized", { status: 401 });
+  }
+
+  // SSRF guard: reject loopback, link-local, cloud metadata, and private
+  // network destinations at the hostname layer.
+  let targetUrlEarly: URL;
+  try {
+    targetUrlEarly = new URL(target);
+  } catch {
+    return new Response("Invalid target URL", { status: 400 });
+  }
+  if (isBlockedProxyHost(targetUrlEarly.hostname)) {
+    return new Response("Target host is not permitted", { status: 403 });
+  }
 
   const upstreamHeaders = new Headers();
   const fp = deriveMiniAppIdentity(accountId).fingerprint;
-  const targetUrl = new URL(target);
+  const targetUrl = targetUrlEarly;
   upstreamHeaders.set("user-agent", fp.userAgent);
   upstreamHeaders.set("accept-language", fp.languages.join(","));
   upstreamHeaders.set("origin", targetUrl.origin);
@@ -617,15 +636,21 @@ async function handle(request: Request, params: { _splat?: string }) {
     if (!STRIP_HEADERS.has(k.toLowerCase())) outHeaders.set(k, v);
   });
   outHeaders.set("access-control-allow-origin", "*");
+  // Backup cookie: subsequent sub-resource requests from the iframe carry
+  // the token even if the URL rewriter missed an inline reference.
+  outHeaders.append(
+    "set-cookie",
+    `miniapp_proxy_t=${encodeURIComponent(token!)}; Path=/api/public/miniapp-proxy/; Max-Age=3600; HttpOnly; Secure; SameSite=None`,
+  );
 
   const ctype = upstream.headers.get("content-type") || "";
   if (ctype.includes("text/html")) {
     let html = await upstream.text();
     const finalUrl = upstream.url || target;
     const upstreamDir = new URL(".", finalUrl).toString();
-    const script = `<script>${buildOverrideScript(accountId, finalUrl)}</script>`;
+    const script = `<script>${buildOverrideScript(accountId, finalUrl, token!)}</script>`;
     const base = `<base href="${upstreamDir}">`;
-    html = rewriteHtmlUrls(html, finalUrl, accountId, proxyOrigin);
+    html = rewriteHtmlUrls(html, finalUrl, accountId, token!, proxyOrigin);
     if (/<head[^>]*>/i.test(html)) {
       html = html.replace(/<head([^>]*)>/i, `<head$1>${script}${base}`);
     } else {
@@ -635,16 +660,34 @@ async function handle(request: Request, params: { _splat?: string }) {
     return new Response(html, { status: upstream.status, headers: outHeaders });
   }
   if (ctype.includes("text/css")) {
-    const css = rewriteCssUrls(await upstream.text(), upstream.url || target, accountId, proxyOrigin);
+    const css = rewriteCssUrls(await upstream.text(), upstream.url || target, accountId, token!, proxyOrigin);
     outHeaders.set("content-type", "text/css; charset=utf-8");
     return new Response(css, { status: upstream.status, headers: outHeaders });
   }
   if (ctype.includes("javascript") || ctype.includes("ecmascript") || /\.m?js(?:$|\?)/i.test(target)) {
-    const js = rewriteJsUrls(await upstream.text(), upstream.url || target, accountId, proxyOrigin);
+    const js = rewriteJsUrls(await upstream.text(), upstream.url || target, accountId, token!, proxyOrigin);
     outHeaders.set("content-type", ctype || "application/javascript; charset=utf-8");
     return new Response(js, { status: upstream.status, headers: outHeaders });
   }
   return new Response(upstream.body, { status: upstream.status, headers: outHeaders });
+}
+
+function readTokenCookie(request: Request): string | null {
+  const cookie = request.headers.get("cookie");
+  if (!cookie) return null;
+  for (const part of cookie.split(";")) {
+    const eq = part.indexOf("=");
+    if (eq === -1) continue;
+    const name = part.slice(0, eq).trim();
+    if (name === "miniapp_proxy_t") {
+      try {
+        return decodeURIComponent(part.slice(eq + 1).trim());
+      } catch {
+        return part.slice(eq + 1).trim();
+      }
+    }
+  }
+  return null;
 }
 
 export const Route = createFileRoute("/api/public/miniapp-proxy/$")({
