@@ -28,6 +28,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Switch } from "@/components/ui/switch";
 import { Loader2, Plus, RefreshCcw, ShieldAlert, Trash2, Zap } from "lucide-react";
+import { useCaptchaAutoDetect, setCaptchaAutoDetect } from "@/lib/miniapp-proxy-url";
 
 export const Route = createFileRoute("/_authenticated/captcha")({
   head: () => ({
@@ -52,13 +53,14 @@ function CaptchaPage() {
     <div className="p-4 md:p-6 space-y-6 max-w-6xl mx-auto">
       <header className="flex items-center gap-3">
         <ShieldAlert className="h-6 w-6 text-primary" />
-        <div>
+        <div className="flex-1">
           <h1 className="text-2xl font-bold">Captcha Solver</h1>
           <p className="text-sm text-muted-foreground">
             Pluggable adapters for 2Captcha, Anti-Captcha & CapSolver — plus built-in AI vision for
             math puzzles and button-choice captchas (no key needed).
           </p>
         </div>
+        <AutoDetectToggle />
       </header>
 
       <Tabs defaultValue="solvers">
@@ -78,6 +80,21 @@ function CaptchaPage() {
           <LogTab />
         </TabsContent>
       </Tabs>
+    </div>
+  );
+}
+
+function AutoDetectToggle() {
+  const on = useCaptchaAutoDetect();
+  return (
+    <div className="flex items-center gap-2 rounded-md border px-3 py-2 bg-muted/30">
+      <div className="text-right">
+        <div className="text-xs font-medium">Auto-detect in mini-apps</div>
+        <div className="text-[10px] text-muted-foreground max-w-[180px]">
+          Off = skip captcha bridge for bots without captchas.
+        </div>
+      </div>
+      <Switch checked={on} onCheckedChange={setCaptchaAutoDetect} />
     </div>
   );
 }

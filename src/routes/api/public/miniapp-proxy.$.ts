@@ -25,8 +25,68 @@ const STRIP_HEADERS = new Set([
   "connection",
 ]);
 
-function buildOverrideScript(accountId: string, upstreamUrl: string, token: string) {
+function buildOverrideScript(accountId: string, upstreamUrl: string, token: string, enableCaptcha: boolean) {
   const fp = deriveMiniAppIdentity(accountId).fingerprint;
+  const captchaBridge = enableCaptcha ? `
+  // ---------- Captcha auto-detect + solver bridge ----------
+  try {
+    const ORIGIN = location.origin;
+    const detectAndAnnounce = () => {
+      const found = [];
+      document.querySelectorAll('[data-sitekey]').forEach((el) => {
+        const sitekey = el.getAttribute('data-sitekey');
+        if (!sitekey) return;
+        const cls = String(el.className || '').toLowerCase();
+        let type = 'recaptchaV2';
+        if (cls.includes('h-captcha')) type = 'hcaptcha';
+        else if (cls.includes('cf-turnstile')) type = 'turnstile';
+        found.push({ type, sitekey, pageUrl: UPSTREAM });
+      });
+      if (found.length) hostPost('captcha_detected', { items: found });
+    };
+    window.__lovableInjectCaptcha = (kind, token) => {
+      try {
+        if (kind === 'recaptchaV2' || kind === 'recaptchaV3') {
+          document.querySelectorAll('textarea[name="g-recaptcha-response"], #g-recaptcha-response')
+            .forEach((el) => { el.value = token; el.innerHTML = token; });
+          if (window.___grecaptcha_cfg && window.___grecaptcha_cfg.clients) {
+            Object.values(window.___grecaptcha_cfg.clients).forEach((client) => {
+              const walk = (o) => { if (!o || typeof o !== 'object') return;
+                for (const k of Object.keys(o)) {
+                  const v = o[k]; if (v && typeof v === 'object' && typeof v.callback === 'function') {
+                    try { v.callback(token); } catch {}
+                  } else walk(v);
+                }
+              };
+              walk(client);
+            });
+          }
+        } else if (kind === 'hcaptcha') {
+          document.querySelectorAll('textarea[name="h-captcha-response"], textarea[name="g-recaptcha-response"]')
+            .forEach((el) => { el.value = token; });
+        } else if (kind === 'turnstile') {
+          document.querySelectorAll('input[name="cf-turnstile-response"]')
+            .forEach((el) => { el.value = token; });
+        }
+        return true;
+      } catch (e) { return false; }
+    };
+    window.addEventListener('message', (ev) => {
+      const d = typeof ev.data === 'string' ? (() => { try { return JSON.parse(ev.data); } catch { return null; } })() : ev.data;
+      if (d && d.__lovableCaptchaSolved) {
+        window.__lovableInjectCaptcha(d.kind, d.token);
+      }
+    });
+    if (document.readyState === 'loading') {
+      document.addEventListener('DOMContentLoaded', () => setTimeout(detectAndAnnounce, 800));
+    } else setTimeout(detectAndAnnounce, 800);
+    let mo;
+    try {
+      mo = new MutationObserver(() => { clearTimeout(mo._t); mo._t = setTimeout(detectAndAnnounce, 1200); });
+      mo.observe(document.documentElement, { childList: true, subtree: true });
+    } catch {}
+  } catch (err) { console.warn('[captcha bridge failed]', err); }
+` : '';
   return `(() => {
   try {
     const fp = ${JSON.stringify(fp)};
@@ -513,76 +573,7 @@ function buildOverrideScript(accountId: string, upstreamUrl: string, token: stri
       Object.defineProperty(window, 'sessionStorage', { configurable: true, get: () => wrapStorage(realSessionStorage) });
     } catch (e) {}
   } catch (err) { console.warn('[fingerprint override failed]', err); }
-  // ---------- Captcha auto-detect + solver bridge ----------
-  try {
-    const ORIGIN = location.origin;
-    const detectAndAnnounce = () => {
-      const found = [];
-      // reCAPTCHA
-      document.querySelectorAll('[data-sitekey]').forEach((el) => {
-        const sitekey = el.getAttribute('data-sitekey');
-        if (!sitekey) return;
-        const cls = String(el.className || '').toLowerCase();
-        let type = 'recaptchaV2';
-        if (cls.includes('h-captcha')) type = 'hcaptcha';
-        else if (cls.includes('cf-turnstile')) type = 'turnstile';
-        found.push({ type, sitekey, pageUrl: UPSTREAM });
-      });
-      // reCAPTCHA v3 (grecaptcha.execute)
-      const scripts = document.querySelectorAll('script[src*="recaptcha"]');
-      if (scripts.length && !found.some((f) => f.type === 'recaptchaV2')) {
-        // v3 sitekey is usually in inline scripts; skip auto-detect
-      }
-      if (found.length) hostPost('captcha_detected', { items: found });
-    };
-    // Solved-token injectors
-    window.__lovableInjectCaptcha = (kind, token) => {
-      try {
-        if (kind === 'recaptchaV2' || kind === 'recaptchaV3') {
-          document.querySelectorAll('textarea[name="g-recaptcha-response"], #g-recaptcha-response')
-            .forEach((el) => { el.value = token; el.innerHTML = token; });
-          if (window.___grecaptcha_cfg && window.___grecaptcha_cfg.clients) {
-            Object.values(window.___grecaptcha_cfg.clients).forEach((client) => {
-              const walk = (o) => { if (!o || typeof o !== 'object') return;
-                for (const k of Object.keys(o)) {
-                  const v = o[k]; if (v && typeof v === 'object' && typeof v.callback === 'function') {
-                    try { v.callback(token); } catch {}
-                  } else walk(v);
-                }
-              };
-              walk(client);
-            });
-          }
-        } else if (kind === 'hcaptcha') {
-          document.querySelectorAll('textarea[name="h-captcha-response"], textarea[name="g-recaptcha-response"]')
-            .forEach((el) => { el.value = token; });
-          if (window.hcaptcha && typeof window.hcaptcha.execute === 'function') {
-            try { window.hcaptcha.execute(); } catch {}
-          }
-        } else if (kind === 'turnstile') {
-          document.querySelectorAll('input[name="cf-turnstile-response"]')
-            .forEach((el) => { el.value = token; });
-        }
-        return true;
-      } catch (e) { return false; }
-    };
-    // Listen for parent → iframe solve results.
-    window.addEventListener('message', (ev) => {
-      const d = typeof ev.data === 'string' ? (() => { try { return JSON.parse(ev.data); } catch { return null; } })() : ev.data;
-      if (d && d.__lovableCaptchaSolved) {
-        window.__lovableInjectCaptcha(d.kind, d.token);
-      }
-    });
-    // Debounced detection on DOM ready + mutations.
-    if (document.readyState === 'loading') {
-      document.addEventListener('DOMContentLoaded', () => setTimeout(detectAndAnnounce, 800));
-    } else setTimeout(detectAndAnnounce, 800);
-    let mo;
-    try {
-      mo = new MutationObserver(() => { clearTimeout(mo._t); mo._t = setTimeout(detectAndAnnounce, 1200); });
-      mo.observe(document.documentElement, { childList: true, subtree: true });
-    } catch {}
-  } catch (err) { console.warn('[captcha bridge failed]', err); }
+  ${captchaBridge}
 })();`;
 }
 
@@ -656,6 +647,7 @@ async function handle(request: Request, params: { _splat?: string }) {
   const proxyOrigin = proxyReqUrl.origin;
   const accountId = proxyReqUrl.searchParams.get("a") || "anon";
   const token = proxyReqUrl.searchParams.get("t") || readTokenCookie(request);
+  const captchaEnabled = proxyReqUrl.searchParams.get("cap") === "1";
 
   // Auth: require a valid short-lived HMAC token (minted by an authenticated
   // server function). Blocks anonymous use of the proxy as an open relay.
@@ -718,7 +710,7 @@ async function handle(request: Request, params: { _splat?: string }) {
     let html = await upstream.text();
     const finalUrl = upstream.url || target;
     const upstreamDir = new URL(".", finalUrl).toString();
-    const script = `<script>${buildOverrideScript(accountId, finalUrl, token!)}</script>`;
+    const script = `<script>${buildOverrideScript(accountId, finalUrl, token!, captchaEnabled)}</script>`;
     const base = `<base href="${upstreamDir}">`;
     html = rewriteHtmlUrls(html, finalUrl, accountId, token!, proxyOrigin);
     if (/<head[^>]*>/i.test(html)) {
