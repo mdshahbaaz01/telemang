@@ -6,7 +6,7 @@ import { useTelegramWebviewBridge } from "@/lib/telegram-webview-bridge";
 import { supabase } from "@/integrations/supabase/client";
 import { listAccounts } from "@/lib/accounts.functions";
 import { openStartAppLink, joinFromLink, extractVerifyLink } from "@/lib/tg-viewer.functions";
-import { proxifyMiniAppUrl } from "@/lib/miniapp-proxy-url";
+import { useMiniAppProxyUrl } from "@/lib/miniapp-proxy-url";
 import { AdminGate } from "@/components/AdminGate";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
