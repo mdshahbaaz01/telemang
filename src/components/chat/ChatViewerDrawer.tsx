@@ -8,6 +8,7 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { chatViewer, useChatViewer } from "./chat-viewer-store";
 import { previewChat, loadChatHistory, loadChatMembers, sendQuickReply } from "@/lib/chat-viewer.functions";
+import { pressInlineButtonAs } from "@/lib/tg-viewer.functions";
 import { listAccounts } from "@/lib/accounts.functions";
 import { ExternalLink, Send, Users, Info, MessageCircle, Loader2, Image as ImageIcon, Video, FileText, Music, Link as LinkIcon } from "lucide-react";
 import { toast } from "sonner";
@@ -64,6 +65,7 @@ function ChatViewerInner({ target, accountId }: { target: string; accountId: str
   const membersFn = useServerFn(loadChatMembers);
   const replyFn = useServerFn(sendQuickReply);
   const accountsFn = useServerFn(listAccounts);
+  const pressFn = useServerFn(pressInlineButtonAs);
 
   const [activeAccountId, setActiveAccountId] = useState<string | null>(accountId);
   useEffect(() => setActiveAccountId(accountId), [accountId, target]);
@@ -110,6 +112,46 @@ function ChatViewerInner({ target, accountId }: { target: string; accountId: str
 
   const [reply, setReply] = useState("");
   const [replyToId, setReplyToId] = useState<number | null>(null);
+  const [pressingKey, setPressingKey] = useState<string | null>(null);
+
+  const peerKey = previewQ.data?.peerKey ?? null;
+
+  async function handlePressButton(msg: any, btn: any, key: string) {
+    if (!activeAccountId) { toast.error("Pick an account first"); return; }
+    try {
+      if (btn.kind === "url" || btn.kind === "urlAuth") {
+        window.open(btn.url, "_blank", "noopener");
+        return;
+      }
+      if (btn.kind === "webview") {
+        if (btn.url) window.open(btn.url, "_blank", "noopener");
+        else toast.info("WebApp button — open from the Telegram app");
+        return;
+      }
+      if (btn.kind === "reply") {
+        setPressingKey(key);
+        await replyFn({ data: { target, accountId: activeAccountId, message: btn.text } });
+        toast.success("Sent");
+        previewQ.refetch();
+        return;
+      }
+      if (btn.kind === "callback") {
+        if (!peerKey) { toast.error("Chat not fully loaded yet"); return; }
+        setPressingKey(key);
+        const res = await pressFn({ data: { accountId: activeAccountId, peerKey, msgId: msg.id, data: btn.data } });
+        if (res?.url) window.open(res.url, "_blank", "noopener");
+        if (res?.message) (res.alert ? toast.warning : toast.success)(res.message);
+        else if (!res?.url) toast.success("Sent");
+        previewQ.refetch();
+        return;
+      }
+      toast.info(`${btn.kind} button not supported here`);
+    } catch (e) {
+      toast.error((e as Error).message);
+    } finally {
+      setPressingKey(null);
+    }
+  }
   const replyMut = useMutation({
     mutationFn: async () => {
       if (!activeAccountId || !reply.trim()) throw new Error("Type a message first");
@@ -225,7 +267,13 @@ function ChatViewerInner({ target, accountId }: { target: string; accountId: str
                       </span>
                     </div>
                     {msgs.map((m) => (
-                      <MessageBubble key={m.id} m={m} onReply={() => setReplyToId(m.id)} />
+                      <MessageBubble
+                        key={m.id}
+                        m={m}
+                        onReply={() => setReplyToId(m.id)}
+                        onPressButton={(btn, key) => handlePressButton(m, btn, key)}
+                        pressingKey={pressingKey}
+                      />
                     ))}
                   </div>
                 ))}
