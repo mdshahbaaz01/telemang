@@ -105,8 +105,16 @@ function SolversTab() {
 
   const invalidate = () => qc.invalidateQueries({ queryKey: ["captcha-solvers"] });
 
+  type SavePayload = {
+    id?: string;
+    provider: ProviderId;
+    label: string;
+    apiKey?: string;
+    enabled: boolean;
+    priority: number;
+  };
   const saveMut = useMutation({
-    mutationFn: (payload: Parameters<typeof save>[0]["data"]) => save({ data: payload }),
+    mutationFn: (payload: SavePayload) => save({ data: payload }),
     onSuccess: () => {
       toast.success("Solver saved");
       setForm({ provider: form.provider, label: "", apiKey: "", priority: 100 });
@@ -266,14 +274,13 @@ function PlaygroundTab() {
   async function run() {
     setBusy(true); setResult("");
     try {
-      let payload: Parameters<typeof solve>[0]["data"];
-      if (kind === "image") payload = { kind, imageBase64 };
-      else if (kind === "math") payload = { kind, text: mathText, imageBase64: imageBase64 || undefined };
-      else if (kind === "buttonChoice") payload = { kind, prompt, choices };
-      else if (kind === "recaptchaV2") payload = { kind, sitekey, pageUrl };
-      else if (kind === "hcaptcha") payload = { kind, sitekey, pageUrl };
-      else payload = { kind: "turnstile", sitekey, pageUrl };
-      const r = await solve({ data: payload });
+      let r;
+      if (kind === "image") r = await solve({ data: { kind, imageBase64 } });
+      else if (kind === "math") r = await solve({ data: { kind, text: mathText, imageBase64: imageBase64 || undefined } });
+      else if (kind === "buttonChoice") r = await solve({ data: { kind, prompt, choices } });
+      else if (kind === "recaptchaV2") r = await solve({ data: { kind, sitekey, pageUrl } });
+      else if (kind === "hcaptcha") r = await solve({ data: { kind, sitekey, pageUrl } });
+      else r = await solve({ data: { kind: "turnstile", sitekey, pageUrl } });
       setResult(JSON.stringify(r, null, 2));
     } catch (e) {
       setResult(`ERROR: ${(e as Error).message}`);
