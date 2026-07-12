@@ -23,6 +23,7 @@ import { Route as AuthenticatedOwnerRouteImport } from './routes/_authenticated/
 import { Route as AuthenticatedMediaRouteImport } from './routes/_authenticated/media'
 import { Route as AuthenticatedDashboardRouteImport } from './routes/_authenticated/dashboard'
 import { Route as AuthenticatedCleanupRouteImport } from './routes/_authenticated/cleanup'
+import { Route as AuthenticatedCaptchaRouteImport } from './routes/_authenticated/captcha'
 import { Route as AuthenticatedButtonsRouteImport } from './routes/_authenticated/buttons'
 import { Route as AuthenticatedBulkPlusRouteImport } from './routes/_authenticated/bulk-plus'
 import { Route as AuthenticatedBulkMixRouteImport } from './routes/_authenticated/bulk-mix'
@@ -111,6 +112,11 @@ const AuthenticatedDashboardRoute = AuthenticatedDashboardRouteImport.update({
 const AuthenticatedCleanupRoute = AuthenticatedCleanupRouteImport.update({
   id: '/cleanup',
   path: '/cleanup',
+  getParentRoute: () => AuthenticatedRouteRoute,
+} as any)
+const AuthenticatedCaptchaRoute = AuthenticatedCaptchaRouteImport.update({
+  id: '/captcha',
+  path: '/captcha',
   getParentRoute: () => AuthenticatedRouteRoute,
 } as any)
 const AuthenticatedButtonsRoute = AuthenticatedButtonsRouteImport.update({
@@ -223,6 +229,7 @@ export interface FileRoutesByFullPath {
   '/bulk-mix': typeof AuthenticatedBulkMixRoute
   '/bulk-plus': typeof AuthenticatedBulkPlusRoute
   '/buttons': typeof AuthenticatedButtonsRoute
+  '/captcha': typeof AuthenticatedCaptchaRoute
   '/cleanup': typeof AuthenticatedCleanupRoute
   '/dashboard': typeof AuthenticatedDashboardRoute
   '/media': typeof AuthenticatedMediaRoute
@@ -257,6 +264,7 @@ export interface FileRoutesByTo {
   '/bulk-mix': typeof AuthenticatedBulkMixRoute
   '/bulk-plus': typeof AuthenticatedBulkPlusRoute
   '/buttons': typeof AuthenticatedButtonsRoute
+  '/captcha': typeof AuthenticatedCaptchaRoute
   '/cleanup': typeof AuthenticatedCleanupRoute
   '/dashboard': typeof AuthenticatedDashboardRoute
   '/media': typeof AuthenticatedMediaRoute
@@ -293,6 +301,7 @@ export interface FileRoutesById {
   '/_authenticated/bulk-mix': typeof AuthenticatedBulkMixRoute
   '/_authenticated/bulk-plus': typeof AuthenticatedBulkPlusRoute
   '/_authenticated/buttons': typeof AuthenticatedButtonsRoute
+  '/_authenticated/captcha': typeof AuthenticatedCaptchaRoute
   '/_authenticated/cleanup': typeof AuthenticatedCleanupRoute
   '/_authenticated/dashboard': typeof AuthenticatedDashboardRoute
   '/_authenticated/media': typeof AuthenticatedMediaRoute
@@ -329,6 +338,7 @@ export interface FileRouteTypes {
     | '/bulk-mix'
     | '/bulk-plus'
     | '/buttons'
+    | '/captcha'
     | '/cleanup'
     | '/dashboard'
     | '/media'
@@ -363,6 +373,7 @@ export interface FileRouteTypes {
     | '/bulk-mix'
     | '/bulk-plus'
     | '/buttons'
+    | '/captcha'
     | '/cleanup'
     | '/dashboard'
     | '/media'
@@ -398,6 +409,7 @@ export interface FileRouteTypes {
     | '/_authenticated/bulk-mix'
     | '/_authenticated/bulk-plus'
     | '/_authenticated/buttons'
+    | '/_authenticated/captcha'
     | '/_authenticated/cleanup'
     | '/_authenticated/dashboard'
     | '/_authenticated/media'
@@ -533,6 +545,13 @@ declare module '@tanstack/react-router' {
       path: '/cleanup'
       fullPath: '/cleanup'
       preLoaderRoute: typeof AuthenticatedCleanupRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
+    '/_authenticated/captcha': {
+      id: '/_authenticated/captcha'
+      path: '/captcha'
+      fullPath: '/captcha'
+      preLoaderRoute: typeof AuthenticatedCaptchaRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
     '/_authenticated/buttons': {
@@ -680,6 +699,7 @@ interface AuthenticatedRouteRouteChildren {
   AuthenticatedBulkMixRoute: typeof AuthenticatedBulkMixRoute
   AuthenticatedBulkPlusRoute: typeof AuthenticatedBulkPlusRoute
   AuthenticatedButtonsRoute: typeof AuthenticatedButtonsRoute
+  AuthenticatedCaptchaRoute: typeof AuthenticatedCaptchaRoute
   AuthenticatedCleanupRoute: typeof AuthenticatedCleanupRoute
   AuthenticatedDashboardRoute: typeof AuthenticatedDashboardRoute
   AuthenticatedMediaRoute: typeof AuthenticatedMediaRoute
@@ -706,6 +726,7 @@ const AuthenticatedRouteRouteChildren: AuthenticatedRouteRouteChildren = {
   AuthenticatedBulkMixRoute: AuthenticatedBulkMixRoute,
   AuthenticatedBulkPlusRoute: AuthenticatedBulkPlusRoute,
   AuthenticatedButtonsRoute: AuthenticatedButtonsRoute,
+  AuthenticatedCaptchaRoute: AuthenticatedCaptchaRoute,
   AuthenticatedCleanupRoute: AuthenticatedCleanupRoute,
   AuthenticatedDashboardRoute: AuthenticatedDashboardRoute,
   AuthenticatedMediaRoute: AuthenticatedMediaRoute,
@@ -742,13 +763,3 @@ const rootRouteChildren: RootRouteChildren = {
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
   ._addFileTypes<FileRouteTypes>()
-
-import type { getRouter } from './router.tsx'
-import type { startInstance } from './start.ts'
-declare module '@tanstack/react-start' {
-  interface Register {
-    ssr: true
-    router: Awaited<ReturnType<typeof getRouter>>
-    config: Awaited<ReturnType<typeof startInstance.getOptions>>
-  }
-}
