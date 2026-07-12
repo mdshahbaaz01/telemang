@@ -647,6 +647,7 @@ async function handle(request: Request, params: { _splat?: string }) {
   const proxyOrigin = proxyReqUrl.origin;
   const accountId = proxyReqUrl.searchParams.get("a") || "anon";
   const token = proxyReqUrl.searchParams.get("t") || readTokenCookie(request);
+  const captchaEnabled = proxyReqUrl.searchParams.get("cap") === "1";
 
   // Auth: require a valid short-lived HMAC token (minted by an authenticated
   // server function). Blocks anonymous use of the proxy as an open relay.
@@ -709,7 +710,7 @@ async function handle(request: Request, params: { _splat?: string }) {
     let html = await upstream.text();
     const finalUrl = upstream.url || target;
     const upstreamDir = new URL(".", finalUrl).toString();
-    const script = `<script>${buildOverrideScript(accountId, finalUrl, token!)}</script>`;
+    const script = `<script>${buildOverrideScript(accountId, finalUrl, token!, captchaEnabled)}</script>`;
     const base = `<base href="${upstreamDir}">`;
     html = rewriteHtmlUrls(html, finalUrl, accountId, token!, proxyOrigin);
     if (/<head[^>]*>/i.test(html)) {
