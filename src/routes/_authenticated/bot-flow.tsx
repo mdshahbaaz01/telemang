@@ -5,14 +5,14 @@ import { useMemo, useRef, useState } from "react";
 import { useTelegramWebviewBridge } from "@/lib/telegram-webview-bridge";
 import { supabase } from "@/integrations/supabase/client";
 import { listAccounts } from "@/lib/accounts.functions";
-import { openStartAppLink, joinFromLink } from "@/lib/tg-viewer.functions";
+import { openStartAppLink, joinFromLink, extractVerifyLink } from "@/lib/tg-viewer.functions";
 import { proxifyMiniAppUrl } from "@/lib/miniapp-proxy-url";
 import { AdminGate } from "@/components/AdminGate";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { toast } from "sonner";
-import { Play, Square, ArrowLeft, Loader2, RefreshCw, X, MessageSquare } from "lucide-react";
+import { Play, Square, ArrowLeft, Loader2, RefreshCw, X, MessageSquare, Copy, ExternalLink } from "lucide-react";
 import { AccountIdPaste } from "@/components/AccountIdPaste";
 
 export const Route = createFileRoute("/_authenticated/bot-flow")({
