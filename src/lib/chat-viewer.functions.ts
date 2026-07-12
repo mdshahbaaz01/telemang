@@ -246,6 +246,7 @@ export const loadChatHistory = createServerFn({ method: "POST" })
             edited: !!m.editDate,
             reactions: [] as { emoji: string; count: number }[],
             isService: m.className === "MessageService",
+            replyMarkup: serializeReplyMarkup(m.replyMarkup),
           };
         })
         .reverse();
