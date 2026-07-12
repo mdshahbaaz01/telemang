@@ -788,6 +788,7 @@ export type Database = {
           processed_items: number
           run_id: string | null
           scheduled_at: string
+          source_id: string | null
           status: string
           total_items: number
           updated_at: string
@@ -804,6 +805,7 @@ export type Database = {
           processed_items?: number
           run_id?: string | null
           scheduled_at: string
+          source_id?: string | null
           status?: string
           total_items?: number
           updated_at?: string
@@ -820,12 +822,21 @@ export type Database = {
           processed_items?: number
           run_id?: string | null
           scheduled_at?: string
+          source_id?: string | null
           status?: string
           total_items?: number
           updated_at?: string
           user_id?: string
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "scheduled_broadcasts_source_id_fkey"
+            columns: ["source_id"]
+            isOneToOne: false
+            referencedRelation: "scheduled_broadcasts"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       task_logs: {
         Row: {
