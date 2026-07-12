@@ -33,9 +33,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import { ChatIdChip } from "@/components/chat/ChatIdChip";
 import { MessagePreview } from "@/components/MessagePreview";
 import { TargetsPicker } from "@/components/TargetsPicker";
-import { chatViewer } from "@/components/chat/chat-viewer-store";
 import { recordInlineButtonClick } from "@/lib/button-clicks.functions";
-import { MessageCircle } from "lucide-react";
 
 function RangeApply({
   label,
