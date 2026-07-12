@@ -1,11 +1,18 @@
-import type { ButtonChoiceRequest, MathSolveRequest, SolveResult, ImageSolveRequest } from "./types";
+import type {
+  ButtonChoiceRequest,
+  MathSolveRequest,
+  SolveResult,
+  ImageSolveRequest,
+  ImagePlusRequest,
+} from "./types";
 
-// AI-powered solvers for text-form puzzles and multi-choice image buttons.
-// Uses the Lovable AI Gateway (gemini-2.5-flash) for vision + reasoning.
-// No user API key needed — LOVABLE_API_KEY is auto-provisioned server-side.
+// AI-powered captcha solvers. No user API key required — LOVABLE_API_KEY is
+// auto-provisioned. Uses Gemini 2.5 Flash for fast tasks and Gemini 2.5 Pro
+// for hard visual reasoning (grid / coordinates / rotate / audio).
 
 const GATEWAY = "https://ai.gateway.lovable.dev/v1/chat/completions";
-const MODEL_VISION = "google/gemini-2.5-flash";
+const MODEL_FAST = "google/gemini-2.5-flash";
+const MODEL_PRO = "google/gemini-2.5-pro";
 
 function key(): string {
   const k = process.env.LOVABLE_API_KEY;
@@ -13,9 +20,12 @@ function key(): string {
   return k;
 }
 
-async function chat(messages: Array<Record<string, unknown>>, opts?: { jsonSchema?: Record<string, unknown> }): Promise<string> {
+async function chat(
+  messages: Array<Record<string, unknown>>,
+  opts?: { jsonSchema?: Record<string, unknown>; model?: string },
+): Promise<string> {
   const body: Record<string, unknown> = {
-    model: MODEL_VISION,
+    model: opts?.model ?? MODEL_FAST,
     messages,
     temperature: 0,
   };
