@@ -926,14 +926,10 @@ function BotFlowPage() {
                   <X className="h-3.5 w-3.5" />
                 </button>
               </div>
-              <iframe
+              <VerifyFrame
                 key={`${verifyAccountId}-${verifyNonce}`}
-                src={proxifyMiniAppUrl(normalizedVerifyLink, verifyAccountId)}
-                title="Verification runner"
-                className="h-full w-full flex-1 border-0"
-                allow="clipboard-read; clipboard-write; camera; microphone; geolocation; payment"
-                sandbox="allow-scripts allow-same-origin allow-forms allow-modals allow-storage-access-by-user-activation"
-                referrerPolicy="no-referrer"
+                url={normalizedVerifyLink}
+                accountId={verifyAccountId}
               />
             </div>
           )}
