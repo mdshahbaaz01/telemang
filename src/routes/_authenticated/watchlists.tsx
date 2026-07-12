@@ -104,7 +104,7 @@ function WatchlistsPage() {
                 <label key={a.id} className="flex cursor-pointer items-center gap-2 py-1 text-sm">
                   <Checkbox checked={form.accountIds.includes(a.id)} onCheckedChange={() => toggleAccount(a.id)} />
                   <span className="text-muted-foreground">#{i + 1}</span>
-                  <span>{a.display_name ?? a.phone_number ?? a.id.slice(0, 8)}</span>
+                  <span>{a.first_name ?? a.username ?? a.phone ?? a.id.slice(0, 8)}</span>
                 </label>
               ))}
             </div>
