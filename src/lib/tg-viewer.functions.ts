@@ -377,6 +377,13 @@ export const sendReactionAs = createServerFn({ method: "POST" })
     const client = await openClientForAccount(context.supabase, data.accountId);
     try {
       const peer = await resolvePeerFromKey(client, Api, data.peerKey);
+      try {
+        await client.invoke(new Api.messages.GetMessagesViews({
+          peer,
+          id: [data.msgId],
+          increment: true,
+        }));
+      } catch {}
       await client.invoke(new Api.messages.SendReaction({
         peer,
         msgId: data.msgId,
