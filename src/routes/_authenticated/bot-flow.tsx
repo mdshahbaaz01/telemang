@@ -75,6 +75,7 @@ function BotFlowPage() {
 
   const [referLink, setReferLink] = useState("");
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
+  const [autoJoinRequired, setAutoJoinRequired] = useState(true);
   const [logs, setLogs] = useState<LogEntry[]>([]);
   const [running, setRunning] = useState(false);
   const [totals, setTotals] = useState<{ ok: number; fail: number } | null>(null);
@@ -177,6 +178,8 @@ function BotFlowPage() {
             // param parsed from the link) is fired before steps run, so the
             // referrer is already credited by then.
             steps: ["wait:2"],
+            autoJoinRequired,
+            maxJoinRounds: 3,
           },
         }),
         signal: ac.signal,
