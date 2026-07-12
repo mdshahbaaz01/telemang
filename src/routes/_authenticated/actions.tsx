@@ -2214,25 +2214,8 @@ function ActionsPageInner() {
                         <button
                           type="button"
                           className="text-xs text-primary underline"
-                          title="Reuse this schedule at the time picked in the scheduler above"
-                          onClick={async () => {
-                            if (!scheduledAt) {
-                              toast.error("Pick a new schedule time (with seconds) above first");
-                              return;
-                            }
-                            const when = istWallClockToDate(scheduledAt);
-                            if (Number.isNaN(when.getTime())) return toast.error("Invalid schedule time");
-                            if (when.getTime() < Date.now() + 5_000) {
-                              return toast.error("Pick a time at least 5 seconds in the future");
-                            }
-                            try {
-                              await rescheduleFn({ data: { id: s.id, scheduledAt: when.toISOString() } });
-                              toast.success(`Reused → ${formatIst(when)}`);
-                              await qc.invalidateQueries({ queryKey: ["scheduled-broadcasts"] });
-                            } catch (e) {
-                              toast.error((e as Error).message);
-                            }
-                          }}
+                          title="Open reuse dialog to review, edit, and reschedule"
+                          onClick={() => setReuseSchedule(s as any)}
                         >
                           Reuse
                         </button>
