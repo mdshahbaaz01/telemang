@@ -6,14 +6,15 @@ import { listAccounts } from "@/lib/accounts.functions";
 import {
   listReferralLinks, upsertReferralLink, deleteReferralLink,
   listReferralJoins, joinReferralFromAccounts, refreshReferralBalances,
-  summarizeReferralsByBot,
+  summarizeReferralsByBot, listBotFlowHistory, listBotFlowRunLogs,
 } from "@/lib/referrals.functions";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Checkbox } from "@/components/ui/checkbox";
 import { AdminGate } from "@/components/AdminGate";
-import { ArrowLeft, Plus, Trash2, Play, RefreshCw, Download, ChevronDown, ChevronRight } from "lucide-react";
+import { ArrowLeft, Plus, Trash2, Play, RefreshCw, Download, ChevronDown, ChevronRight, Bot, MessageCircle, ExternalLink } from "lucide-react";
 import { toast } from "sonner";
+import { chatViewer } from "@/components/chat/chat-viewer-store";
 
 function downloadCsv(filename: string, rows: (string | number | null | undefined)[][]) {
   const esc = (v: any) => {
@@ -61,6 +62,7 @@ function Page() {
       </header>
       <div className="mx-auto max-w-7xl space-y-4 px-4 py-6 md:px-8">
         <BotSummaryPanel />
+        <BotFlowHistoryPanel />
 
         <div className="rounded-lg border border-border bg-card p-4">
           <h3 className="mb-3 font-semibold">Add referral link</h3>
