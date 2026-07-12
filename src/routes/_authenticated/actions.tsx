@@ -3496,14 +3496,7 @@ function BroadcastRepliesDialog({
               </Button>
               <Button
                 variant="outline"
-                onClick={async () => {
-                  try {
-                    await navigator.clipboard.writeText(confirmUrl);
-                    toast.success("Link copied");
-                  } catch {
-                    toast.error("Failed to copy");
-                  }
-                }}
+                onClick={() => copyWithToast(confirmUrl, toast)}
               >
                 <Copy className="mr-1 h-4 w-4" /> Copy
               </Button>
