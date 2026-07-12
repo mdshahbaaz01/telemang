@@ -30,6 +30,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Switch } from "@/components/ui/switch";
 import { Loader2, Plus, RefreshCcw, ShieldAlert, Trash2, Zap } from "lucide-react";
 import { useCaptchaAutoDetect, setCaptchaAutoDetect } from "@/lib/miniapp-proxy-url";
+import { KIND_LABELS } from "@/lib/captcha/types";
 
 export const Route = createFileRoute("/_authenticated/captcha")({
   head: () => ({
@@ -593,33 +594,88 @@ function LogTab() {
   const qc = useQueryClient();
   const list = useServerFn(listSolveLog);
   const clear = useServerFn(clearSolveLog);
-  const { data: rows = [], isLoading } = useQuery({ queryKey: ["captcha-log"], queryFn: () => list() });
+  const { data: rows = [], isLoading } = useQuery({
+    queryKey: ["captcha-log"],
+    queryFn: () => list(),
+    refetchInterval: 5000,
+  });
+  const [methodFilter, setMethodFilter] = useState<"all" | "ai" | "provider">("all");
+
+  const classify = (provider: string): { method: "ai" | "provider"; label: string; tone: string } => {
+    if (provider.startsWith("ai-vision-pro")) return { method: "ai", label: "Free AI (Pro)", tone: "bg-emerald-600 text-white" };
+    if (provider.startsWith("ai-vision")) return { method: "ai", label: "Free AI", tone: "bg-emerald-500 text-white" };
+    if (provider === "none") return { method: "provider", label: "No solver", tone: "bg-muted text-foreground" };
+    return { method: "provider", label: `Provider · ${provider.split(":")[0]}`, tone: "bg-blue-600 text-white" };
+  };
+
+  const filtered = rows.filter((r) => methodFilter === "all" || classify(r.provider).method === methodFilter);
+  const aiCount = rows.filter((r) => classify(r.provider).method === "ai").length;
+  const provCount = rows.length - aiCount;
+
   return (
     <Card>
-      <CardHeader className="flex-row items-center justify-between">
-        <CardTitle className="text-base">Recent solves</CardTitle>
-        <Button
-          size="sm"
-          variant="outline"
-          onClick={async () => { await clear(); toast.success("Cleared"); qc.invalidateQueries({ queryKey: ["captcha-log"] }); }}
-        >
-          <Trash2 className="h-3 w-3 mr-1" /> Clear
-        </Button>
+      <CardHeader className="space-y-3">
+        <div className="flex flex-row items-center justify-between">
+          <div>
+            <CardTitle className="text-base">Solver trace</CardTitle>
+            <p className="text-xs text-muted-foreground mt-0.5">
+              Live log of every solve — which captcha was detected and which method (free AI vs paid provider) handled it. Auto-refreshes every 5s.
+            </p>
+          </div>
+          <Button
+            size="sm"
+            variant="outline"
+            onClick={async () => { await clear(); toast.success("Cleared"); qc.invalidateQueries({ queryKey: ["captcha-log"] }); }}
+          >
+            <Trash2 className="h-3 w-3 mr-1" /> Clear
+          </Button>
+        </div>
+        <div className="flex flex-wrap items-center gap-2 text-xs">
+          <button
+            onClick={() => setMethodFilter("all")}
+            className={`px-2 py-1 rounded border ${methodFilter === "all" ? "bg-primary text-primary-foreground" : "bg-muted"}`}
+          >All ({rows.length})</button>
+          <button
+            onClick={() => setMethodFilter("ai")}
+            className={`px-2 py-1 rounded border ${methodFilter === "ai" ? "bg-emerald-600 text-white" : "bg-muted"}`}
+          >Free AI ({aiCount})</button>
+          <button
+            onClick={() => setMethodFilter("provider")}
+            className={`px-2 py-1 rounded border ${methodFilter === "provider" ? "bg-blue-600 text-white" : "bg-muted"}`}
+          >Provider ({provCount})</button>
+        </div>
       </CardHeader>
       <CardContent>
         {isLoading && <div className="text-sm text-muted-foreground">Loading…</div>}
-        <div className="space-y-1">
-          {rows.map((r) => (
-            <div key={r.id} className="flex items-center gap-2 text-xs border rounded px-2 py-1.5">
-              <Badge variant={r.success ? "default" : "destructive"}>{r.kind}</Badge>
-              <span className="text-muted-foreground">{r.provider}</span>
-              <span className="ml-auto text-muted-foreground">{r.latency_ms}ms</span>
-              {r.answer_preview && <code className="text-primary truncate max-w-[200px]">{r.answer_preview}</code>}
-              {r.error && <span className="text-destructive truncate max-w-[300px]">{r.error}</span>}
-              <span className="text-muted-foreground">{new Date(r.created_at).toLocaleTimeString()}</span>
+        <div className="space-y-1.5">
+          {filtered.map((r) => {
+            const c = classify(r.provider);
+            const kindLabel = KIND_LABELS[r.kind as keyof typeof KIND_LABELS] ?? r.kind;
+            return (
+              <div key={r.id} className="flex items-center flex-wrap gap-2 text-xs border rounded px-2 py-1.5">
+                <Badge variant={r.success ? "default" : "destructive"} className="text-[10px]">
+                  {r.success ? "✓" : "✗"}
+                </Badge>
+                <span className="font-medium">Detected: {kindLabel}</span>
+                <span className={`px-1.5 py-0.5 rounded text-[10px] font-medium ${c.tone}`}>
+                  {c.label}
+                </span>
+                <span className="text-muted-foreground text-[10px]">{r.provider}</span>
+                <span className="ml-auto text-muted-foreground">{r.latency_ms}ms</span>
+                {typeof r.cost_usd === "number" && r.cost_usd > 0 && (
+                  <span className="text-muted-foreground">${r.cost_usd.toFixed(4)}</span>
+                )}
+                {r.answer_preview && <code className="text-primary truncate max-w-[200px]">{r.answer_preview}</code>}
+                {r.error && <span className="text-destructive truncate max-w-[300px]">{r.error}</span>}
+                <span className="text-muted-foreground">{new Date(r.created_at).toLocaleTimeString()}</span>
+              </div>
+            );
+          })}
+          {!isLoading && filtered.length === 0 && (
+            <div className="text-sm text-muted-foreground py-6 text-center">
+              {rows.length === 0 ? "No solves yet — trigger one from the Playground tab." : "No entries match this filter."}
             </div>
-          ))}
-          {!isLoading && rows.length === 0 && <div className="text-sm text-muted-foreground">No solves yet.</div>}
+          )}
         </div>
       </CardContent>
     </Card>
