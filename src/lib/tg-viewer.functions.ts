@@ -743,3 +743,124 @@ export const joinFromLink = createServerFn({ method: "POST" })
       await client.disconnect().catch(() => {});
     }
   });
+
+// ── extractVerifyLink — for a given account + bot, send /start (optional
+// with a startParam) and scan the last few bot replies for an inline
+// "verify"-style button. Returns the launched WebApp URL (with
+// tgWebAppData for THAT account) or a plain URL button target.
+export const extractVerifyLink = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((d: unknown) =>
+    z
+      .object({
+        accountId: z.string().uuid(),
+        botUsername: z.string().min(1).max(64),
+        startParam: z.string().max(256).optional(),
+        // Case-insensitive substring match against button label. Default "verify".
+        buttonText: z.string().max(120).optional(),
+        // If true, always send /start first even if the last bot message
+        // already has buttons. Default true.
+        sendStart: z.boolean().default(true),
+      })
+      .parse(d),
+  )
+  .handler(async ({ data, context }) => {
+    await assertAdmin(context.supabase);
+    const { openClientForAccount } = await import("./cleanup.server");
+    const { Api } = await import("telegram");
+    const { deriveMiniAppIdentity } = await import("./mini-app-identity.server");
+    const client = await openClientForAccount(context.supabase, data.accountId);
+    const identity = deriveMiniAppIdentity(data.accountId);
+    const needle = (data.buttonText ?? "verify").trim().toLowerCase();
+    try {
+      const bot: any = await client.getEntity(
+        data.botUsername.replace(/^@/, ""),
+      );
+      // Send /start (optionally with ref/start param) to trigger the bot's
+      // menu with the verify button. Ignore duplicate errors.
+      if (data.sendStart) {
+        const startMsg = data.startParam
+          ? `/start ${data.startParam}`
+          : "/start";
+        try {
+          await client.sendMessage(bot, { message: startMsg });
+        } catch {
+          /* ignore — bot may already be started */
+        }
+        // Give the bot a moment to reply.
+        await new Promise((r) => setTimeout(r, 1500));
+      }
+      // Fetch the last handful of bot messages and look for the button.
+      const history: any[] = await client.getMessages(bot, { limit: 8 });
+      let found:
+        | { msgId: number; label: string; kind: "webview" | "url"; url?: string }
+        | null = null;
+      for (const msg of history) {
+        const rm: any = (msg as any)?.replyMarkup;
+        const rows: any[] = rm?.rows ?? [];
+        for (const row of rows) {
+          const btns: any[] = row?.buttons ?? [];
+          for (const b of btns) {
+            const label = String(b?.text ?? "").toLowerCase();
+            if (!label.includes(needle)) continue;
+            const cn = String(b?.className ?? "");
+            if (cn.includes("WebView")) {
+              found = {
+                msgId: Number(msg.id),
+                label: String(b.text),
+                kind: "webview",
+                url: b?.url ? String(b.url) : undefined,
+              };
+              break;
+            }
+            if (cn === "KeyboardButtonUrl" || cn.includes("Url")) {
+              found = {
+                msgId: Number(msg.id),
+                label: String(b.text),
+                kind: "url",
+                url: String(b?.url ?? ""),
+              };
+              break;
+            }
+          }
+          if (found) break;
+        }
+        if (found) break;
+      }
+      if (!found) {
+        throw new Error(
+          `No button matching "${data.buttonText ?? "verify"}" found in the bot's last messages`,
+        );
+      }
+      if (found.kind === "url") {
+        return {
+          url: found.url!,
+          label: found.label,
+          kind: "url" as const,
+          platform: identity.platform,
+        };
+      }
+      // WebView button — ask Telegram to open it so we get tgWebAppData.
+      const themeParams = new Api.DataJSON({
+        data: JSON.stringify(identity.themeParams),
+      });
+      const res: any = await client.invoke(
+        new Api.messages.RequestWebView({
+          peer: bot,
+          bot,
+          url: found.url,
+          platform: identity.platform,
+          themeParams,
+        } as any),
+      );
+      return {
+        url: String(res?.url ?? ""),
+        label: found.label,
+        kind: "webview" as const,
+        platform: identity.platform,
+        queryId: res?.queryId ? String(res.queryId) : null,
+      };
+    } finally {
+      await client.disconnect().catch(() => {});
+    }
+  });
