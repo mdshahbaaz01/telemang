@@ -15,6 +15,9 @@ import { toast } from "sonner";
 import { Play, Square, ArrowLeft, Loader2, RefreshCw, X, MessageSquare, Copy, ExternalLink } from "lucide-react";
 import { AccountIdPaste } from "@/components/AccountIdPaste";
 import { copyWithToast } from "@/lib/clipboard";
+import { useBotFlowCaptchaConfig, CAPTCHA_KIND_OPTIONS, CAPTCHA_PROVIDER_OPTIONS } from "@/lib/bot-flow-captcha-config";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Switch } from "@/components/ui/switch";
 
 export const Route = createFileRoute("/_authenticated/bot-flow")({
   component: () => (
@@ -455,6 +458,8 @@ function BotFlowPage() {
           <ArrowLeft className="h-4 w-4" /> Dashboard
         </Link>
         <h1 className="text-2xl font-semibold tracking-tight">Bot Flow</h1>
+
+        <BotFlowCaptchaCard />
 
         <section className="rounded-lg border border-border bg-card p-4 space-y-4">
           <h2 className="text-lg font-medium">Run a bot with your referral link</h2>
