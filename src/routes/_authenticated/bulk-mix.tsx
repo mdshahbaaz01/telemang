@@ -43,6 +43,14 @@ function parsePostLink(raw: string): { chat: string; msgId: number } | null {
   return { chat, msgId };
 }
 
+function friendlyError(e: unknown): string {
+  const msg = (e as Error)?.message || String(e);
+  if (/failed to fetch|networkerror|load failed/i.test(msg)) {
+    return "Network / server error (request may have timed out). Try smaller batch or check Recent tasks.";
+  }
+  return msg;
+}
+
 function AccountsPopover({
   accounts, selected, setSelected,
 }: {
@@ -276,14 +284,15 @@ function ReactionsMix({ accounts }: { accounts: Account[] }) {
 type ViewPost = {
   id: string;
   link: string;
-  spread: number;
+  minDelay: number;
+  maxDelay: number;
   selected: Set<string>;
   busy: boolean;
   logs: LogRow[];
 };
 
 function newViewPost(): ViewPost {
-  return { id: crypto.randomUUID(), link: "", spread: 60, selected: new Set(), busy: false, logs: [] };
+  return { id: crypto.randomUUID(), link: "", minDelay: 10, maxDelay: 60, selected: new Set(), busy: false, logs: [] };
 }
 
 function ViewBoost({ accounts }: { accounts: Account[] }) {
@@ -303,7 +312,9 @@ function ViewBoost({ accounts }: { accounts: Account[] }) {
         data: {
           source: { chat: parsed.chat, msgIds: [parsed.msgId] },
           accountIds: Array.from(post.selected),
-          spreadSeconds: post.spread,
+          spreadSeconds: post.maxDelay,
+          minDelay: post.minDelay,
+          maxDelay: post.maxDelay,
         },
       });
       update(post.id, {
@@ -315,8 +326,9 @@ function ViewBoost({ accounts }: { accounts: Account[] }) {
       });
       toast.success(`${parsed.chat}/${parsed.msgId}: ok ${res.ok}, fail ${res.fail}`);
     } catch (e) {
-      update(post.id, { busy: false, logs: [{ accountId: null, target: post.link, level: "error", message: (e as Error).message }] });
-      toast.error((e as Error).message);
+      const msg = friendlyError(e);
+      update(post.id, { busy: false, logs: [{ accountId: null, target: post.link, level: "error", message: msg }] });
+      toast.error(msg);
     }
   };
 
@@ -351,9 +363,15 @@ function ViewBoost({ accounts }: { accounts: Account[] }) {
                 <Input value={post.link} onChange={(e) => update(post.id, { link: e.target.value })}
                   placeholder="https://t.me/channel/123" />
               </div>
-              <div>
-                <Label className="text-xs">Spread (sec)</Label>
-                <Input type="number" min={0} max={3600} value={post.spread} onChange={(e) => update(post.id, { spread: Number(e.target.value) || 0 })} />
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <Label className="text-xs">Min (sec)</Label>
+                  <Input type="number" min={0} max={3600} value={post.minDelay} onChange={(e) => update(post.id, { minDelay: Math.max(0, Number(e.target.value) || 0) })} />
+                </div>
+                <div>
+                  <Label className="text-xs">Max (sec)</Label>
+                  <Input type="number" min={0} max={3600} value={post.maxDelay} onChange={(e) => update(post.id, { maxDelay: Math.max(0, Number(e.target.value) || 0) })} />
+                </div>
               </div>
               <Button size="sm" onClick={() => runOne(post)} disabled={post.busy}>
                 {post.busy ? <Loader2 className="mr-1 h-4 w-4 animate-spin" /> : <Eye className="mr-1 h-4 w-4" />}
