@@ -112,6 +112,36 @@ export type Database = {
           },
         ]
       }
+      action_recipes: {
+        Row: {
+          created_at: string
+          description: string
+          id: string
+          name: string
+          steps: Json
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          description?: string
+          id?: string
+          name: string
+          steps?: Json
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          description?: string
+          id?: string
+          name?: string
+          steps?: Json
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       action_runs: {
         Row: {
           created_at: string
@@ -357,6 +387,45 @@ export type Database = {
           phone_code_hash?: string | null
           session_enc?: string | null
           stage?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
+      media_library: {
+        Row: {
+          created_at: string
+          filename: string
+          id: string
+          is_voice: boolean
+          mime_type: string | null
+          name: string
+          path: string
+          size_bytes: number | null
+          tags: string[]
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          filename: string
+          id?: string
+          is_voice?: boolean
+          mime_type?: string | null
+          name: string
+          path: string
+          size_bytes?: number | null
+          tags?: string[]
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          filename?: string
+          id?: string
+          is_voice?: boolean
+          mime_type?: string | null
+          name?: string
+          path?: string
+          size_bytes?: number | null
+          tags?: string[]
           user_id?: string
         }
         Relationships: []
@@ -795,6 +864,45 @@ export type Database = {
           created_at?: string
           id?: string
           role?: Database["public"]["Enums"]["app_role"]
+          user_id?: string
+        }
+        Relationships: []
+      }
+      watchlists: {
+        Row: {
+          account_ids: string[]
+          chat: string
+          created_at: string
+          emoji: string
+          enabled: boolean
+          id: string
+          last_msg_id: number
+          last_run_at: string | null
+          name: string
+          user_id: string
+        }
+        Insert: {
+          account_ids?: string[]
+          chat: string
+          created_at?: string
+          emoji?: string
+          enabled?: boolean
+          id?: string
+          last_msg_id?: number
+          last_run_at?: string | null
+          name: string
+          user_id: string
+        }
+        Update: {
+          account_ids?: string[]
+          chat?: string
+          created_at?: string
+          emoji?: string
+          enabled?: boolean
+          id?: string
+          last_msg_id?: number
+          last_run_at?: string | null
+          name?: string
           user_id?: string
         }
         Relationships: []
