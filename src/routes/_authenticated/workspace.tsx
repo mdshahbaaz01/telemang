@@ -208,6 +208,7 @@ function Pane(props: {
 }) {
   const { index, paneId, tabs, accounts, isFollowingActive, onPickPane, onDetach } = props;
   const byId = useMemo(() => new Map(accounts.map((a) => [a.id, a])), [accounts]);
+  const [reloadTick, setReloadTick] = useState(0);
 
   if (!paneId) {
     return (
@@ -235,6 +236,11 @@ function Pane(props: {
         <span className="truncate font-medium">{nameFor(a, paneId)}</span>
         {isFollowingActive && <span className="rounded bg-primary/10 px-1 text-[10px] text-primary">follows active</span>}
         <div className="ml-auto flex items-center gap-1">
+          <button
+            onClick={() => setReloadTick((t) => t + 1)}
+            className="rounded p-1 hover:bg-muted"
+            title="Refresh this pane"
+          ><RefreshCw className="h-3 w-3" /></button>
           <Popover>
             <PopoverTrigger asChild>
               <Button size="sm" variant="ghost" className="h-6 px-1 text-[10px]">Pin…</Button>
@@ -269,7 +275,7 @@ function Pane(props: {
         </div>
       </div>
       <iframe
-        key={paneId}
+        key={`${paneId}-${reloadTick}`}
         src={`/accounts/${paneId}?solo=1`}
         className="flex-1 border-0"
         title={`Account ${nameFor(a, paneId)}`}

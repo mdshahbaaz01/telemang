@@ -175,17 +175,36 @@ function AccountViewerPage() {
 
   const dialogsQ = useQuery({
     queryKey: ["tg-dialogs", accountId],
-    queryFn: () => listDialogsFn({ data: { accountId, limit: 1000 } }),
-    refetchInterval: 15_000,
-    staleTime: 10_000,
+    queryFn: async () => {
+      // Only download avatars on first load; subsequent refetches skip
+      // photo downloads (huge speedup) and reuse the previously cached ones.
+      const prev = qc.getQueryData<any>(["tg-dialogs", accountId]);
+      const withPhotos = !prev;
+      const res: any = await listDialogsFn({ data: { accountId, limit: 1000, withPhotos } });
+      if (!withPhotos && prev) {
+        const prevMap = new Map<string, string | null>(
+          (prev.dialogs ?? []).map((d: any) => [d.peerKey, d.photoDataUrl]),
+        );
+        res.dialogs = res.dialogs.map((d: any) => ({
+          ...d,
+          photoDataUrl: prevMap.get(d.peerKey) ?? d.photoDataUrl ?? null,
+        }));
+        if (res.me) res.me.photoDataUrl = prev.me?.photoDataUrl ?? res.me.photoDataUrl ?? null;
+      }
+      return res;
+    },
+    refetchInterval: 20_000,
+    staleTime: 15_000,
+    placeholderData: (prev) => prev,
   });
 
   const historyQ = useQuery({
     queryKey: ["tg-history", accountId, activePeer],
     queryFn: () => getHistoryFn({ data: { accountId, peerKey: activePeer!, limit: 50 } }),
     enabled: !!activePeer,
-    refetchInterval: activePeer ? 5_000 : false,
-    staleTime: 2_000,
+    refetchInterval: activePeer ? 3_000 : false,
+    staleTime: 1_000,
+    placeholderData: (prev) => prev,
   });
 
   const dialogs: Dialog[] = (dialogsQ.data?.dialogs ?? []) as Dialog[];
@@ -505,6 +524,14 @@ function AccountViewerPage() {
                 </div>
                 <div className="ml-auto flex items-center gap-2">
                   {historyQ.isFetching && <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />}
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    onClick={() => { historyQ.refetch(); dialogsQ.refetch(); }}
+                    title="Refresh chat"
+                  >
+                    <RefreshCw className={cn("h-4 w-4", historyQ.isFetching && "animate-spin")} />
+                  </Button>
                 </div>
               </div>
 
