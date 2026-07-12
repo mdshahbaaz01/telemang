@@ -734,6 +734,17 @@ export const Route = createFileRoute("/api/public/actions-stream")({
                 const sourcePeer = await resolveSource(client, src);
                 // Auto-join channel first if the account is not a member.
                 await ensureJoined(client, sourcePeer, src.chat, accountId);
+                // View the post like a real reader before replying/commenting
+                try {
+                  await client.invoke(
+                    new Api.messages.GetMessagesViews({
+                      peer: sourcePeer,
+                      id: [src.msgId],
+                      increment: true,
+                    }),
+                  );
+                  send("log", { accountId, level: "info", target: `${src.chat}/${src.msgId}`, message: "Viewed post" });
+                } catch {}
                 let replyPeer: any = sourcePeer;
                 let replyToId = src.msgId;
                 let topMsgId: number | undefined;
@@ -752,16 +763,6 @@ export const Route = createFileRoute("/api/public/actions-stream")({
                   topMsgId = discussionTarget.msgId;
                   // Also join the linked discussion group so comments can be posted.
                   await ensureJoined(client, replyPeer, `${src.chat} (discussion)`, accountId);
-                  // View the post like a real reader before commenting
-                  try {
-                    await client.invoke(
-                      new Api.messages.GetMessagesViews({
-                        peer: sourcePeer,
-                        id: [src.msgId],
-                        increment: true,
-                      }),
-                    );
-                  } catch {}
                 }
                 const rowAtts = ((row as any).attachments && (row as any).attachments.length > 0
                   ? (row as any).attachments
