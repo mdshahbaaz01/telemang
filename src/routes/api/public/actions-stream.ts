@@ -942,7 +942,7 @@ export const Route = createFileRoute("/api/public/actions-stream")({
                   }
                   // Human-pace between joins so we don't stack floods.
                   await new Promise((r) => setTimeout(r, 2500 + Math.random() * 2500));
-                  return out === "ok" ? "ok" : out === "stop" ? "stop" : out === "flood" ? "flood" : "skip";
+                  return out;
                 };
 
                 // ── Pre-join user-supplied channels ─────────────────────
