@@ -967,6 +967,24 @@ function BotFlowPage() {
 }
 
 function MiniAppFrame({ url, title, accountId, botUsername }: { url: string; title: string; accountId: string; botUsername: string }) {
+  return <MiniAppFrameImpl url={url} title={title} accountId={accountId} botUsername={botUsername} />;
+}
+
+function VerifyFrame({ url, accountId }: { url: string; accountId: string }) {
+  const { url: proxied } = useMiniAppProxyUrl(url, accountId);
+  return (
+    <iframe
+      src={proxied ?? "about:blank"}
+      title="Verification runner"
+      className="h-full w-full flex-1 border-0"
+      allow="clipboard-read; clipboard-write; camera; microphone; geolocation; payment"
+      sandbox="allow-scripts allow-same-origin allow-forms allow-modals allow-storage-access-by-user-activation"
+      referrerPolicy="no-referrer"
+    />
+  );
+}
+
+function MiniAppFrameImpl({ url, title, accountId, botUsername }: { url: string; title: string; accountId: string; botUsername: string }) {
   const ref = useRef<HTMLIFrameElement | null>(null);
   const joinFn = useServerFn(joinFromLink);
   const { url: proxiedUrl } = useMiniAppProxyUrl(url, accountId);
