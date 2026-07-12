@@ -551,7 +551,7 @@ function PlaygroundTab() {
           </>
         )}
 
-        {(kind === "recaptchaV2" || kind === "hcaptcha" || kind === "turnstile") && (
+        {kind !== "image" && kind !== "math" && kind !== "buttonChoice" && (
           <>
             <div><Label>Sitekey</Label><Input value={sitekey} onChange={(e) => setSitekey(e.target.value)} /></div>
             <div><Label>Page URL</Label><Input value={pageUrl} onChange={(e) => setPageUrl(e.target.value)} placeholder="https://…" /></div>
