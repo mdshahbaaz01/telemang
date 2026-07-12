@@ -813,8 +813,15 @@ export const extractVerifyLink = createServerFn({ method: "POST" })
       const bot: any = await client.getEntity(
         data.botUsername.replace(/^@/, ""),
       );
-      // Send /start (optionally with ref/start param) to trigger the bot's
-      // menu with the verify button. Ignore duplicate errors.
+      // Record the newest existing message so we can wait for a FRESH bot
+      // reply after /start (verification bots rotate the session hash /
+      // token on every menu render — using a stale button URL causes
+      // "invalid hash" or "session expired" failures downstream).
+      const priorHistory: any[] = await client.getMessages(bot, { limit: 1 });
+      const priorMaxId = Number(priorHistory[0]?.id ?? 0);
+
+      // Always re-send /start so the bot re-renders the menu with a new
+      // token. Ignore duplicate errors.
       if (data.sendStart) {
         const startMsg = data.startParam
           ? `/start ${data.startParam}`
@@ -824,15 +831,40 @@ export const extractVerifyLink = createServerFn({ method: "POST" })
         } catch {
           /* ignore — bot may already be started */
         }
-        // Give the bot a moment to reply.
-        await new Promise((r) => setTimeout(r, 1500));
       }
-      // Fetch the last handful of bot messages and look for the button.
-      const history: any[] = await client.getMessages(bot, { limit: 8 });
+
+      // Poll for a NEW bot message (id > priorMaxId) that carries the
+      // matching button, up to ~10s.
+      const scanFor = async () => {
+        const hist: any[] = await client.getMessages(bot, { limit: 8 });
+        return hist;
+      };
+      let history: any[] = [];
       let found:
         | { msgId: number; label: string; kind: "webview" | "url"; url?: string }
         | null = null;
-      for (const msg of history) {
+      const deadline = Date.now() + 10_000;
+      while (Date.now() < deadline) {
+        await new Promise((r) => setTimeout(r, 900));
+        history = await scanFor();
+        found = null;
+        for (const msg of history) {
+          if (data.sendStart && Number(msg.id) <= priorMaxId) continue;
+          const match = pickVerifyButton(msg, needle);
+          if (match) { found = match; break; }
+        }
+        if (found) break;
+      }
+      // Fallback: if we never saw a fresh message, accept the newest match
+      // in whatever we have (bot may not have re-sent).
+      if (!found) {
+        for (const msg of history) {
+          const match = pickVerifyButton(msg, needle);
+          if (match) { found = match; break; }
+        }
+      }
+      // Old inline scan kept for reference; new logic above.
+      for (const _ of [] as any[]) {
         const rm: any = (msg as any)?.replyMarkup;
         const rows: any[] = rm?.rows ?? [];
         for (const row of rows) {
@@ -888,6 +920,9 @@ export const extractVerifyLink = createServerFn({ method: "POST" })
           url: found.url,
           platform: identity.platform,
           themeParams,
+          fromBotMenu: false,
+          silent: false,
+          writeAllowed: true,
         } as any),
       );
       return {
@@ -901,3 +936,36 @@ export const extractVerifyLink = createServerFn({ method: "POST" })
       await client.disconnect().catch(() => {});
     }
   });
+
+function pickVerifyButton(
+  msg: any,
+  needle: string,
+): { msgId: number; label: string; kind: "webview" | "url"; url?: string } | null {
+  const rm: any = msg?.replyMarkup;
+  const rows: any[] = rm?.rows ?? [];
+  for (const row of rows) {
+    const btns: any[] = row?.buttons ?? [];
+    for (const b of btns) {
+      const label = String(b?.text ?? "").toLowerCase();
+      if (!label.includes(needle)) continue;
+      const cn = String(b?.className ?? "");
+      if (cn.includes("WebView")) {
+        return {
+          msgId: Number(msg.id),
+          label: String(b.text),
+          kind: "webview",
+          url: b?.url ? String(b.url) : undefined,
+        };
+      }
+      if (cn === "KeyboardButtonUrl" || cn.includes("Url")) {
+        return {
+          msgId: Number(msg.id),
+          label: String(b.text),
+          kind: "url",
+          url: String(b?.url ?? ""),
+        };
+      }
+    }
+  }
+  return null;
+}
