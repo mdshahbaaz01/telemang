@@ -428,11 +428,13 @@ export const pressInlineButtonAs = createServerFn({ method: "POST" })
         peerKey: z.string().min(3),
         msgId: z.number().int().positive(),
         data: z.string().min(1).max(700),
+        buttonLabel: z.string().max(300).optional(),
       })
       .parse(d),
   )
   .handler(async ({ data, context }) => {
     await assertAdmin(context.supabase);
+    const { insertInlineButtonClick } = await import("./button-clicks.functions");
     const { data: acct } = await context.supabase
       .from("telegram_accounts")
       .select("paused_until")
@@ -451,6 +453,19 @@ export const pressInlineButtonAs = createServerFn({ method: "POST" })
         const res: any = await client.invoke(
           new Api.messages.GetBotCallbackAnswer({ peer, msgId: data.msgId, data: buf }),
         );
+        await insertInlineButtonClick(context.supabase, context.userId, {
+          accountId: data.accountId,
+          peerKey: data.peerKey,
+          msgId: data.msgId,
+          buttonKind: "callback",
+          buttonLabel: data.buttonLabel ?? null,
+          buttonPayload: data.data,
+          source: "viewer",
+          resultStatus: "ok",
+          resultMessage: res?.message ? String(res.message) : null,
+          resultAlert: !!res?.alert,
+          resultUrl: res?.url ? String(res.url) : null,
+        });
         return {
           message: res?.message ? String(res.message) : "",
           alert: !!res?.alert,
@@ -468,8 +483,30 @@ export const pressInlineButtonAs = createServerFn({ method: "POST" })
               last_error: `FloodWait ${secs}s`,
             })
             .eq("id", data.accountId);
+          await insertInlineButtonClick(context.supabase, context.userId, {
+            accountId: data.accountId,
+            peerKey: data.peerKey,
+            msgId: data.msgId,
+            buttonKind: "callback",
+            buttonLabel: data.buttonLabel ?? null,
+            buttonPayload: data.data,
+            source: "viewer",
+            resultStatus: "error",
+            resultMessage: `FloodWait ${secs}s — account paused`,
+          });
           throw new Error(`FloodWait ${secs}s — account paused`);
         }
+        await insertInlineButtonClick(context.supabase, context.userId, {
+          accountId: data.accountId,
+          peerKey: data.peerKey,
+          msgId: data.msgId,
+          buttonKind: "callback",
+          buttonLabel: data.buttonLabel ?? null,
+          buttonPayload: data.data,
+          source: "viewer",
+          resultStatus: "error",
+          resultMessage: em,
+        });
         throw new Error(em);
       }
     } finally {
