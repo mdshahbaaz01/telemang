@@ -75,12 +75,28 @@ function CaptchaPage() {
         <div className="flex-1">
           <h1 className="text-2xl font-bold">Captcha Solver</h1>
           <p className="text-sm text-muted-foreground">
-            Pluggable adapters for 2Captcha, Anti-Captcha & CapSolver — plus built-in AI vision for
-            math puzzles and button-choice captchas (no key needed).
+            Works out of the box — <strong>no API keys required</strong>. Built-in AI solves math
+            puzzles, word puzzles, button-choice captchas and image (OCR) captchas for free using
+            Lovable AI. Add optional provider keys only if you need reCAPTCHA / hCaptcha / Turnstile.
           </p>
         </div>
         <AutoDetectToggle />
       </header>
+
+      <Card className="border-primary/60 bg-primary/5">
+        <CardContent className="pt-4 text-sm flex items-start gap-3">
+          <Zap className="h-5 w-5 text-primary shrink-0 mt-0.5" />
+          <div className="space-y-1">
+            <div className="font-medium text-foreground">Free built-in solver is already active</div>
+            <p className="text-muted-foreground text-xs">
+              You don't need to configure anything. Math, word, button-choice and image (OCR)
+              captchas are solved automatically by Lovable AI. External provider keys below are
+              <strong> optional</strong> and only add support for reCAPTCHA v2/v3, hCaptcha,
+              Cloudflare Turnstile, GeeTest and other JS-widget challenges.
+            </p>
+          </div>
+        </CardContent>
+      </Card>
 
       <Tabs defaultValue="solvers">
         <TabsList>
