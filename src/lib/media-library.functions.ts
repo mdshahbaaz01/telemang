@@ -65,7 +65,7 @@ export const updateMedia = createServerFn({ method: "POST" })
     }).parse(d),
   )
   .handler(async ({ data, context }) => {
-    const patch: Record<string, unknown> = {};
+    const patch: { name?: string; tags?: string[] } = {};
     if (data.name !== undefined) patch.name = data.name;
     if (data.tags !== undefined) patch.tags = data.tags;
     const { error } = await context.supabase
