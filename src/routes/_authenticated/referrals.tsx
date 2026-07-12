@@ -6,14 +6,15 @@ import { listAccounts } from "@/lib/accounts.functions";
 import {
   listReferralLinks, upsertReferralLink, deleteReferralLink,
   listReferralJoins, joinReferralFromAccounts, refreshReferralBalances,
-  summarizeReferralsByBot,
+  summarizeReferralsByBot, listBotFlowHistory, listBotFlowRunLogs,
 } from "@/lib/referrals.functions";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Checkbox } from "@/components/ui/checkbox";
 import { AdminGate } from "@/components/AdminGate";
-import { ArrowLeft, Plus, Trash2, Play, RefreshCw, Download, ChevronDown, ChevronRight } from "lucide-react";
+import { ArrowLeft, Plus, Trash2, Play, RefreshCw, Download, ChevronDown, ChevronRight, Bot, MessageCircle, ExternalLink } from "lucide-react";
 import { toast } from "sonner";
+import { chatViewer } from "@/components/chat/chat-viewer-store";
 
 function downloadCsv(filename: string, rows: (string | number | null | undefined)[][]) {
   const esc = (v: any) => {
@@ -61,6 +62,7 @@ function Page() {
       </header>
       <div className="mx-auto max-w-7xl space-y-4 px-4 py-6 md:px-8">
         <BotSummaryPanel />
+        <BotFlowHistoryPanel />
 
         <div className="rounded-lg border border-border bg-card p-4">
           <h3 className="mb-3 font-semibold">Add referral link</h3>
@@ -287,6 +289,121 @@ function BotSummaryPanel() {
         })}
         {q.data && q.data.length === 0 && (
           <div className="p-3 text-sm text-muted-foreground">Add a referral link and run "Join with accounts" to see per-bot stats here.</div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function BotFlowHistoryPanel() {
+  const listFn = useServerFn(listBotFlowHistory);
+  const logsFn = useServerFn(listBotFlowRunLogs);
+  const q = useQuery({ queryKey: ["botflow-history"], queryFn: () => listFn(), refetchInterval: 15000 });
+  const [openId, setOpenId] = useState<string | null>(null);
+  const logsQ = useQuery({
+    queryKey: ["botflow-run-logs", openId],
+    queryFn: () => logsFn({ data: { run_id: openId! } }),
+    enabled: !!openId,
+  });
+
+  const logsByAcc = new Map<string, { level: string; message: string; created_at: string }>();
+  for (const l of logsQ.data ?? []) {
+    logsByAcc.set(l.account_id ?? "?", { level: l.level, message: l.message, created_at: l.created_at });
+  }
+
+  return (
+    <div className="rounded-lg border border-border bg-card">
+      <div className="flex items-center justify-between border-b border-border p-3">
+        <span className="flex items-center gap-2 font-semibold"><Bot className="h-4 w-4" /> Bot Flow history ({q.data?.length ?? 0})</span>
+        <Button size="sm" variant="ghost" onClick={() => q.refetch()}><RefreshCw className="mr-1 h-3.5 w-3.5" />Refresh</Button>
+      </div>
+      {q.isLoading && <div className="p-3 text-sm text-muted-foreground">Loading…</div>}
+      <div className="divide-y divide-border max-h-[520px] overflow-y-auto">
+        {(q.data ?? []).map((run) => {
+          const isOpen = openId === run.id;
+          const badge =
+            run.status === "done" ? "bg-green-500/15 text-green-600 dark:text-green-400"
+            : run.status === "error" ? "bg-destructive/15 text-destructive"
+            : run.status === "stopped" ? "bg-yellow-500/15 text-yellow-600 dark:text-yellow-400"
+            : "bg-blue-500/15 text-blue-600 dark:text-blue-400";
+          return (
+            <div key={run.id}>
+              <button
+                onClick={() => setOpenId(isOpen ? null : run.id)}
+                className="flex w-full items-center gap-2 p-3 text-left hover:bg-muted/30"
+              >
+                {isOpen ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
+                <div className="min-w-0 flex-1">
+                  <div className="flex items-center gap-2">
+                    <span className="text-sm font-medium truncate">@{run.bot || "unknown"}</span>
+                    {run.startParam && <span className="rounded bg-muted px-1.5 py-0.5 font-mono text-[10px]">start={run.startParam}</span>}
+                    <span className={`rounded px-2 py-0.5 text-[10px] ${badge}`}>{run.status}</span>
+                  </div>
+                  <div className="mt-0.5 text-[11px] text-muted-foreground">
+                    {new Date(run.created_at).toLocaleString()} · {run.accounts.length} account(s) · {run.steps.length} step(s)
+                  </div>
+                </div>
+                {run.link && (
+                  <span
+                    role="button"
+                    tabIndex={0}
+                    onClick={(e) => { e.stopPropagation(); window.open(run.link!, "_blank"); }}
+                    className="rounded p-1 text-muted-foreground hover:bg-muted"
+                    title="Open link"
+                  >
+                    <ExternalLink className="h-3.5 w-3.5" />
+                  </span>
+                )}
+              </button>
+              {isOpen && (
+                <div className="border-t border-border bg-muted/10 p-3">
+                  {run.accounts.length === 0 && (
+                    <div className="text-xs text-muted-foreground">No accounts recorded for this run.</div>
+                  )}
+                  <div className="grid gap-2 md:grid-cols-2">
+                    {run.accounts.map((a) => {
+                      const log = logsByAcc.get(a.account_id);
+                      const lvlColor =
+                        log?.level === "error" ? "text-destructive"
+                        : log?.level === "success" ? "text-green-600 dark:text-green-400"
+                        : log?.level === "warn" ? "text-yellow-600 dark:text-yellow-400"
+                        : "text-muted-foreground";
+                      return (
+                        <div key={a.account_id} className="flex items-center gap-2 rounded border border-border p-2">
+                          <div className="min-w-0 flex-1">
+                            <div className="truncate text-sm font-medium">{a.name}</div>
+                            <div className={`truncate text-[11px] ${lvlColor}`}>
+                              {log ? log.message : "No log entry"}
+                            </div>
+                          </div>
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={() => chatViewer.open(run.bot, a.account_id)}
+                            title="Open bot chat for this account"
+                            disabled={!run.bot}
+                          >
+                            <MessageCircle className="mr-1 h-3.5 w-3.5" />Chat
+                          </Button>
+                        </div>
+                      );
+                    })}
+                  </div>
+                  {run.steps.length > 0 && (
+                    <details className="mt-3 text-xs">
+                      <summary className="cursor-pointer text-muted-foreground">Steps sent ({run.steps.length})</summary>
+                      <ol className="mt-1 list-decimal space-y-0.5 pl-5">
+                        {run.steps.map((s, i) => (<li key={i} className="font-mono break-all">{s}</li>))}
+                      </ol>
+                    </details>
+                  )}
+                </div>
+              )}
+            </div>
+          );
+        })}
+        {q.data && q.data.length === 0 && (
+          <div className="p-3 text-sm text-muted-foreground">No Bot Flow runs yet. Runs from the Bot Flow page will appear here automatically.</div>
         )}
       </div>
     </div>

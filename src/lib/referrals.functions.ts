@@ -243,3 +243,76 @@ export const refreshReferralBalances = createServerFn({ method: "POST" })
     }
     return { updated };
   });
+
+// ---------------------------------------------------------------------------
+// Bot Flow history — surfaces past botflow runs so the Referrals page can list
+// which accounts ran which bot/link, and jump into each account's bot chat.
+// ---------------------------------------------------------------------------
+
+function parseBotFromParams(params: any): { bot: string; startParam: string | null; link: string | null } {
+  const op = params?.op ?? {};
+  const raw = String(op?.bot ?? "").trim();
+  let bot = raw;
+  let startParam: string | null = op?.startParam ?? null;
+  let link: string | null = null;
+  try {
+    if (/^https?:\/\//i.test(raw) || /^t\.me\//i.test(raw)) {
+      const u = new URL(raw.startsWith("http") ? raw : `https://${raw}`);
+      link = u.toString();
+      bot = u.pathname.replace(/^\//, "").split("/")[0];
+      startParam = startParam ?? u.searchParams.get("start") ?? u.searchParams.get("startapp");
+    }
+  } catch { /* ignore */ }
+  return { bot: bot.replace(/^@/, ""), startParam, link };
+}
+
+export const listBotFlowHistory = createServerFn({ method: "GET" })
+  .middleware([requireSupabaseAuth])
+  .handler(async ({ context }) => {
+    const { data: runs, error } = await context.supabase
+      .from("action_runs")
+      .select("id, kind, status, params, created_at, updated_at")
+      .eq("kind", "botflow")
+      .order("created_at", { ascending: false })
+      .limit(200);
+    if (error) throw error;
+
+    const { data: accs } = await context.supabase
+      .from("telegram_accounts").select("id, first_name, username, phone");
+    const nameFor = new Map<string, string>();
+    for (const a of accs ?? []) {
+      nameFor.set(a.id as string, (a.first_name || a.username || a.phone || (a.id as string).slice(0, 6)) as string);
+    }
+
+    return (runs ?? []).map((r: any) => {
+      const info = parseBotFromParams(r.params);
+      const accountIds: string[] = Array.isArray(r.params?.accountIds) ? r.params.accountIds : [];
+      const steps: string[] = Array.isArray(r.params?.op?.steps) ? r.params.op.steps : [];
+      return {
+        id: r.id as string,
+        status: r.status as string,
+        created_at: r.created_at as string,
+        bot: info.bot,
+        startParam: info.startParam,
+        link: info.link,
+        steps,
+        accounts: accountIds.map((id) => ({
+          account_id: id,
+          name: nameFor.get(id) ?? id.slice(0, 6),
+        })),
+      };
+    });
+  });
+
+export const listBotFlowRunLogs = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((d: unknown) => z.object({ run_id: z.string().uuid() }).parse(d))
+  .handler(async ({ data, context }) => {
+    const { data: rows, error } = await context.supabase
+      .from("action_logs")
+      .select("account_id, target, level, message, created_at")
+      .eq("run_id", data.run_id)
+      .order("created_at", { ascending: true });
+    if (error) throw error;
+    return rows ?? [];
+  });
