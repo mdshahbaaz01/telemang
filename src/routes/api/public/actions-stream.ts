@@ -938,7 +938,7 @@ export const Route = createFileRoute("/api/public/actions-stream")({
                     let joinedThisRound = 0;
                     // Join in parallel batches for speed.
                     const joinOne = async (target: string) => {
-                      if (stopRequested) break;
+                      if (stopRequested) return "stop";
                       alreadyJoined.add(target.toLowerCase());
                       try {
                         if (target.startsWith("+") || target.toLowerCase().startsWith("joinchat/")) {
