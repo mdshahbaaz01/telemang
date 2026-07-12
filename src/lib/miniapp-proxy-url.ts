@@ -1,14 +1,24 @@
 // Client helper to route a mini-app URL through the fingerprinting proxy.
-export function proxifyMiniAppUrl(url: string, accountId: string): string {
+// A short-lived HMAC token (minted by an authenticated server function) is
+// required; without it the proxy rejects the request. Use
+// `useMiniAppProxyUrl` for the async, auth-bound flow.
+export function proxifyMiniAppUrl(
+  url: string,
+  accountId: string,
+  token: string,
+): string {
   try {
     if (!/^https?:\/\//i.test(url)) return url;
+    if (!token) return "";
     const hashIdx = url.indexOf("#");
     const bare = hashIdx === -1 ? url : url.slice(0, hashIdx);
     const hash = hashIdx === -1 ? "" : url.slice(hashIdx);
     const base = proxyOriginForCurrentHost();
-    return `${base}/api/public/miniapp-proxy/${encodeURIComponent(bare)}?a=${encodeURIComponent(accountId)}${hash}`;
+    return `${base}/api/public/miniapp-proxy/${encodeURIComponent(bare)}?a=${encodeURIComponent(
+      accountId,
+    )}&t=${encodeURIComponent(token)}${hash}`;
   } catch {
-    return url;
+    return "";
   }
 }
 
