@@ -167,6 +167,43 @@ export const cancelScheduledBroadcast = createServerFn({ method: "POST" })
     return { ok: true };
   });
 
+export const rescheduleBroadcast = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((d: unknown) =>
+    z.object({
+      id: z.string().uuid(),
+      scheduledAt: z.string().datetime({ offset: true }),
+      label: z.string().max(120).optional(),
+    }).parse(d),
+  )
+  .handler(async ({ data, context }) => {
+    const when = new Date(data.scheduledAt);
+    if (Number.isNaN(when.getTime())) throw new Error("Invalid time");
+    if (when.getTime() < Date.now() + 5_000) {
+      throw new Error("Schedule at least 5 seconds in the future");
+    }
+    const { data: src, error: sErr } = await context.supabase
+      .from("scheduled_broadcasts")
+      .select("payload, label")
+      .eq("id", data.id)
+      .maybeSingle();
+    if (sErr) throw new Error(sErr.message);
+    if (!src) throw new Error("Source schedule not found");
+    const { data: row, error } = await context.supabase
+      .from("scheduled_broadcasts")
+      .insert({
+        user_id: context.userId,
+        scheduled_at: when.toISOString(),
+        label: data.label ?? (src.label as string | null) ?? null,
+        payload: src.payload as any,
+        status: "pending",
+      })
+      .select("id, scheduled_at")
+      .single();
+    if (error) throw new Error(error.message);
+    return { id: row.id as string, scheduledAt: row.scheduled_at as string };
+  });
+
 export const clearScheduledHistory = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .handler(async ({ context }) => {
