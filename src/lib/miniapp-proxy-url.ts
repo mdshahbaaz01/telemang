@@ -4,7 +4,7 @@ import { mintMiniAppProxyToken } from "@/lib/miniapp-token.functions";
 
 // Hook: mint (and auto-refresh) a proxy token and return the proxified URL.
 // Returns null until the token is ready. Token TTL is 1h; we refresh 5m early.
-export function useMiniAppProxyUrl(url: string | null | undefined, accountId: string) {
+export function useMiniAppProxyUrl(url: string | null | undefined, accountId: string, opts?: { captcha?: boolean }) {
   const mint = useServerFn(mintMiniAppProxyToken);
   const tokenQuery = useQuery({
     queryKey: ["miniapp-proxy-token"],
@@ -14,7 +14,7 @@ export function useMiniAppProxyUrl(url: string | null | undefined, accountId: st
     refetchOnWindowFocus: false,
   });
   const token = tokenQuery.data?.token ?? "";
-  const proxied = url && token ? proxifyMiniAppUrl(url, accountId, token) : null;
+  const proxied = url && token ? proxifyMiniAppUrl(url, accountId, token, { captcha: opts?.captcha }) : null;
   return { url: proxied, loading: tokenQuery.isPending, error: tokenQuery.error };
 }
 // Client helper to route a mini-app URL through the fingerprinting proxy.
@@ -25,6 +25,7 @@ export function proxifyMiniAppUrl(
   url: string,
   accountId: string,
   token: string,
+  opts?: { captcha?: boolean },
 ): string {
   try {
     if (!/^https?:\/\//i.test(url)) return url;
@@ -33,9 +34,10 @@ export function proxifyMiniAppUrl(
     const bare = hashIdx === -1 ? url : url.slice(0, hashIdx);
     const hash = hashIdx === -1 ? "" : url.slice(hashIdx);
     const base = proxyOriginForCurrentHost();
+    const cap = opts?.captcha ? "&cap=1" : "";
     return `${base}/api/public/miniapp-proxy/${encodeURIComponent(bare)}?a=${encodeURIComponent(
       accountId,
-    )}&t=${encodeURIComponent(token)}${hash}`;
+    )}&t=${encodeURIComponent(token)}${cap}${hash}`;
   } catch {
     return "";
   }
