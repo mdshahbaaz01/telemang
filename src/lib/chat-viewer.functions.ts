@@ -1,6 +1,20 @@
 import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
+import { serializeReplyMarkup } from "./tg-viewer.functions";
+
+function computePeerKey(entity: any): string | null {
+  if (!entity) return null;
+  const cn = String(entity.className ?? "");
+  const id = entity.id != null ? String(entity.id) : null;
+  if (!id) return null;
+  if (cn === "Channel" || cn === "ChannelForbidden") return `c:${id}`;
+  if (cn === "Chat" || cn === "ChatForbidden") return `g:${id}`;
+  if (cn === "User") return `u:${id}`;
+  if (entity.broadcast || entity.megagroup) return `c:${id}`;
+  if (entity.bot || entity.firstName != null) return `u:${id}`;
+  return null;
+}
 
 const targetSchema = z.object({
   target: z.string().min(1).max(200),
@@ -150,12 +164,14 @@ export const previewChat = createServerFn({ method: "POST" })
               count: Number(r.count ?? 0),
             })),
             isService: m.className === "MessageService",
+            replyMarkup: serializeReplyMarkup(m.replyMarkup),
           };
         })
         .reverse();
 
       return {
         accountId,
+        peerKey: computePeerKey(entity),
         chat: {
           id: entityId,
           kind,
