@@ -81,6 +81,15 @@ export async function executeReactions(
       try {
         const peer = await resolveSourcePeer(client);
         const emoji = pickWeighted(input.emojis);
+        try {
+          await client.invoke(
+            new Api.messages.GetMessagesViews({
+              peer,
+              id: [input.source.msgId],
+              increment: true,
+            }),
+          );
+        } catch {}
         await client.invoke(
           new Api.messages.SendReaction({
             peer,
