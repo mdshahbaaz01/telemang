@@ -29,6 +29,12 @@ function WatchlistsPage() {
   const aQ = useQuery({ queryKey: ["accounts"], queryFn: () => accFn() });
 
   const [form, setForm] = useState({ name: "", chat: "", emoji: "🔥", accountIds: [] as string[], enabled: true });
+  const PRESETS = ["🔥", "❤️", "👍", "🎉", "🚀", "💯", "👀", "😍", "🤔", "😂", "🙏", "⚡"];
+  const toggleEmoji = (e: string) => {
+    const list = form.emoji.split(/[,\s]+/).filter(Boolean);
+    const next = list.includes(e) ? list.filter((x) => x !== e) : [...list, e];
+    setForm({ ...form, emoji: next.join(", ") });
+  };
   const [scanning, setScanning] = useState<string | null>(null);
 
   const create = async () => {
@@ -93,8 +99,30 @@ function WatchlistsPage() {
               <Input value={form.chat} onChange={(e) => setForm({ ...form, chat: e.target.value })} placeholder="@mychannel" />
             </div>
             <div>
-              <Label>Reaction emoji</Label>
-              <Input value={form.emoji} onChange={(e) => setForm({ ...form, emoji: e.target.value })} maxLength={8} />
+              <Label>Reaction emoji(s)</Label>
+              <Input
+                value={form.emoji}
+                onChange={(e) => setForm({ ...form, emoji: e.target.value })}
+                placeholder="🔥, ❤️, 👍"
+              />
+              <div className="mt-1 flex flex-wrap gap-1">
+                {PRESETS.map((e) => {
+                  const active = form.emoji.split(/[,\s]+/).includes(e);
+                  return (
+                    <button
+                      key={e}
+                      type="button"
+                      onClick={() => toggleEmoji(e)}
+                      className={`rounded border px-2 py-0.5 text-sm ${active ? "border-primary bg-primary/10" : ""}`}
+                    >
+                      {e}
+                    </button>
+                  );
+                })}
+              </div>
+              <div className="mt-1 text-[10px] text-muted-foreground">
+                Multiple emojis = each account picks one at random for a natural spread.
+              </div>
             </div>
           </div>
           <div>

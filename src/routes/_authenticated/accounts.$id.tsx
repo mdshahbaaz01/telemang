@@ -18,6 +18,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { ArrowLeft, Loader2, Send, Search, Reply, Trash2, Smile, RefreshCw, X, ExternalLink } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { getStealthSettings } from "./stealth";
 import { MiniAppDrawer, type MiniAppRequest } from "@/components/MiniAppDrawer";
 
 const searchSchema = z.object({
@@ -227,10 +228,21 @@ function AccountViewerPage() {
     return null;
   }, [messages]);
 
-  // Mark read when opening
+  // Mark read when opening — with optional random human-like delay
   useEffect(() => {
     if (!activePeer) return;
-    markReadFn({ data: { accountId, peerKey: activePeer } }).catch(() => {});
+    const s = getStealthSettings();
+    if (!s.readReceiptEnabled) {
+      markReadFn({ data: { accountId, peerKey: activePeer } }).catch(() => {});
+      return;
+    }
+    const min = Math.max(0, s.readReceiptMinMs);
+    const max = Math.max(min, s.readReceiptMaxMs);
+    const wait = min + Math.floor(Math.random() * (max - min + 1));
+    const t = setTimeout(() => {
+      markReadFn({ data: { accountId, peerKey: activePeer } }).catch(() => {});
+    }, wait);
+    return () => clearTimeout(t);
   }, [activePeer, accountId, markReadFn]);
 
   const [search, setSearch] = useState("");
