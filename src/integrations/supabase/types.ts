@@ -258,6 +258,78 @@ export type Database = {
         }
         Relationships: []
       }
+      inline_button_clicks: {
+        Row: {
+          account_id: string | null
+          button_kind: string
+          button_label: string | null
+          button_payload: string | null
+          created_at: string
+          id: number
+          msg_id: number | null
+          peer_key: string | null
+          result_alert: boolean
+          result_message: string | null
+          result_status: string
+          result_url: string | null
+          run_id: string | null
+          source: string
+          target: string | null
+          user_id: string
+        }
+        Insert: {
+          account_id?: string | null
+          button_kind: string
+          button_label?: string | null
+          button_payload?: string | null
+          created_at?: string
+          id?: number
+          msg_id?: number | null
+          peer_key?: string | null
+          result_alert?: boolean
+          result_message?: string | null
+          result_status?: string
+          result_url?: string | null
+          run_id?: string | null
+          source?: string
+          target?: string | null
+          user_id?: string
+        }
+        Update: {
+          account_id?: string | null
+          button_kind?: string
+          button_label?: string | null
+          button_payload?: string | null
+          created_at?: string
+          id?: number
+          msg_id?: number | null
+          peer_key?: string | null
+          result_alert?: boolean
+          result_message?: string | null
+          result_status?: string
+          result_url?: string | null
+          run_id?: string | null
+          source?: string
+          target?: string | null
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "inline_button_clicks_account_id_fkey"
+            columns: ["account_id"]
+            isOneToOne: false
+            referencedRelation: "telegram_accounts"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "inline_button_clicks_run_id_fkey"
+            columns: ["run_id"]
+            isOneToOne: false
+            referencedRelation: "action_runs"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       join_task_items: {
         Row: {
           error: string | null

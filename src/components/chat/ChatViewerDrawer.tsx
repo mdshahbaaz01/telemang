@@ -9,6 +9,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { chatViewer, useChatViewer } from "./chat-viewer-store";
 import { previewChat, loadChatHistory, loadChatMembers, sendQuickReply } from "@/lib/chat-viewer.functions";
 import { pressInlineButtonAs } from "@/lib/tg-viewer.functions";
+import { recordInlineButtonClick } from "@/lib/button-clicks.functions";
 import { listAccounts } from "@/lib/accounts.functions";
 import { ExternalLink, Send, Users, Info, MessageCircle, Loader2, Image as ImageIcon, Video, FileText, Music, Link as LinkIcon } from "lucide-react";
 import { toast } from "sonner";
@@ -66,6 +67,7 @@ function ChatViewerInner({ target, accountId }: { target: string; accountId: str
   const replyFn = useServerFn(sendQuickReply);
   const accountsFn = useServerFn(listAccounts);
   const pressFn = useServerFn(pressInlineButtonAs);
+  const recordClickFn = useServerFn(recordInlineButtonClick);
 
   const [activeAccountId, setActiveAccountId] = useState<string | null>(accountId);
   useEffect(() => setActiveAccountId(accountId), [accountId, target]);
@@ -118,12 +120,30 @@ function ChatViewerInner({ target, accountId }: { target: string; accountId: str
 
   async function handlePressButton(msg: any, btn: any, key: string) {
     if (!activeAccountId) { toast.error("Pick an account first"); return; }
+    const commonLog = {
+      accountId: activeAccountId,
+      peerKey: peerKey ?? null,
+      target,
+      msgId: msg?.id ?? null,
+      buttonLabel: btn?.text ?? null,
+      source: "viewer" as const,
+    };
     try {
+      if (!btn || typeof btn !== "object" || !btn.kind) {
+        toast.error("Malformed button — cannot press");
+        return;
+      }
       if (btn.kind === "url" || btn.kind === "urlAuth") {
+        recordClickFn({
+          data: { ...commonLog, buttonKind: btn.kind, resultStatus: "opened", resultUrl: btn.url ?? null },
+        }).catch(() => {});
         window.open(btn.url, "_blank", "noopener");
         return;
       }
       if (btn.kind === "webview") {
+        recordClickFn({
+          data: { ...commonLog, buttonKind: "webview", resultStatus: btn.url ? "opened" : "ok", resultUrl: btn.url ?? null },
+        }).catch(() => {});
         if (btn.url) window.open(btn.url, "_blank", "noopener");
         else toast.info("WebApp button — open from the Telegram app");
         return;
@@ -131,6 +151,9 @@ function ChatViewerInner({ target, accountId }: { target: string; accountId: str
       if (btn.kind === "reply") {
         setPressingKey(key);
         await replyFn({ data: { target, accountId: activeAccountId, message: btn.text } });
+        recordClickFn({
+          data: { ...commonLog, buttonKind: "reply", resultStatus: "ok", resultMessage: btn.text },
+        }).catch(() => {});
         toast.success("Sent");
         previewQ.refetch();
         return;
@@ -138,7 +161,15 @@ function ChatViewerInner({ target, accountId }: { target: string; accountId: str
       if (btn.kind === "callback") {
         if (!peerKey) { toast.error("Chat not fully loaded yet"); return; }
         setPressingKey(key);
-        const res = await pressFn({ data: { accountId: activeAccountId, peerKey, msgId: msg.id, data: btn.data } });
+        const res = await pressFn({
+          data: {
+            accountId: activeAccountId,
+            peerKey,
+            msgId: msg.id,
+            data: btn.data,
+            buttonLabel: btn.text ?? undefined,
+          },
+        });
         if (res?.url) window.open(res.url, "_blank", "noopener");
         if (res?.message) (res.alert ? toast.warning : toast.success)(res.message);
         else if (!res?.url) toast.success("Sent");
@@ -147,7 +178,11 @@ function ChatViewerInner({ target, accountId }: { target: string; accountId: str
       }
       toast.info(`${btn.kind} button not supported here`);
     } catch (e) {
-      toast.error((e as Error).message);
+      const msgTxt = (e as Error)?.message || "Button press failed";
+      recordClickFn({
+        data: { ...commonLog, buttonKind: btn?.kind ?? "unknown", resultStatus: "error", resultMessage: msgTxt },
+      }).catch(() => {});
+      toast.error(msgTxt);
     } finally {
       setPressingKey(null);
     }

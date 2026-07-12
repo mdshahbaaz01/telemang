@@ -8,6 +8,7 @@ import {
   listReferralJoins, joinReferralFromAccounts, refreshReferralBalances,
   summarizeReferralsByBot, listBotFlowHistory, listBotFlowRunLogs,
 } from "@/lib/referrals.functions";
+import { listInlineButtonClicks } from "@/lib/button-clicks.functions";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -298,11 +299,17 @@ function BotSummaryPanel() {
 function BotFlowHistoryPanel() {
   const listFn = useServerFn(listBotFlowHistory);
   const logsFn = useServerFn(listBotFlowRunLogs);
+  const clicksFn = useServerFn(listInlineButtonClicks);
   const q = useQuery({ queryKey: ["botflow-history"], queryFn: () => listFn(), refetchInterval: 15000 });
   const [openId, setOpenId] = useState<string | null>(null);
   const logsQ = useQuery({
     queryKey: ["botflow-run-logs", openId],
     queryFn: () => logsFn({ data: { run_id: openId! } }),
+    enabled: !!openId,
+  });
+  const clicksQ = useQuery({
+    queryKey: ["botflow-run-clicks", openId],
+    queryFn: () => clicksFn({ data: { runId: openId!, limit: 100 } }),
     enabled: !!openId,
   });
 
@@ -397,6 +404,44 @@ function BotFlowHistoryPanel() {
                       </ol>
                     </details>
                   )}
+                  <details className="mt-3 text-xs" open={(clicksQ.data?.length ?? 0) > 0}>
+                    <summary className="cursor-pointer text-muted-foreground">
+                      Button clicks ({clicksQ.data?.length ?? 0})
+                    </summary>
+                    {clicksQ.isLoading ? (
+                      <div className="mt-1 text-muted-foreground">Loading…</div>
+                    ) : (clicksQ.data?.length ?? 0) === 0 ? (
+                      <div className="mt-1 text-muted-foreground">No button clicks recorded for this run.</div>
+                    ) : (
+                      <ul className="mt-1 space-y-1">
+                        {clicksQ.data!.map((c) => (
+                          <li key={c.id} className="flex flex-wrap items-center gap-2 rounded border border-border/50 bg-background px-2 py-1">
+                            <span className="text-[10px] uppercase tracking-wide text-muted-foreground">
+                              {new Date(c.created_at).toLocaleTimeString()}
+                            </span>
+                            <span className="rounded bg-muted px-1.5 py-0.5 text-[10px] font-mono">{c.button_kind}</span>
+                            <span className={
+                              c.result_status === "error"
+                                ? "text-destructive"
+                                : c.result_alert
+                                  ? "text-yellow-600 dark:text-yellow-400"
+                                  : ""
+                            }>
+                              {c.button_label ?? "(no label)"}
+                            </span>
+                            {c.result_message && (
+                              <span className="truncate text-muted-foreground">→ {c.result_message}</span>
+                            )}
+                            {c.result_url && (
+                              <a href={c.result_url} target="_blank" rel="noreferrer" className="text-primary hover:underline">
+                                <ExternalLink className="inline h-3 w-3" />
+                              </a>
+                            )}
+                          </li>
+                        ))}
+                      </ul>
+                    )}
+                  </details>
                 </div>
               )}
             </div>
