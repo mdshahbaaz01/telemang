@@ -19,6 +19,7 @@ import {
   cancelScheduledBroadcast,
   getScheduleReport,
   clearScheduledHistory,
+  rescheduleBroadcast,
 } from "@/lib/schedule.functions";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -443,6 +444,7 @@ function ActionsPageInner() {
   const createSchedFn = useServerFn(createScheduledBroadcast);
   const cancelSchedFn = useServerFn(cancelScheduledBroadcast);
   const clearSchedHistoryFn = useServerFn(clearScheduledHistory);
+  const rescheduleFn = useServerFn(rescheduleBroadcast);
   const reportSchedFn = useServerFn(getScheduleReport);
   const [reportOpen, setReportOpen] = useState(false);
   const [reportId, setReportId] = useState<string | null>(null);
@@ -2208,6 +2210,31 @@ function ActionsPageInner() {
                           }}
                         >
                           Report
+                        </button>
+                        <button
+                          type="button"
+                          className="text-xs text-primary underline"
+                          title="Reuse this schedule at the time picked in the scheduler above"
+                          onClick={async () => {
+                            if (!scheduledAt) {
+                              toast.error("Pick a new schedule time (with seconds) above first");
+                              return;
+                            }
+                            const when = istWallClockToDate(scheduledAt);
+                            if (Number.isNaN(when.getTime())) return toast.error("Invalid schedule time");
+                            if (when.getTime() < Date.now() + 5_000) {
+                              return toast.error("Pick a time at least 5 seconds in the future");
+                            }
+                            try {
+                              await rescheduleFn({ data: { id: s.id, scheduledAt: when.toISOString() } });
+                              toast.success(`Reused → ${formatIst(when)}`);
+                              await qc.invalidateQueries({ queryKey: ["scheduled-broadcasts"] });
+                            } catch (e) {
+                              toast.error((e as Error).message);
+                            }
+                          }}
+                        >
+                          Reuse
                         </button>
                         {s.status === "pending" && (
                           <button
