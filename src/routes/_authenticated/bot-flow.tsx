@@ -72,6 +72,7 @@ function BotFlowPage() {
   const listAcc = useServerFn(listAccounts);
   const accountsQ = useQuery({ queryKey: ["accounts"], queryFn: () => listAcc() });
   const openStartApp = useServerFn(openStartAppLink);
+  const extractVerifyFn = useServerFn(extractVerifyLink);
 
   const [referLink, setReferLink] = useState("");
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
@@ -271,6 +272,86 @@ function BotFlowPage() {
   const closeMini = (accountId: string) =>
     setMiniRuns((prev) => prev.filter((r) => r.accountId !== accountId));
   const clearMini = () => setMiniRuns([]);
+
+  // ─── Verify-link extractor ───────────────────────────────────────
+  const [vxLink, setVxLink] = useState("");
+  const [vxButtonText, setVxButtonText] = useState("verify");
+  const [vxSelected, setVxSelected] = useState<string[]>([]);
+  const [vxRunning, setVxRunning] = useState(false);
+  const [vxResults, setVxResults] = useState<
+    { accountId: string; status: "loading" | "ready" | "error"; url?: string; label?: string; kind?: "webview" | "url"; error?: string }[]
+  >([]);
+
+  const vxParsed = useMemo(() => {
+    const raw = vxLink.trim();
+    if (!raw) return null;
+    try {
+      let username = "";
+      let startParam = "";
+      if (raw.startsWith("@")) username = raw.slice(1);
+      else if (raw.includes("t.me/") || raw.startsWith("http")) {
+        const url = new URL(raw.startsWith("http") ? raw : `https://${raw}`);
+        username = url.pathname.replace(/^\/+/, "").split("/")[0];
+        startParam = url.searchParams.get("start") || url.searchParams.get("startapp") || "";
+      } else username = raw;
+      return { username, startParam };
+    } catch { return { username: raw, startParam: "" }; }
+  }, [vxLink]);
+
+  const vxToggle = (id: string) =>
+    setVxSelected((ids) => (ids.includes(id) ? ids.filter((x) => x !== id) : [...ids, id]));
+
+  const runExtractVerify = async () => {
+    if (!vxParsed?.username) return toast.error("Paste a bot link or @username");
+    const ids = vxSelected.length ? vxSelected : allIds;
+    if (!ids.length) return toast.error("Select at least one account");
+    setVxRunning(true);
+    setVxResults(ids.map((id) => ({ accountId: id, status: "loading" as const })));
+    await Promise.all(
+      ids.map(async (accountId) => {
+        try {
+          const res = await extractVerifyFn({
+            data: {
+              accountId,
+              botUsername: vxParsed.username,
+              startParam: vxParsed.startParam || undefined,
+              buttonText: vxButtonText.trim() || "verify",
+              sendStart: true,
+            },
+          });
+          setVxResults((prev) =>
+            prev.map((r) =>
+              r.accountId === accountId
+                ? { ...r, status: "ready", url: res.url, label: res.label, kind: res.kind }
+                : r,
+            ),
+          );
+        } catch (e) {
+          setVxResults((prev) =>
+            prev.map((r) =>
+              r.accountId === accountId
+                ? { ...r, status: "error", error: (e as Error).message || "Failed" }
+                : r,
+            ),
+          );
+        }
+      }),
+    );
+    setVxRunning(false);
+  };
+
+  const copyAllVerify = async () => {
+    const lines = vxResults
+      .filter((r) => r.status === "ready" && r.url)
+      .map((r) => {
+        const acc = accountList.find((a) => a.id === r.accountId);
+        const who = acc?.first_name || acc?.username || acc?.phone || r.accountId.slice(0, 8);
+        return `${who}\t${r.url}`;
+      });
+    if (!lines.length) return toast.error("No links yet");
+    await navigator.clipboard.writeText(lines.join("\n"));
+    toast.success(`Copied ${lines.length} link(s)`);
+  };
 
   // ─── Direct verification link runner ───────────────────────────────
   const [verifyLink, setVerifyLink] = useState("");
