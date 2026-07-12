@@ -3070,6 +3070,7 @@ function BroadcastRepliesDialog({
   const fetchReplies = useServerFn(getBroadcastReplies);
   const refresh = useServerFn(refreshReplyThread);
   const press = useServerFn(pressInlineButton);
+  const recordClick = useServerFn(recordInlineButtonClick);
 
   const [loading, setLoading] = useState(true);
   const [pairs, setPairs] = useState<ReplyPair[]>([]);
@@ -3151,17 +3152,38 @@ function BroadcastRepliesDialog({
   }, [autoRefresh, pairs, runCreatedAt, refresh]);
 
   const onPress = async (pair: ReplyPair, msgId: number, btn: ReplyButton, key: string) => {
+    if (!btn || typeof btn !== "object" || !("kind" in btn) || !btn.kind) {
+      toast.error("Malformed button — cannot press");
+      return;
+    }
+    const logCommon = {
+      runId,
+      accountId: pair.accountId,
+      target: pair.target,
+      msgId,
+      buttonLabel: (btn as any)?.text ?? null,
+      source: "broadcast" as const,
+    };
     if (btn.kind === "url" || btn.kind === "urlAuth" || btn.kind === "webview") {
       const url = (btn as any).url as string | undefined;
       if (!url) {
         toast.error("Button has no URL");
+        recordClick({
+          data: { ...logCommon, buttonKind: btn.kind, resultStatus: "error", resultMessage: "Button has no URL" },
+        }).catch(() => {});
         return;
       }
+      recordClick({
+        data: { ...logCommon, buttonKind: btn.kind, resultStatus: "opened", resultUrl: url },
+      }).catch(() => {});
       setConfirmUrl(url);
       return;
     }
     if (btn.kind !== "callback") {
       toast.info("This button type isn't supported from a user account");
+      recordClick({
+        data: { ...logCommon, buttonKind: btn.kind, resultStatus: "error", resultMessage: "Unsupported button type" },
+      }).catch(() => {});
       return;
     }
     setBusy(key);
@@ -3173,6 +3195,8 @@ function BroadcastRepliesDialog({
           target: pair.target,
           msgId,
           data: btn.data,
+          runId,
+          buttonLabel: (btn as any).text ?? undefined,
         },
       });
       if (res.message) {
