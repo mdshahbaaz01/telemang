@@ -1,5 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { deriveMiniAppIdentity } from "@/lib/mini-app-identity.server";
+import { verifyMiniAppProxyToken, isBlockedProxyHost } from "@/lib/miniapp-token.server";
 
 // Cross-origin mini-app proxy that:
 //   1. strips X-Frame-Options / CSP so the app renders in an iframe;
@@ -24,12 +25,13 @@ const STRIP_HEADERS = new Set([
   "connection",
 ]);
 
-function buildOverrideScript(accountId: string, upstreamUrl: string) {
+function buildOverrideScript(accountId: string, upstreamUrl: string, token: string) {
   const fp = deriveMiniAppIdentity(accountId).fingerprint;
   return `(() => {
   try {
     const fp = ${JSON.stringify(fp)};
     const ACCT = ${JSON.stringify(accountId)};
+    const TOKEN = ${JSON.stringify(token)};
     const UPSTREAM = ${JSON.stringify(upstreamUrl)};
     const PROXY_PREFIX = '/api/public/miniapp-proxy/';
     const upstreamOrigin = (() => { try { return new URL(UPSTREAM).origin; } catch { return null; } })();
@@ -228,6 +230,7 @@ function buildOverrideScript(accountId: string, upstreamUrl: string) {
         // identity survives hardcoded JS URLs rewritten by the server.
         if (abs.origin === location.origin && abs.pathname.startsWith(PROXY_PREFIX)) {
           if (!abs.searchParams.get('a')) abs.searchParams.set('a', ACCT);
+          if (!abs.searchParams.get('t')) abs.searchParams.set('t', TOKEN);
           return abs.toString();
         }
         // Rewrite both same-preview paths and absolute upstream calls through the proxy.
@@ -237,7 +240,7 @@ function buildOverrideScript(accountId: string, upstreamUrl: string) {
         const hashIdx = target.indexOf('#');
         const bare = hashIdx === -1 ? target : target.slice(0, hashIdx);
         const hash = hashIdx === -1 ? '' : target.slice(hashIdx);
-        return location.origin + PROXY_PREFIX + encodeURIComponent(bare) + '?a=' + encodeURIComponent(ACCT) + hash;
+        return location.origin + PROXY_PREFIX + encodeURIComponent(bare) + '?a=' + encodeURIComponent(ACCT) + '&t=' + encodeURIComponent(TOKEN) + hash;
       } catch { return s; }
     };
     const isTgLink = (raw) => {
@@ -513,11 +516,11 @@ function buildOverrideScript(accountId: string, upstreamUrl: string) {
 })();`;
 }
 
-function proxyUrl(target: string, accountId: string, proxyOrigin = "") {
-  return `${proxyOrigin}/api/public/miniapp-proxy/${encodeURIComponent(target)}?a=${encodeURIComponent(accountId)}`;
+function proxyUrl(target: string, accountId: string, token: string, proxyOrigin = "") {
+  return `${proxyOrigin}/api/public/miniapp-proxy/${encodeURIComponent(target)}?a=${encodeURIComponent(accountId)}&t=${encodeURIComponent(token)}`;
 }
 
-function rewriteHtmlUrls(html: string, baseUrl: string, accountId: string, proxyOrigin: string) {
+function rewriteHtmlUrls(html: string, baseUrl: string, accountId: string, token: string, proxyOrigin: string) {
   const base = new URL(baseUrl);
   const toProxy = (raw: string) => {
     if (!raw || raw.startsWith("#") || raw.startsWith("data:") || raw.startsWith("blob:") || raw.startsWith("mailto:") || raw.startsWith("tel:")) {
@@ -526,7 +529,7 @@ function rewriteHtmlUrls(html: string, baseUrl: string, accountId: string, proxy
     try {
       const absolute = new URL(raw, base).toString();
       if (!/^https?:\/\//i.test(absolute)) return raw;
-      return proxyUrl(absolute, accountId, proxyOrigin);
+      return proxyUrl(absolute, accountId, token, proxyOrigin);
     } catch {
       return raw;
     }
@@ -549,22 +552,25 @@ function rewriteHtmlUrls(html: string, baseUrl: string, accountId: string, proxy
     });
 }
 
-function rewriteCssUrls(css: string, baseUrl: string, accountId: string, proxyOrigin: string) {
+function rewriteCssUrls(css: string, baseUrl: string, accountId: string, token: string, proxyOrigin: string) {
   const base = new URL(baseUrl);
   return css.replace(/url\((['"]?)(.*?)\1\)/gi, (_m, quote, value) => {
     if (!value || value.startsWith("data:") || value.startsWith("blob:")) return `url(${quote}${value}${quote})`;
     try {
-      return `url(${quote}${proxyUrl(new URL(value, base).toString(), accountId, proxyOrigin)}${quote})`;
+      return `url(${quote}${proxyUrl(new URL(value, base).toString(), accountId, token, proxyOrigin)}${quote})`;
     } catch {
       return `url(${quote}${value}${quote})`;
     }
   });
 }
 
-function rewriteJsUrls(js: string, baseUrl: string, accountId: string, proxyOrigin: string) {
+function rewriteJsUrls(js: string, baseUrl: string, accountId: string, token: string, proxyOrigin: string) {
   try {
     const upstream = new URL(baseUrl);
+    // Note: the resulting URL will not have query params; the client-side
+    // proxify shim adds `?a=` and `?t=` when the browser loads the resource.
     const proxyBase = `${proxyOrigin}/api/public/miniapp-proxy/${encodeURIComponent(upstream.origin)}`;
+    void token;
     return js.replaceAll(upstream.origin, proxyBase);
   } catch {
     return js;
@@ -579,10 +585,29 @@ async function handle(request: Request, params: { _splat?: string }) {
   const proxyReqUrl = new URL(request.url);
   const proxyOrigin = proxyReqUrl.origin;
   const accountId = proxyReqUrl.searchParams.get("a") || "anon";
+  const token = proxyReqUrl.searchParams.get("t") || readTokenCookie(request);
+
+  // Auth: require a valid short-lived HMAC token (minted by an authenticated
+  // server function). Blocks anonymous use of the proxy as an open relay.
+  if (!verifyMiniAppProxyToken(token)) {
+    return new Response("Unauthorized", { status: 401 });
+  }
+
+  // SSRF guard: reject loopback, link-local, cloud metadata, and private
+  // network destinations at the hostname layer.
+  let targetUrlEarly: URL;
+  try {
+    targetUrlEarly = new URL(target);
+  } catch {
+    return new Response("Invalid target URL", { status: 400 });
+  }
+  if (isBlockedProxyHost(targetUrlEarly.hostname)) {
+    return new Response("Target host is not permitted", { status: 403 });
+  }
 
   const upstreamHeaders = new Headers();
   const fp = deriveMiniAppIdentity(accountId).fingerprint;
-  const targetUrl = new URL(target);
+  const targetUrl = targetUrlEarly;
   upstreamHeaders.set("user-agent", fp.userAgent);
   upstreamHeaders.set("accept-language", fp.languages.join(","));
   upstreamHeaders.set("origin", targetUrl.origin);
@@ -611,15 +636,21 @@ async function handle(request: Request, params: { _splat?: string }) {
     if (!STRIP_HEADERS.has(k.toLowerCase())) outHeaders.set(k, v);
   });
   outHeaders.set("access-control-allow-origin", "*");
+  // Backup cookie: subsequent sub-resource requests from the iframe carry
+  // the token even if the URL rewriter missed an inline reference.
+  outHeaders.append(
+    "set-cookie",
+    `miniapp_proxy_t=${encodeURIComponent(token!)}; Path=/api/public/miniapp-proxy/; Max-Age=3600; HttpOnly; Secure; SameSite=None`,
+  );
 
   const ctype = upstream.headers.get("content-type") || "";
   if (ctype.includes("text/html")) {
     let html = await upstream.text();
     const finalUrl = upstream.url || target;
     const upstreamDir = new URL(".", finalUrl).toString();
-    const script = `<script>${buildOverrideScript(accountId, finalUrl)}</script>`;
+    const script = `<script>${buildOverrideScript(accountId, finalUrl, token!)}</script>`;
     const base = `<base href="${upstreamDir}">`;
-    html = rewriteHtmlUrls(html, finalUrl, accountId, proxyOrigin);
+    html = rewriteHtmlUrls(html, finalUrl, accountId, token!, proxyOrigin);
     if (/<head[^>]*>/i.test(html)) {
       html = html.replace(/<head([^>]*)>/i, `<head$1>${script}${base}`);
     } else {
@@ -629,16 +660,34 @@ async function handle(request: Request, params: { _splat?: string }) {
     return new Response(html, { status: upstream.status, headers: outHeaders });
   }
   if (ctype.includes("text/css")) {
-    const css = rewriteCssUrls(await upstream.text(), upstream.url || target, accountId, proxyOrigin);
+    const css = rewriteCssUrls(await upstream.text(), upstream.url || target, accountId, token!, proxyOrigin);
     outHeaders.set("content-type", "text/css; charset=utf-8");
     return new Response(css, { status: upstream.status, headers: outHeaders });
   }
   if (ctype.includes("javascript") || ctype.includes("ecmascript") || /\.m?js(?:$|\?)/i.test(target)) {
-    const js = rewriteJsUrls(await upstream.text(), upstream.url || target, accountId, proxyOrigin);
+    const js = rewriteJsUrls(await upstream.text(), upstream.url || target, accountId, token!, proxyOrigin);
     outHeaders.set("content-type", ctype || "application/javascript; charset=utf-8");
     return new Response(js, { status: upstream.status, headers: outHeaders });
   }
   return new Response(upstream.body, { status: upstream.status, headers: outHeaders });
+}
+
+function readTokenCookie(request: Request): string | null {
+  const cookie = request.headers.get("cookie");
+  if (!cookie) return null;
+  for (const part of cookie.split(";")) {
+    const eq = part.indexOf("=");
+    if (eq === -1) continue;
+    const name = part.slice(0, eq).trim();
+    if (name === "miniapp_proxy_t") {
+      try {
+        return decodeURIComponent(part.slice(eq + 1).trim());
+      } catch {
+        return part.slice(eq + 1).trim();
+      }
+    }
+  }
+  return null;
 }
 
 export const Route = createFileRoute("/api/public/miniapp-proxy/$")({

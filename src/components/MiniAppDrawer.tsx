@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { X, Loader2, RefreshCw } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useTelegramWebviewBridge } from "@/lib/telegram-webview-bridge";
-import { proxifyMiniAppUrl } from "@/lib/miniapp-proxy-url";
+import { useMiniAppProxyUrl } from "@/lib/miniapp-proxy-url";
 
 export type MiniAppRequest = {
   accountId: string;
@@ -32,10 +32,7 @@ export function MiniAppDrawer({
   const iframeRef = useRef<HTMLIFrameElement | null>(null);
   useTelegramWebviewBridge(iframeRef);
 
-  const iframeUrl = useMemo(
-    () => (resolvedUrl ? proxifyMiniAppUrl(resolvedUrl, request?.accountId ?? "anon") : null),
-    [resolvedUrl, request?.accountId],
-  );
+  const { url: iframeUrl } = useMiniAppProxyUrl(resolvedUrl, request?.accountId ?? "anon");
 
   useEffect(() => {
     if (!open || !request) {

@@ -6,7 +6,7 @@ import { useTelegramWebviewBridge } from "@/lib/telegram-webview-bridge";
 import { supabase } from "@/integrations/supabase/client";
 import { listAccounts } from "@/lib/accounts.functions";
 import { openStartAppLink, joinFromLink, extractVerifyLink } from "@/lib/tg-viewer.functions";
-import { proxifyMiniAppUrl } from "@/lib/miniapp-proxy-url";
+import { useMiniAppProxyUrl } from "@/lib/miniapp-proxy-url";
 import { AdminGate } from "@/components/AdminGate";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -926,14 +926,10 @@ function BotFlowPage() {
                   <X className="h-3.5 w-3.5" />
                 </button>
               </div>
-              <iframe
+              <VerifyFrame
                 key={`${verifyAccountId}-${verifyNonce}`}
-                src={proxifyMiniAppUrl(normalizedVerifyLink, verifyAccountId)}
-                title="Verification runner"
-                className="h-full w-full flex-1 border-0"
-                allow="clipboard-read; clipboard-write; camera; microphone; geolocation; payment"
-                sandbox="allow-scripts allow-same-origin allow-forms allow-modals allow-storage-access-by-user-activation"
-                referrerPolicy="no-referrer"
+                url={normalizedVerifyLink}
+                accountId={verifyAccountId}
               />
             </div>
           )}
@@ -971,8 +967,27 @@ function BotFlowPage() {
 }
 
 function MiniAppFrame({ url, title, accountId, botUsername }: { url: string; title: string; accountId: string; botUsername: string }) {
+  return <MiniAppFrameImpl url={url} title={title} accountId={accountId} botUsername={botUsername} />;
+}
+
+function VerifyFrame({ url, accountId }: { url: string; accountId: string }) {
+  const { url: proxied } = useMiniAppProxyUrl(url, accountId);
+  return (
+    <iframe
+      src={proxied ?? "about:blank"}
+      title="Verification runner"
+      className="h-full w-full flex-1 border-0"
+      allow="clipboard-read; clipboard-write; camera; microphone; geolocation; payment"
+      sandbox="allow-scripts allow-same-origin allow-forms allow-modals allow-storage-access-by-user-activation"
+      referrerPolicy="no-referrer"
+    />
+  );
+}
+
+function MiniAppFrameImpl({ url, title, accountId, botUsername }: { url: string; title: string; accountId: string; botUsername: string }) {
   const ref = useRef<HTMLIFrameElement | null>(null);
   const joinFn = useServerFn(joinFromLink);
+  const { url: proxiedUrl } = useMiniAppProxyUrl(url, accountId);
   const [nonce, setNonce] = useState(0);
   const [overlay, setOverlay] = useState<
     | { status: "loading"; url: string }
@@ -1020,7 +1035,7 @@ function MiniAppFrame({ url, title, accountId, botUsername }: { url: string; tit
       <iframe
         key={`${url}#${nonce}`}
         ref={ref}
-        src={proxifyMiniAppUrl(url, accountId)}
+        src={proxiedUrl ?? "about:blank"}
         title={title}
         name={`tgminiapp-${accountId}`}
         className="h-full w-full border-0"
