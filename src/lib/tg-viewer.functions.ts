@@ -864,38 +864,6 @@ export const extractVerifyLink = createServerFn({ method: "POST" })
         }
       }
       // Old inline scan kept for reference; new logic above.
-      for (const _ of [] as any[]) {
-        const rm: any = (msg as any)?.replyMarkup;
-        const rows: any[] = rm?.rows ?? [];
-        for (const row of rows) {
-          const btns: any[] = row?.buttons ?? [];
-          for (const b of btns) {
-            const label = String(b?.text ?? "").toLowerCase();
-            if (!label.includes(needle)) continue;
-            const cn = String(b?.className ?? "");
-            if (cn.includes("WebView")) {
-              found = {
-                msgId: Number(msg.id),
-                label: String(b.text),
-                kind: "webview",
-                url: b?.url ? String(b.url) : undefined,
-              };
-              break;
-            }
-            if (cn === "KeyboardButtonUrl" || cn.includes("Url")) {
-              found = {
-                msgId: Number(msg.id),
-                label: String(b.text),
-                kind: "url",
-                url: String(b?.url ?? ""),
-              };
-              break;
-            }
-          }
-          if (found) break;
-        }
-        if (found) break;
-      }
       if (!found) {
         throw new Error(
           `No button matching "${data.buttonText ?? "verify"}" found in the bot's last messages`,
