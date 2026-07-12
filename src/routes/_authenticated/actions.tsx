@@ -3495,6 +3495,19 @@ function BroadcastRepliesDialog({
                 Cancel
               </Button>
               <Button
+                variant="outline"
+                onClick={async () => {
+                  try {
+                    await navigator.clipboard.writeText(confirmUrl);
+                    toast.success("Link copied");
+                  } catch {
+                    toast.error("Failed to copy");
+                  }
+                }}
+              >
+                <Copy className="mr-1 h-4 w-4" /> Copy
+              </Button>
+              <Button
                 onClick={() => {
                   window.open(confirmUrl, "_blank", "noopener,noreferrer");
                   setConfirmUrl(null);

@@ -16,7 +16,7 @@ import {
 } from "@/lib/tg-viewer.functions";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { ArrowLeft, Loader2, Send, Search, Reply, Trash2, Smile, RefreshCw, X, ExternalLink } from "lucide-react";
+import { ArrowLeft, Loader2, Send, Search, Reply, Trash2, Smile, RefreshCw, X, ExternalLink, Copy } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { getStealthSettings } from "./stealth";
 import { MiniAppDrawer, type MiniAppRequest } from "@/components/MiniAppDrawer";
@@ -690,6 +690,20 @@ function AccountViewerPage() {
             <div className="flex justify-end gap-2">
               <Button variant="outline" size="sm" onClick={() => setConfirmUrl(null)}>
                 Cancel
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={async () => {
+                  try {
+                    await navigator.clipboard.writeText(confirmUrl);
+                    toast.success("Link copied");
+                  } catch {
+                    toast.error("Failed to copy");
+                  }
+                }}
+              >
+                <Copy className="mr-1 h-4 w-4" /> Copy
               </Button>
               <Button
                 size="sm"
