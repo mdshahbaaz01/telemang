@@ -941,7 +941,12 @@ export const processBatchJoin = createServerFn({ method: "POST" })
     };
 
     try {
-      await Promise.all(items.map(processOne));
+      // Serialize per-account with human pacing to avoid FLOOD_WAITs stacking.
+      for (const item of items) {
+        if (floodPaused) break;
+        await processOne(item);
+        await new Promise((r) => setTimeout(r, 2500 + Math.random() * 2500));
+      }
       const newSession = (client.session as InstanceType<typeof StringSession>).save();
       if (newSession && newSession !== sessionStr) {
         const enc = await encryptString(newSession);
