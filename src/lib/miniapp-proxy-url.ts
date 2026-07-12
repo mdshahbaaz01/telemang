@@ -1,3 +1,22 @@
+import { useQuery } from "@tanstack/react-query";
+import { useServerFn } from "@tanstack/react-start";
+import { mintMiniAppProxyToken } from "@/lib/miniapp-token.functions";
+
+// Hook: mint (and auto-refresh) a proxy token and return the proxified URL.
+// Returns null until the token is ready. Token TTL is 1h; we refresh 5m early.
+export function useMiniAppProxyUrl(url: string | null | undefined, accountId: string) {
+  const mint = useServerFn(mintMiniAppProxyToken);
+  const tokenQuery = useQuery({
+    queryKey: ["miniapp-proxy-token"],
+    queryFn: () => mint({ data: {} }),
+    staleTime: 55 * 60 * 1000,
+    refetchInterval: 55 * 60 * 1000,
+    refetchOnWindowFocus: false,
+  });
+  const token = tokenQuery.data?.token ?? "";
+  const proxied = url && token ? proxifyMiniAppUrl(url, accountId, token) : null;
+  return { url: proxied, loading: tokenQuery.isPending, error: tokenQuery.error };
+}
 // Client helper to route a mini-app URL through the fingerprinting proxy.
 // A short-lived HMAC token (minted by an authenticated server function) is
 // required; without it the proxy rejects the request. Use
