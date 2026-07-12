@@ -516,11 +516,11 @@ function buildOverrideScript(accountId: string, upstreamUrl: string, token: stri
 })();`;
 }
 
-function proxyUrl(target: string, accountId: string, proxyOrigin = "") {
-  return `${proxyOrigin}/api/public/miniapp-proxy/${encodeURIComponent(target)}?a=${encodeURIComponent(accountId)}`;
+function proxyUrl(target: string, accountId: string, token: string, proxyOrigin = "") {
+  return `${proxyOrigin}/api/public/miniapp-proxy/${encodeURIComponent(target)}?a=${encodeURIComponent(accountId)}&t=${encodeURIComponent(token)}`;
 }
 
-function rewriteHtmlUrls(html: string, baseUrl: string, accountId: string, proxyOrigin: string) {
+function rewriteHtmlUrls(html: string, baseUrl: string, accountId: string, token: string, proxyOrigin: string) {
   const base = new URL(baseUrl);
   const toProxy = (raw: string) => {
     if (!raw || raw.startsWith("#") || raw.startsWith("data:") || raw.startsWith("blob:") || raw.startsWith("mailto:") || raw.startsWith("tel:")) {
@@ -529,7 +529,7 @@ function rewriteHtmlUrls(html: string, baseUrl: string, accountId: string, proxy
     try {
       const absolute = new URL(raw, base).toString();
       if (!/^https?:\/\//i.test(absolute)) return raw;
-      return proxyUrl(absolute, accountId, proxyOrigin);
+      return proxyUrl(absolute, accountId, token, proxyOrigin);
     } catch {
       return raw;
     }
@@ -552,22 +552,25 @@ function rewriteHtmlUrls(html: string, baseUrl: string, accountId: string, proxy
     });
 }
 
-function rewriteCssUrls(css: string, baseUrl: string, accountId: string, proxyOrigin: string) {
+function rewriteCssUrls(css: string, baseUrl: string, accountId: string, token: string, proxyOrigin: string) {
   const base = new URL(baseUrl);
   return css.replace(/url\((['"]?)(.*?)\1\)/gi, (_m, quote, value) => {
     if (!value || value.startsWith("data:") || value.startsWith("blob:")) return `url(${quote}${value}${quote})`;
     try {
-      return `url(${quote}${proxyUrl(new URL(value, base).toString(), accountId, proxyOrigin)}${quote})`;
+      return `url(${quote}${proxyUrl(new URL(value, base).toString(), accountId, token, proxyOrigin)}${quote})`;
     } catch {
       return `url(${quote}${value}${quote})`;
     }
   });
 }
 
-function rewriteJsUrls(js: string, baseUrl: string, accountId: string, proxyOrigin: string) {
+function rewriteJsUrls(js: string, baseUrl: string, accountId: string, token: string, proxyOrigin: string) {
   try {
     const upstream = new URL(baseUrl);
+    // Note: the resulting URL will not have query params; the client-side
+    // proxify shim adds `?a=` and `?t=` when the browser loads the resource.
     const proxyBase = `${proxyOrigin}/api/public/miniapp-proxy/${encodeURIComponent(upstream.origin)}`;
+    void token;
     return js.replaceAll(upstream.origin, proxyBase);
   } catch {
     return js;
