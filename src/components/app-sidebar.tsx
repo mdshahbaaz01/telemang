@@ -25,6 +25,7 @@ import {
   Pencil,
   Check,
   GripVertical,
+  ShieldAlert,
 } from "lucide-react";
 import {
   DndContext,
@@ -99,6 +100,7 @@ const items: Item[] = [
   { id: "media", title: "Media Library", to: "/media", icon: ImageIcon },
   { id: "watchlists", title: "Watchlists", to: "/watchlists", icon: Eye },
   { id: "stealth", title: "Stealth", to: "/stealth", icon: EyeOff },
+  { id: "captcha", title: "Captcha Solver", to: "/captcha", icon: ShieldAlert },
 ];
 
 const ORDER_KEY = "tm.sidebarOrder.v1";
