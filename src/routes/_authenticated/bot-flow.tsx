@@ -706,6 +706,139 @@ function BotFlowPage() {
             Paste the direct mini-app verification URL and open it with one account identity.
           </p>
 
+          {/* ── Extract verify links per account ── */}
+        </section>
+
+        <section className="rounded-lg border border-border bg-card p-4 space-y-4">
+          <h2 className="text-lg font-medium">Extract verify links (per account)</h2>
+          <p className="text-xs text-muted-foreground">
+            Paste a bot link/username. For each selected account, the system will
+            <code className="mx-1">/start</code> the bot, find the inline
+            <em> Verify </em> button (or any matching label), and return that
+            account's personal <code>tgWebAppData</code>-signed URL. Copy any
+            link and open it wherever you want.
+          </p>
+
+          <div className="grid gap-3 md:grid-cols-[1fr_200px]">
+            <div>
+              <Label>Bot link or @username</Label>
+              <Input
+                value={vxLink}
+                onChange={(e) => setVxLink(e.target.value)}
+                placeholder="https://t.me/BonusCash_referbot?start=XXXX  or  @BonusCash_referbot"
+              />
+              {vxParsed?.username && (
+                <p className="mt-1 text-xs text-muted-foreground">
+                  Bot: <span className="font-mono text-foreground">@{vxParsed.username}</span>
+                  {vxParsed.startParam && (
+                    <> · start: <span className="font-mono text-foreground">{vxParsed.startParam}</span></>
+                  )}
+                </p>
+              )}
+            </div>
+            <div>
+              <Label>Button label contains</Label>
+              <Input
+                value={vxButtonText}
+                onChange={(e) => setVxButtonText(e.target.value)}
+                placeholder="verify"
+              />
+            </div>
+          </div>
+
+          <div className="space-y-2">
+            <div className="flex items-center gap-2">
+              <div className="text-sm font-medium mr-auto">
+                {vxSelected.length} / {allIds.length} accounts selected
+              </div>
+              <Button type="button" size="sm" variant="outline" onClick={() => setVxSelected(allIds)}>Select all</Button>
+              <Button type="button" size="sm" variant="outline" onClick={() => setVxSelected([])}>Deselect all</Button>
+            </div>
+            <div className="grid grid-cols-1 gap-1 sm:grid-cols-2 lg:grid-cols-3 max-h-56 overflow-auto rounded-md border border-border p-2">
+              {accountList.map((a) => {
+                const checked = vxSelected.includes(a.id);
+                return (
+                  <label key={a.id} className="flex items-center gap-2 rounded px-2 py-1 text-sm hover:bg-muted/40">
+                    <input type="checkbox" checked={checked} onChange={() => vxToggle(a.id)} />
+                    <span className="truncate">{a.first_name || a.username || a.phone}</span>
+                  </label>
+                );
+              })}
+            </div>
+          </div>
+
+          <div className="flex gap-2">
+            <Button onClick={runExtractVerify} disabled={vxRunning || !vxParsed?.username || allIds.length === 0}>
+              {vxRunning ? <Loader2 className="mr-1 h-4 w-4 animate-spin" /> : <Play className="mr-1 h-4 w-4" />}
+              Extract links
+            </Button>
+            {vxResults.length > 0 && (
+              <>
+                <Button variant="outline" onClick={copyAllVerify}>
+                  <Copy className="mr-1 h-4 w-4" /> Copy all
+                </Button>
+                <Button variant="ghost" onClick={() => setVxResults([])}>Clear</Button>
+              </>
+            )}
+          </div>
+
+          {vxResults.length > 0 && (
+            <div className="space-y-1">
+              {vxResults.map((r) => {
+                const acc = accountList.find((a) => a.id === r.accountId);
+                const who = acc?.first_name || acc?.username || acc?.phone || r.accountId.slice(0, 8);
+                return (
+                  <div key={r.accountId} className="flex items-center gap-2 rounded-md border border-border bg-background/50 px-2 py-1.5 text-xs">
+                    <div className="min-w-[140px] truncate font-medium">{who}</div>
+                    {r.status === "loading" && (
+                      <div className="flex items-center gap-1 text-muted-foreground">
+                        <Loader2 className="h-3 w-3 animate-spin" /> resolving…
+                      </div>
+                    )}
+                    {r.status === "error" && (
+                      <div className="truncate text-destructive" title={r.error}>{r.error}</div>
+                    )}
+                    {r.status === "ready" && r.url && (
+                      <>
+                        <span className="rounded bg-muted px-1.5 py-0.5 text-[10px] uppercase text-muted-foreground">
+                          {r.kind}
+                        </span>
+                        <span className="min-w-0 flex-1 truncate font-mono text-[11px]" title={r.url}>{r.url}</span>
+                        <button
+                          type="button"
+                          className="rounded p-1 hover:bg-muted"
+                          title="Copy URL"
+                          onClick={async () => {
+                            await navigator.clipboard.writeText(r.url!);
+                            toast.success("Copied");
+                          }}
+                        >
+                          <Copy className="h-3.5 w-3.5" />
+                        </button>
+                        <a
+                          href={r.url}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="rounded p-1 hover:bg-muted"
+                          title="Open in new tab"
+                        >
+                          <ExternalLink className="h-3.5 w-3.5" />
+                        </a>
+                      </>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </section>
+
+        <section className="rounded-lg border border-border bg-card p-4 space-y-4">
+          <h2 className="text-lg font-medium">Verification URL runner (single account)</h2>
+          <p className="text-xs text-muted-foreground">
+            Paste a direct mini-app verification URL and open it inside a specific account's proxy.
+          </p>
+
           <div className="grid gap-3 md:grid-cols-[1fr_260px]">
             <div>
               <Label>Verification URL</Label>
