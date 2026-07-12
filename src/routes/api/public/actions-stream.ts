@@ -896,24 +896,27 @@ export const Route = createFileRoute("/api/public/actions-stream")({
                 // and a list of URL buttons / t.me links. Detect them, join
                 // from this account, then re-fire /start so the bot re-checks.
                 if (op.autoJoinRequired !== false) {
-                  const rounds = Math.max(1, Math.min(5, op.maxJoinRounds ?? 3));
+                  const rounds = Math.max(1, Math.min(15, op.maxJoinRounds ?? 10));
                   const alreadyJoined = new Set<string>();
                   const linkRe = /(?:https?:\/\/)?(?:t(?:elegram)?\.me)\/(\+[A-Za-z0-9_-]+|joinchat\/[A-Za-z0-9_-]+|[A-Za-z0-9_]{4,})/gi;
                   for (let round = 0; round < rounds; round++) {
                     if (stopRequested) break;
-                    // Give the bot a moment to reply.
-                    await new Promise((r) => setTimeout(r, 2500));
+                    // Give the bot a brief moment to reply (short = fast).
+                    await new Promise((r) => setTimeout(r, 900));
                     let recent: any[] = [];
                     try { recent = await client.getMessages(botPeer, { limit: 5 }) as any[]; } catch { recent = []; }
                     const candidates: string[] = [];
+                    let joinHintSeen = false;
                     for (const m of recent) {
                       const text = String(m?.message ?? m?.text ?? "");
+                      if (/join|जॉइन|加入|подпис/i.test(text)) joinHintSeen = true;
                       let match: RegExpExecArray | null;
                       while ((match = linkRe.exec(text)) !== null) candidates.push(match[1]);
                       const rows: any[] = m?.replyMarkup?.rows ?? [];
                       for (const row of rows) for (const btn of (row?.buttons ?? [])) {
                         const url: string | undefined = btn?.url;
                         if (!url) continue;
+                        if (/t(?:elegram)?\.me\//i.test(url)) joinHintSeen = true;
                         const mm = linkRe.exec(url);
                         linkRe.lastIndex = 0;
                         if (mm) candidates.push(mm[1]);
@@ -922,9 +925,19 @@ export const Route = createFileRoute("/api/public/actions-stream")({
                     // Deduplicate + skip bot itself and already-joined.
                     const targets = Array.from(new Set(candidates))
                       .filter((c) => c && c.toLowerCase() !== parsed.username.toLowerCase() && !alreadyJoined.has(c.toLowerCase()));
-                    if (!targets.length) break;
+                    if (!targets.length) {
+                      // Nothing new to join. If the bot still shows a join
+                      // prompt, re-fire /start once more in case it just
+                      // needs a nudge; otherwise we're done.
+                      if (joinHintSeen && round === 0) {
+                        try { await doStartBot(); } catch { /* noop */ }
+                        continue;
+                      }
+                      break;
+                    }
                     let joinedThisRound = 0;
-                    for (const target of targets) {
+                    // Join in parallel batches for speed.
+                    const joinOne = async (target: string) => {
                       if (stopRequested) break;
                       alreadyJoined.add(target.toLowerCase());
                       try {
@@ -958,12 +971,22 @@ export const Route = createFileRoute("/api/public/actions-stream")({
                         const secs = await pauseAccountOnFlood(accountId, em);
                         if (secs) {
                           send("log", { accountId, level: "warn", target: botLabel, message: `FloodWait ${secs}s — account paused` });
-                          break;
+                          return "flood";
                         }
                         send("log", { accountId, level: "warn", target: botLabel, message: `Join ${target}: ${em}` });
                       }
-                      // Small pacing between joins.
-                      await new Promise((r) => setTimeout(r, jitter(body.minDelay, body.maxDelay)));
+                      // Tiny pacing to avoid the API smacking us.
+                      await new Promise((r) => setTimeout(r, 150 + Math.random() * 200));
+                      return "ok";
+                    };
+                    // 4-wide parallel joins per account.
+                    const batchSize = 4;
+                    let floodHit = false;
+                    for (let i = 0; i < targets.length; i += batchSize) {
+                      if (stopRequested || floodHit) break;
+                      const batch = targets.slice(i, i + batchSize);
+                      const outs = await Promise.all(batch.map((t) => joinOne(t)));
+                      if (outs.includes("flood")) { floodHit = true; break; }
                     }
                     if (!joinedThisRound) break;
                     // Re-fire /start so the bot re-verifies membership.
