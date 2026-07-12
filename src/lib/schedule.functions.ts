@@ -108,11 +108,28 @@ export const listScheduledBroadcasts = createServerFn({ method: "GET" })
   .handler(async ({ context }) => {
     const { data, error } = await context.supabase
       .from("scheduled_broadcasts")
-      .select("id, scheduled_at, label, status, dispatched_at, completed_at, error, payload, created_at, total_items, processed_items")
+      .select("id, scheduled_at, label, status, dispatched_at, completed_at, error, payload, created_at, total_items, processed_items, source_id")
       .order("scheduled_at", { ascending: true })
       .limit(200);
     if (error) throw new Error(error.message);
-    return (data ?? []).map((r) => {
+    const rows = data ?? [];
+    const sourceIds = Array.from(
+      new Set(rows.map((r) => (r as any).source_id).filter(Boolean) as string[]),
+    );
+    const sourceMap = new Map<string, { label: string | null; scheduledAt: string }>();
+    if (sourceIds.length) {
+      const { data: srcs } = await context.supabase
+        .from("scheduled_broadcasts")
+        .select("id, label, scheduled_at")
+        .in("id", sourceIds);
+      for (const s of srcs ?? []) {
+        sourceMap.set(s.id as string, {
+          label: (s.label as string | null) ?? null,
+          scheduledAt: s.scheduled_at as string,
+        });
+      }
+    }
+    return rows.map((r) => {
       const payload = (r.payload as any) ?? {};
       const kind: "broadcast" | "reply" | "forward" | "edit" | "deleteMessages" =
         ["reply", "forward", "edit", "deleteMessages"].includes(payload.kind) ? payload.kind : "broadcast";
@@ -136,6 +153,8 @@ export const listScheduledBroadcasts = createServerFn({ method: "GET" })
         const ids = Array.isArray(payload.messageIds) ? payload.messageIds.length : 0;
         summary = `${accIds} account(s) · delete ${ids} message(s)`;
       }
+      const srcId = ((r as any).source_id as string | null) ?? null;
+      const src = srcId ? sourceMap.get(srcId) ?? null : null;
       return {
         id: r.id as string,
         scheduledAt: r.scheduled_at as string,
@@ -150,6 +169,12 @@ export const listScheduledBroadcasts = createServerFn({ method: "GET" })
         totalItems: Number((r as any).total_items ?? 0),
         processedItems: Number((r as any).processed_items ?? 0),
         createdAt: r.created_at as string,
+        payload: payload as any,
+        minDelay: Number(payload.minDelay ?? 1),
+        maxDelay: Number(payload.maxDelay ?? 2),
+        sourceId: srcId,
+        sourceLabel: src?.label ?? null,
+        sourceScheduledAt: src?.scheduledAt ?? null,
       };
     });
   });
