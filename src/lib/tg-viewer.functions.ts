@@ -103,7 +103,7 @@ export type SerializedReplyMarkup =
   | { kind: "hide" }
   | { kind: "forceReply"; placeholder?: string };
 
-function serializeReplyMarkup(markup: any): SerializedReplyMarkup | null {
+export function serializeReplyMarkup(markup: any): SerializedReplyMarkup | null {
   if (!markup) return null;
   const cn = String(markup?.className ?? "");
   if (cn.includes("ReplyKeyboardHide")) return { kind: "hide" };
