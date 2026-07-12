@@ -475,6 +475,14 @@ function BotFlowPage() {
             {parsed?.username && (
               <div className="mt-2 text-xs text-muted-foreground">
                 Bot: <span className="font-mono text-foreground">@{parsed.username}</span>
+                <button
+                  type="button"
+                  className="ml-1 rounded p-0.5 align-middle hover:bg-muted"
+                  title="Copy link"
+                  onClick={() => copyWithToast(referLink.trim(), toast)}
+                >
+                  <Copy className="inline h-3 w-3" />
+                </button>
                 {parsed.startParam ? (
                   <>
                     {" "}· Ref code:{" "}
@@ -557,6 +565,48 @@ function BotFlowPage() {
               </div>
             )}
           </div>
+
+          {Object.keys(joinState).length > 0 && (
+            <div className="rounded-md border border-border bg-muted/20 p-3 space-y-2">
+              <div className="flex items-center justify-between">
+                <div className="text-sm font-medium">Auto-join progress</div>
+                <div className="text-xs text-muted-foreground">
+                  {Object.values(joinState).reduce((s, j) => s + j.remaining, 0)} channel(s) remaining across all accounts
+                </div>
+              </div>
+              <div className="grid grid-cols-1 gap-1.5 md:grid-cols-2">
+                {Object.entries(joinState).map(([id, j]) => {
+                  const a = accountList.find((x) => x.id === id);
+                  const who = a?.first_name || a?.username || a?.phone || id.slice(0, 8);
+                  const pct = j.total ? Math.round((j.joined / j.total) * 100) : 0;
+                  return (
+                    <div key={id} className="rounded border border-border bg-background/60 px-2 py-1.5 text-xs">
+                      <div className="flex items-center gap-2">
+                        <span className="min-w-[100px] truncate font-medium">{who}</span>
+                        <span className="text-muted-foreground">
+                          {j.joined}/{j.total} joined · <span className={j.remaining ? "text-yellow-600 dark:text-yellow-400" : "text-green-600 dark:text-green-400"}>{j.remaining} left</span>
+                          {typeof j.round === "number" && <> · round {j.round}</>}
+                        </span>
+                        {j.stopped && (
+                          <span className="ml-auto rounded bg-muted px-1.5 py-0.5 text-[10px] uppercase text-muted-foreground" title={`Stop reason: ${j.reason}`}>
+                            {j.reason ?? "stopped"}
+                          </span>
+                        )}
+                      </div>
+                      <div className="mt-1 h-1 w-full overflow-hidden rounded bg-muted">
+                        <div className="h-full bg-primary transition-all" style={{ width: `${pct}%` }} />
+                      </div>
+                      {j.remainingList.length > 0 && (
+                        <div className="mt-1 truncate font-mono text-[10px] text-muted-foreground" title={j.remainingList.join(", ")}>
+                          pending: {j.remainingList.slice(0, 6).join(", ")}{j.remainingList.length > 6 ? ` +${j.remainingList.length - 6}` : ""}
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          )}
 
           {parsed?.username && (
             <div className="space-y-3 rounded-md border border-border bg-muted/20 p-3">
