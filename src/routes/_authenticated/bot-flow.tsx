@@ -1061,6 +1061,51 @@ function MiniAppFrame({ url, title, accountId, botUsername }: { url: string; tit
   return <MiniAppFrameImpl url={url} title={title} accountId={accountId} botUsername={botUsername} />;
 }
 
+function BotFlowCaptchaCard() {
+  const [cfg, set] = useBotFlowCaptchaConfig();
+  return (
+    <section className="rounded-lg border border-border bg-card p-4 space-y-3">
+      <div className="flex items-center gap-3">
+        <div className="flex-1">
+          <h2 className="text-sm font-semibold">Captcha auto-solve</h2>
+          <p className="text-xs text-muted-foreground">
+            When enabled, captchas that appear in bot replies or mini-apps are auto-solved with the
+            chosen type &amp; provider. Manage keys on the{" "}
+            <Link to="/captcha" className="underline text-primary">Captcha Solver</Link> page.
+          </p>
+        </div>
+        <Switch checked={cfg.enabled} onCheckedChange={(v) => set({ enabled: v })} />
+      </div>
+      {cfg.enabled && (
+        <div className="grid gap-3 sm:grid-cols-2">
+          <div>
+            <Label className="text-xs">Captcha type</Label>
+            <Select value={cfg.kind} onValueChange={(v) => set({ kind: v as never })}>
+              <SelectTrigger><SelectValue /></SelectTrigger>
+              <SelectContent className="max-h-72">
+                {CAPTCHA_KIND_OPTIONS.map((o) => (
+                  <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+          <div>
+            <Label className="text-xs">Preferred provider</Label>
+            <Select value={cfg.provider} onValueChange={(v) => set({ provider: v as never })}>
+              <SelectTrigger><SelectValue /></SelectTrigger>
+              <SelectContent>
+                {CAPTCHA_PROVIDER_OPTIONS.map((o) => (
+                  <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+        </div>
+      )}
+    </section>
+  );
+}
+
 function VerifyFrame({ url, accountId }: { url: string; accountId: string }) {
   const { url: proxied } = useMiniAppProxyUrl(url, accountId);
   return (
