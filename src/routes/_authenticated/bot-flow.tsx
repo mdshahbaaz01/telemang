@@ -14,6 +14,7 @@ import { Label } from "@/components/ui/label";
 import { toast } from "sonner";
 import { Play, Square, ArrowLeft, Loader2, RefreshCw, X, MessageSquare, Copy, ExternalLink } from "lucide-react";
 import { AccountIdPaste } from "@/components/AccountIdPaste";
+import { copyWithToast } from "@/lib/clipboard";
 
 export const Route = createFileRoute("/_authenticated/bot-flow")({
   component: () => (
@@ -29,6 +30,16 @@ type LogEntry = {
   target?: string;
   message: string;
   ts: number;
+};
+
+type JoinState = {
+  total: number;
+  joined: number;
+  remaining: number;
+  remainingList: string[];
+  round?: number;
+  stopped?: boolean;
+  reason?: string;
 };
 
 type VerifyLinkSession = {
@@ -81,6 +92,7 @@ function BotFlowPage() {
   const [logs, setLogs] = useState<LogEntry[]>([]);
   const [running, setRunning] = useState(false);
   const [totals, setTotals] = useState<{ ok: number; fail: number } | null>(null);
+  const [joinState, setJoinState] = useState<Record<string, JoinState>>({});
   const abortRef = useRef<AbortController | null>(null);
 
   const accountList = accountsQ.data ?? [];
@@ -141,6 +153,33 @@ function BotFlowPage() {
         if (event === "start") addLog({ level: "info", message: "Run started" });
         else if (event === "log") addLog({ accountId: data.accountId, level: data.level ?? "info", target: data.target, message: data.message ?? "" });
         else if (event === "done") addLog({ accountId: data.accountId, level: data.fail ? "warn" : "info", message: `Account done — ok ${data.ok}, fail ${data.fail}` });
+        else if (event === "joinProgress") {
+          setJoinState((prev) => ({
+            ...prev,
+            [data.accountId]: {
+              total: data.total ?? 0,
+              joined: data.joined ?? 0,
+              remaining: data.remaining ?? 0,
+              remainingList: data.remainingList ?? [],
+              round: data.round,
+              stopped: false,
+            },
+          }));
+        }
+        else if (event === "joinStop") {
+          setJoinState((prev) => ({
+            ...prev,
+            [data.accountId]: {
+              total: data.total ?? 0,
+              joined: data.joined ?? 0,
+              remaining: data.remaining ?? 0,
+              remainingList: data.remainingList ?? [],
+              round: data.round,
+              stopped: true,
+              reason: data.reason,
+            },
+          }));
+        }
         else if (event === "end") {
           setTotals({ ok: data.ok ?? 0, fail: data.fail ?? 0 });
           const message = `Finished — ok ${data.ok}, fail ${data.fail}`;
@@ -162,6 +201,7 @@ function BotFlowPage() {
 
     setLogs([]);
     setTotals(null);
+    setJoinState({});
     setRunning(true);
     const ac = new AbortController();
     abortRef.current = ac;
