@@ -20,8 +20,6 @@ export function verifyHookAuth(request: Request): Response | null {
   const candidates = [
     process.env.CRON_SECRET,
     process.env.SUPABASE_SERVICE_ROLE_KEY,
-    process.env.SUPABASE_PUBLISHABLE_KEY,
-    process.env.SUPABASE_ANON_KEY,
   ].filter((v): v is string => typeof v === "string" && v.length > 0);
 
   const presentedBuf = Buffer.from(presented);
