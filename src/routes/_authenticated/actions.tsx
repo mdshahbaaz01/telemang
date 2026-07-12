@@ -2403,6 +2403,17 @@ function ActionsPageInner() {
             </DialogContent>
           </Dialog>
 
+          <ReuseScheduleDialog
+            schedule={reuseSchedule}
+            defaultTimeIst={scheduledAt}
+            onClose={() => setReuseSchedule(null)}
+            onSubmitted={async () => {
+              setReuseSchedule(null);
+              await qc.invalidateQueries({ queryKey: ["scheduled-broadcasts"] });
+            }}
+            rescheduleFn={rescheduleFn}
+          />
+
           {errorLogs.length > 0 && (
             <div className="rounded-lg border border-destructive/40 bg-destructive/5 p-4">
               <div className="mb-3 flex flex-wrap items-center gap-2">
