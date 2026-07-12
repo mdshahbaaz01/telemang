@@ -179,7 +179,7 @@ function BotFlowPage() {
             // referrer is already credited by then.
             steps: ["wait:2"],
             autoJoinRequired,
-            maxJoinRounds: 3,
+            maxJoinRounds: 10,
           },
         }),
         signal: ac.signal,
