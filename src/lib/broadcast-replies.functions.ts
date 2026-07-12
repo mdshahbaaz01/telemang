@@ -287,12 +287,15 @@ export const pressInlineButton = createServerFn({ method: "POST" })
         msgId: z.number().int().positive(),
         // base64-encoded callback data
         data: z.string().min(1).max(700),
+        runId: z.string().uuid().optional(),
+        buttonLabel: z.string().max(300).optional(),
       })
       .parse(d),
   )
   .handler(async ({ data, context }) => {
     await assertAdmin(context.supabase);
     await assertOwnsAccount(context.supabase, data.accountId);
+    const { insertInlineButtonClick } = await import("./button-clicks.functions");
 
     // FloodWait guard
     const { data: acct } = await context.supabase
@@ -332,10 +335,48 @@ export const pressInlineButton = createServerFn({ method: "POST" })
               last_error: `FloodWait ${secs}s`,
             })
             .eq("id", data.accountId);
+          await insertInlineButtonClick(context.supabase, context.userId, {
+            runId: data.runId ?? null,
+            accountId: data.accountId,
+            target: data.target,
+            msgId: data.msgId,
+            buttonKind: "callback",
+            buttonLabel: data.buttonLabel ?? null,
+            buttonPayload: data.data,
+            source: "broadcast",
+            resultStatus: "error",
+            resultMessage: `FloodWait ${secs}s — account paused`,
+          });
           throw new Error(`FloodWait ${secs}s — account paused`);
         }
+        await insertInlineButtonClick(context.supabase, context.userId, {
+          runId: data.runId ?? null,
+          accountId: data.accountId,
+          target: data.target,
+          msgId: data.msgId,
+          buttonKind: "callback",
+          buttonLabel: data.buttonLabel ?? null,
+          buttonPayload: data.data,
+          source: "broadcast",
+          resultStatus: "error",
+          resultMessage: em,
+        });
         throw new Error(em);
       }
+      await insertInlineButtonClick(context.supabase, context.userId, {
+        runId: data.runId ?? null,
+        accountId: data.accountId,
+        target: data.target,
+        msgId: data.msgId,
+        buttonKind: "callback",
+        buttonLabel: data.buttonLabel ?? null,
+        buttonPayload: data.data,
+        source: "broadcast",
+        resultStatus: "ok",
+        resultMessage: res?.message ? String(res.message) : null,
+        resultAlert: !!res?.alert,
+        resultUrl: res?.url ? String(res.url) : null,
+      });
       return {
         message: res?.message ? String(res.message) : "",
         alert: !!res?.alert,
