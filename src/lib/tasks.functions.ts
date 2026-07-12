@@ -654,6 +654,22 @@ export const processNextJoin = createServerFn({ method: "POST" })
         } else if (msg.includes("FLOOD_WAIT") || err.seconds) {
           const match = msg.match(/FLOOD_WAIT_?(\d+)/i);
           const seconds = err.seconds ?? (match ? Number(match[1]) : 60);
+          // Small floods: sleep locally and mark item pending — DON'T pause
+          // the account. Telegram often returns tiny waits between joins.
+          if (seconds <= 30) {
+            await new Promise((r) => setTimeout(r, (seconds + 1) * 1000));
+            statusUpdate = {
+              status: "pending",
+              error: `Rate-limited ${seconds}s (auto-retry)`,
+              processed_at: new Date().toISOString(),
+            };
+            await log(
+              task.id,
+              "info",
+              `Rate-limited ${seconds}s on @${item.target} — waited and will retry next pass.`,
+            );
+            return { done: false, paused: false, target: item.target };
+          }
           const pausedUntil = new Date(Date.now() + seconds * 1000).toISOString();
           const acctLabel = acct.phone ?? acct.id.slice(0, 8);
           await supabase
@@ -884,6 +900,22 @@ export const processBatchJoin = createServerFn({ method: "POST" })
         } else if (msg.includes("FLOOD_WAIT") || err.seconds) {
           const match = msg.match(/FLOOD_WAIT_?(\d+)/i);
           const seconds = err.seconds ?? (match ? Number(match[1]) : 60);
+          // Small floods: sleep + retry next pass, don't pause the account.
+          if (seconds <= 30) {
+            await new Promise((r) => setTimeout(r, (seconds + 1) * 1000));
+            statusUpdate = {
+              status: "pending",
+              error: `Rate-limited ${seconds}s (auto-retry)`,
+              processed_at: new Date().toISOString(),
+            };
+            await log(
+              task.id,
+              "info",
+              `Rate-limited ${seconds}s on @${item.target} — waited and will retry next pass.`,
+            );
+            await supabase.from("join_task_items").update(statusUpdate).eq("id", item.id);
+            return;
+          }
           floodPaused = { seconds, target: item.target, reason: msg.trim() };
           statusUpdate = {
             status: "pending",
@@ -909,7 +941,12 @@ export const processBatchJoin = createServerFn({ method: "POST" })
     };
 
     try {
-      await Promise.all(items.map(processOne));
+      // Serialize per-account with human pacing to avoid FLOOD_WAITs stacking.
+      for (const item of items) {
+        if (floodPaused) break;
+        await processOne(item);
+        await new Promise((r) => setTimeout(r, 2500 + Math.random() * 2500));
+      }
       const newSession = (client.session as InstanceType<typeof StringSession>).save();
       if (newSession && newSession !== sessionStr) {
         const enc = await encryptString(newSession);

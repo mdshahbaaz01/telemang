@@ -76,6 +76,7 @@ function BotFlowPage() {
   const [referLink, setReferLink] = useState("");
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [autoJoinRequired, setAutoJoinRequired] = useState(true);
+  const [preJoinText, setPreJoinText] = useState("");
   const [logs, setLogs] = useState<LogEntry[]>([]);
   const [running, setRunning] = useState(false);
   const [totals, setTotals] = useState<{ ok: number; fail: number } | null>(null);
@@ -180,6 +181,11 @@ function BotFlowPage() {
             steps: ["wait:2"],
             autoJoinRequired,
             maxJoinRounds: 10,
+            preJoinChannels: preJoinText
+              .split(/[\s,]+/)
+              .map((s) => s.trim())
+              .filter(Boolean)
+              .slice(0, 100),
           },
         }),
         signal: ac.signal,
@@ -392,6 +398,21 @@ function BotFlowPage() {
                 <p className="text-xs text-muted-foreground">No accounts yet.</p>
               )}
             </div>
+          </div>
+
+          <div>
+            <Label>Pre-join channels (optional)</Label>
+            <textarea
+              value={preJoinText}
+              onChange={(e) => setPreJoinText(e.target.value)}
+              placeholder={"One per line — @channel, https://t.me/xxx, or +invitehash\nJoined from every selected account BEFORE running the bot."}
+              rows={3}
+              className="mt-1 w-full rounded-md border border-input bg-background px-3 py-2 font-mono text-xs"
+            />
+            <p className="mt-1 text-xs text-muted-foreground">
+              These channels are joined first, then the bot is /started, then
+              any additional channels the bot asks for get auto-joined.
+            </p>
           </div>
 
           <div className="flex gap-2">

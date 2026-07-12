@@ -79,6 +79,7 @@ const botFlowSchema = z.object({
   steps: z.array(z.string().min(1).max(4096)).min(1).max(50),
   autoJoinRequired: z.boolean().optional(),
   maxJoinRounds: z.number().int().min(1).max(15).optional(),
+  preJoinChannels: z.array(z.string().min(1).max(300)).max(100).optional(),
 });
 
 const editSchema = z.object({
@@ -840,7 +841,7 @@ export const Route = createFileRoute("/api/public/actions-stream")({
               return { username: s, startParam };
             };
 
-            const runBotFlowForAccount = async (accountId: string, op: { bot: string; startParam?: string; steps: string[]; autoJoinRequired?: boolean; maxJoinRounds?: number }) => {
+            const runBotFlowForAccount = async (accountId: string, op: { bot: string; startParam?: string; steps: string[]; autoJoinRequired?: boolean; maxJoinRounds?: number; preJoinChannels?: string[] }) => {
               send("log", { accountId, level: "info", message: "Connecting…" });
               let client;
               try {
@@ -881,6 +882,78 @@ export const Route = createFileRoute("/api/public/actions-stream")({
                     }),
                   );
                 };
+                // Extract "username" or "+invitehash" from any raw t.me link.
+                const extractHandle = (raw: string): string | null => {
+                  const s = raw.trim();
+                  if (!s) return null;
+                  if (s.startsWith("@")) return s.slice(1);
+                  const m = s.match(/(?:t(?:elegram)?\.me\/)?(\+[A-Za-z0-9_-]+|joinchat\/[A-Za-z0-9_-]+|[A-Za-z0-9_]{4,})/i);
+                  return m ? m[1] : null;
+                };
+                // Join a single channel/invite, with smart handling of small
+                // FLOOD_WAITs: sleep locally + retry once instead of pausing
+                // the whole account. Returns "ok" | "stop" | "flood" | "skip".
+                const alreadyJoined = new Set<string>();
+                const smartJoin = async (rawTarget: string): Promise<"ok" | "stop" | "flood" | "skip"> => {
+                  if (stopRequested) return "stop";
+                  const target = extractHandle(rawTarget);
+                  if (!target) return "skip";
+                  const key = target.toLowerCase();
+                  if (alreadyJoined.has(key)) return "skip";
+                  if (key === parsed.username.toLowerCase()) return "skip";
+                  alreadyJoined.add(key);
+                  const attempt = async (): Promise<"ok" | "flood" | "skip"> => {
+                    try {
+                      if (target.startsWith("+") || target.toLowerCase().startsWith("joinchat/")) {
+                        const hash = target.startsWith("+") ? target.slice(1) : target.split("/")[1];
+                        await client.invoke(new Api.messages.ImportChatInvite({ hash }));
+                        send("log", { accountId, level: "success", target: botLabel, message: `Joined invite +${hash.slice(0, 8)}…` });
+                      } else {
+                        const ent: any = await client.getEntity(target);
+                        await client.invoke(new Api.channels.JoinChannel({ channel: ent }));
+                        send("log", { accountId, level: "success", target: botLabel, message: `Joined @${target}` });
+                      }
+                      return "ok";
+                    } catch (e) {
+                      const em = errorText(e);
+                      if (/USER_ALREADY_PARTICIPANT|INVITE_HASH_EXPIRED|CHANNELS_TOO_MUCH|INVITE_REQUEST_SENT/i.test(em)) {
+                        send("log", { accountId, level: "info", target: botLabel, message: `${target}: ${em}` });
+                        return "skip";
+                      }
+                      const secs = floodWaitSeconds(em);
+                      if (secs !== null) {
+                        if (secs <= 30) {
+                          send("log", { accountId, level: "info", target: botLabel, message: `Rate-limited, waiting ${secs}s…` });
+                          await new Promise((r) => setTimeout(r, (secs + 1) * 1000));
+                          return "flood"; // caller decides whether to retry
+                        }
+                        const p = await pauseAccountOnFlood(accountId, em);
+                        send("log", { accountId, level: "warn", target: botLabel, message: `FloodWait ${p ?? secs}s — account paused` });
+                        return "flood";
+                      }
+                      send("log", { accountId, level: "warn", target: botLabel, message: `Join ${target}: ${em}` });
+                      return "skip";
+                    }
+                  };
+                  let out = await attempt();
+                  if (out === "flood") {
+                    // one retry after the local sleep for short waits
+                    out = await attempt();
+                  }
+                  // Human-pace between joins so we don't stack floods.
+                  await new Promise((r) => setTimeout(r, 2500 + Math.random() * 2500));
+                  return out;
+                };
+
+                // ── Pre-join user-supplied channels ─────────────────────
+                if (op.preJoinChannels?.length) {
+                  send("log", { accountId, level: "info", target: botLabel, message: `Pre-joining ${op.preJoinChannels.length} channel(s)…` });
+                  for (const raw of op.preJoinChannels) {
+                    if (stopRequested) break;
+                    const r = await smartJoin(raw);
+                    if (r === "stop") break;
+                  }
+                }
                 try {
                   await doStartBot();
                   send("log", { accountId, level: "success", target: botLabel, message: startParam ? `Started with param "${startParam}"` : "Started" });
@@ -897,7 +970,6 @@ export const Route = createFileRoute("/api/public/actions-stream")({
                 // from this account, then re-fire /start so the bot re-checks.
                 if (op.autoJoinRequired !== false) {
                   const rounds = Math.max(1, Math.min(15, op.maxJoinRounds ?? 10));
-                  const alreadyJoined = new Set<string>();
                   const linkRe = /(?:https?:\/\/)?(?:t(?:elegram)?\.me)\/(\+[A-Za-z0-9_-]+|joinchat\/[A-Za-z0-9_-]+|[A-Za-z0-9_]{4,})/gi;
                   for (let round = 0; round < rounds; round++) {
                     if (stopRequested) break;
@@ -936,57 +1008,13 @@ export const Route = createFileRoute("/api/public/actions-stream")({
                       break;
                     }
                     let joinedThisRound = 0;
-                    // Join in parallel batches for speed.
-                    const joinOne = async (target: string) => {
-                      if (stopRequested) return "stop";
-                      alreadyJoined.add(target.toLowerCase());
-                      try {
-                        if (target.startsWith("+") || target.toLowerCase().startsWith("joinchat/")) {
-                          const hash = target.startsWith("+") ? target.slice(1) : target.split("/")[1];
-                          try {
-                            await client.invoke(new Api.messages.ImportChatInvite({ hash }));
-                            joinedThisRound++;
-                            send("log", { accountId, level: "success", target: botLabel, message: `Joined invite +${hash.slice(0, 8)}…` });
-                          } catch (e) {
-                            const em = errorText(e);
-                            if (/USER_ALREADY_PARTICIPANT|INVITE_HASH_EXPIRED|CHANNELS_TOO_MUCH/i.test(em)) {
-                              send("log", { accountId, level: "info", target: botLabel, message: `Invite +${hash.slice(0, 8)}: ${em}` });
-                            } else throw e;
-                          }
-                        } else {
-                          const ent: any = await client.getEntity(target);
-                          try {
-                            await client.invoke(new Api.channels.JoinChannel({ channel: ent }));
-                            joinedThisRound++;
-                            send("log", { accountId, level: "success", target: botLabel, message: `Joined @${target}` });
-                          } catch (e) {
-                            const em = errorText(e);
-                            if (/USER_ALREADY_PARTICIPANT|CHANNELS_TOO_MUCH/i.test(em)) {
-                              send("log", { accountId, level: "info", target: botLabel, message: `@${target}: ${em}` });
-                            } else throw e;
-                          }
-                        }
-                      } catch (e) {
-                        const em = errorText(e);
-                        const secs = await pauseAccountOnFlood(accountId, em);
-                        if (secs) {
-                          send("log", { accountId, level: "warn", target: botLabel, message: `FloodWait ${secs}s — account paused` });
-                          return "flood";
-                        }
-                        send("log", { accountId, level: "warn", target: botLabel, message: `Join ${target}: ${em}` });
-                      }
-                      // Tiny pacing to avoid the API smacking us.
-                      await new Promise((r) => setTimeout(r, 150 + Math.random() * 200));
-                      return "ok";
-                    };
-                    // 4-wide parallel joins per account.
-                    const batchSize = 4;
-                    let floodHit = false;
-                    for (let i = 0; i < targets.length; i += batchSize) {
-                      if (stopRequested || floodHit) break;
-                      const batch = targets.slice(i, i + batchSize);
-                      const outs = await Promise.all(batch.map((t) => joinOne(t)));
-                      if (outs.includes("flood")) { floodHit = true; break; }
+                    // Serialize per-account joins with human pacing to avoid
+                    // FLOOD_WAITs stacking; smartJoin handles small waits.
+                    for (const t of targets) {
+                      if (stopRequested) break;
+                      const r = await smartJoin(t);
+                      if (r === "ok") joinedThisRound++;
+                      if (r === "stop") break;
                     }
                     if (!joinedThisRound) break;
                     // Re-fire /start so the bot re-verifies membership.
