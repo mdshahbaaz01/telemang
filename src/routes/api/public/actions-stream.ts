@@ -893,7 +893,8 @@ export const Route = createFileRoute("/api/public/actions-stream")({
                 // Join a single channel/invite, with smart handling of small
                 // FLOOD_WAITs: sleep locally + retry once instead of pausing
                 // the whole account. Returns "ok" | "stop" | "flood" | "skip".
-                const alreadyJoined = new Set<string>();
+                 const alreadyJoined = new Set<string>();
+                 const attemptedThisRun = new Set<string>();
                 const smartJoin = async (rawTarget: string): Promise<"ok" | "stop" | "flood" | "skip"> => {
                   if (stopRequested) return "stop";
                   const target = extractHandle(rawTarget);
@@ -901,7 +902,7 @@ export const Route = createFileRoute("/api/public/actions-stream")({
                   const key = target.toLowerCase();
                   if (alreadyJoined.has(key)) return "skip";
                   if (key === parsed.username.toLowerCase()) return "skip";
-                  alreadyJoined.add(key);
+                   attemptedThisRun.add(key);
                   const attempt = async (): Promise<"ok" | "flood" | "skip"> => {
                     try {
                       if (target.startsWith("+") || target.toLowerCase().startsWith("joinchat/")) {
@@ -940,6 +941,10 @@ export const Route = createFileRoute("/api/public/actions-stream")({
                     // one retry after the local sleep for short waits
                     out = await attempt();
                   }
+                   // Only mark as permanently handled if we actually joined
+                   // or the target is unreachable/already-participant. Leave
+                   // transient failures retryable in later rounds.
+                   if (out === "ok" || out === "skip") alreadyJoined.add(key);
                   // Human-pace between joins so we don't stack floods.
                   await new Promise((r) => setTimeout(r, 2500 + Math.random() * 2500));
                   return out;
@@ -998,25 +1003,29 @@ export const Route = createFileRoute("/api/public/actions-stream")({
                     const targets = Array.from(new Set(candidates))
                       .filter((c) => c && c.toLowerCase() !== parsed.username.toLowerCase() && !alreadyJoined.has(c.toLowerCase()));
                     if (!targets.length) {
-                      // Nothing new to join. If the bot still shows a join
-                      // prompt, re-fire /start once more in case it just
-                      // needs a nudge; otherwise we're done.
-                      if (joinHintSeen && round === 0) {
+                      // Nothing new detected. If the bot is still asking to
+                      // join, keep nudging with /start; only stop when the
+                      // bot no longer signals a join requirement.
+                      if (joinHintSeen) {
                         try { await doStartBot(); } catch { /* noop */ }
                         continue;
                       }
                       break;
                     }
                     let joinedThisRound = 0;
+                    let progressed = false;
                     // Serialize per-account joins with human pacing to avoid
                     // FLOOD_WAITs stacking; smartJoin handles small waits.
                     for (const t of targets) {
                       if (stopRequested) break;
                       const r = await smartJoin(t);
-                      if (r === "ok") joinedThisRound++;
+                      if (r === "ok") { joinedThisRound++; progressed = true; }
+                      if (r === "skip") progressed = true; // marked done, move on
                       if (r === "stop") break;
                     }
-                    if (!joinedThisRound) break;
+                    // Keep looping while the bot still asks for joins, even
+                    // if this round only hit floods — retry after pacing.
+                    if (!joinedThisRound && !progressed && !joinHintSeen) break;
                     // Re-fire /start so the bot re-verifies membership.
                     try {
                       await doStartBot();
