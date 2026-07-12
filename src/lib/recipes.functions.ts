@@ -14,8 +14,8 @@ const stepSchema = z.object({
     "forward",
     "wait",
   ]),
-  // Free-form op payload (validated by the executing endpoint).
-  op: z.record(z.string(), z.unknown()).default({}),
+  // Free-form op payload serialized as JSON (validated by the executing endpoint).
+  opJson: z.string().max(20000).default("{}"),
   minDelay: z.number().int().min(0).max(3600).default(1),
   maxDelay: z.number().int().min(0).max(3600).default(3),
   // Extra pause after this step completes (in seconds).
