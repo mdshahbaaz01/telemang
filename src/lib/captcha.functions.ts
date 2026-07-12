@@ -162,7 +162,77 @@ const solveInputSchema = z.discriminatedUnion("kind", [
     action_turnstile: z.string().max(80).optional(),
     accountId: z.string().uuid().nullish(),
   }),
+  z.object({
+    kind: z.enum([
+      "geetest","geetestV4","funcaptcha","keycaptcha","capy","mtcaptcha",
+      "friendlyCaptcha","amazonWaf","datadome","lemin","cutcaptcha",
+      "atbCaptcha","prosopo","tencent",
+    ]),
+    sitekey: z.string().min(1).max(400),
+    pageUrl: z.string().url(),
+    extra: z.record(z.string(), z.union([z.string(), z.number(), z.boolean()])).optional(),
+    accountId: z.string().uuid().nullish(),
+  }),
+  z.object({
+    kind: z.enum(["coordinates","grid","rotate","canvas","audio"]),
+    imageBase64: z.string().min(20).max(4_000_000),
+    hint: z.string().max(300).optional(),
+    extra: z.record(z.string(), z.union([z.string(), z.number(), z.boolean()])).optional(),
+    accountId: z.string().uuid().nullish(),
+  }),
 ]);
+
+// ---------- Bulk save (all providers at once) ----------
+
+export const saveSolversBulk = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((d: unknown) =>
+    z.object({
+      keys: z.object({
+        twocaptcha: z.string().min(8).max(500).optional().or(z.literal("")),
+        anticaptcha: z.string().min(8).max(500).optional().or(z.literal("")),
+        capsolver: z.string().min(8).max(500).optional().or(z.literal("")),
+      }),
+    }).parse(d),
+  )
+  .handler(async ({ data, context }) => {
+    const { encryptString } = await import("@/lib/crypto.server");
+    const entries = Object.entries(data.keys) as Array<[
+      "twocaptcha" | "anticaptcha" | "capsolver", string | undefined
+    ]>;
+    const results: { provider: string; action: "inserted" | "updated" | "skipped" }[] = [];
+    for (const [provider, key] of entries) {
+      if (!key) { results.push({ provider, action: "skipped" }); continue; }
+      const enc = await encryptString(key);
+      const { data: existing } = await context.supabase
+        .from("captcha_solvers")
+        .select("id")
+        .eq("user_id", context.userId)
+        .eq("provider", provider)
+        .eq("label", "")
+        .maybeSingle();
+      if (existing?.id) {
+        await context.supabase
+          .from("captcha_solvers")
+          .update({ api_key_encrypted: enc, enabled: true })
+          .eq("id", existing.id);
+        results.push({ provider, action: "updated" });
+      } else {
+        await context.supabase
+          .from("captcha_solvers")
+          .insert({
+            user_id: context.userId,
+            provider,
+            label: "",
+            api_key_encrypted: enc,
+            enabled: true,
+            priority: 100,
+          });
+        results.push({ provider, action: "inserted" });
+      }
+    }
+    return { results };
+  });
 
 export const solveCaptcha = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
