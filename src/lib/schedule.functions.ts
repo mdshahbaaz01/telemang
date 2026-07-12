@@ -174,6 +174,9 @@ export const rescheduleBroadcast = createServerFn({ method: "POST" })
       id: z.string().uuid(),
       scheduledAt: z.string().datetime({ offset: true }),
       label: z.string().max(120).optional(),
+      op: opSchema.optional(),
+      minDelay: z.number().int().min(0).max(60).optional(),
+      maxDelay: z.number().int().min(0).max(60).optional(),
     }).parse(d),
   )
   .handler(async ({ data, context }) => {
@@ -189,14 +192,27 @@ export const rescheduleBroadcast = createServerFn({ method: "POST" })
       .maybeSingle();
     if (sErr) throw new Error(sErr.message);
     if (!src) throw new Error("Source schedule not found");
+    const srcPayload = (src.payload as any) ?? {};
+    const newPayload = data.op
+      ? {
+          ...data.op,
+          minDelay: data.minDelay ?? Number(srcPayload.minDelay ?? 1),
+          maxDelay: data.maxDelay ?? Number(srcPayload.maxDelay ?? 2),
+        }
+      : {
+          ...srcPayload,
+          ...(data.minDelay !== undefined ? { minDelay: data.minDelay } : {}),
+          ...(data.maxDelay !== undefined ? { maxDelay: data.maxDelay } : {}),
+        };
     const { data: row, error } = await context.supabase
       .from("scheduled_broadcasts")
       .insert({
         user_id: context.userId,
         scheduled_at: when.toISOString(),
         label: data.label ?? (src.label as string | null) ?? null,
-        payload: src.payload as any,
+        payload: JSON.parse(JSON.stringify(newPayload)),
         status: "pending",
+        source_id: data.id,
       })
       .select("id, scheduled_at")
       .single();
