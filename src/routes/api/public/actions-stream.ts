@@ -77,6 +77,8 @@ const botFlowSchema = z.object({
   bot: z.string().min(1).max(200),
   startParam: z.string().max(200).optional(),
   steps: z.array(z.string().min(1).max(4096)).min(1).max(50),
+  autoJoinRequired: z.boolean().optional(),
+  maxJoinRounds: z.number().int().min(1).max(5).optional(),
 });
 
 const editSchema = z.object({
@@ -838,7 +840,7 @@ export const Route = createFileRoute("/api/public/actions-stream")({
               return { username: s, startParam };
             };
 
-            const runBotFlowForAccount = async (accountId: string, op: { bot: string; startParam?: string; steps: string[] }) => {
+            const runBotFlowForAccount = async (accountId: string, op: { bot: string; startParam?: string; steps: string[]; autoJoinRequired?: boolean; maxJoinRounds?: number }) => {
               send("log", { accountId, level: "info", message: "Connecting…" });
               let client;
               try {
@@ -867,7 +869,7 @@ export const Route = createFileRoute("/api/public/actions-stream")({
                 }
 
                 // Kick off with /start (+ optional deep link param) so the bot is initialized.
-                try {
+                const doStartBot = async () => {
                   const { default: bigInt } = await import("big-integer");
                   const randomId = bigInt(Math.floor(Math.random() * 1e15));
                   await client.invoke(
@@ -878,12 +880,100 @@ export const Route = createFileRoute("/api/public/actions-stream")({
                       startParam: startParam ?? "",
                     }),
                   );
+                };
+                try {
+                  await doStartBot();
                   send("log", { accountId, level: "success", target: botLabel, message: startParam ? `Started with param "${startParam}"` : "Started" });
                   await logDb(accountId, botLabel, "success", startParam ? `Started with param "${startParam}"` : "Started");
                 } catch (e) {
                   const em = errorText(e);
                   send("log", { accountId, level: "warn", target: botLabel, message: `StartBot: ${em}` });
                   await logDb(accountId, botLabel, "warn", `StartBot: ${em}`);
+                }
+
+                // ── Auto-join required channels ─────────────────────────
+                // Many referral bots reply with "Please join these channels"
+                // and a list of URL buttons / t.me links. Detect them, join
+                // from this account, then re-fire /start so the bot re-checks.
+                if (op.autoJoinRequired !== false) {
+                  const rounds = Math.max(1, Math.min(5, op.maxJoinRounds ?? 3));
+                  const alreadyJoined = new Set<string>();
+                  const linkRe = /(?:https?:\/\/)?(?:t(?:elegram)?\.me)\/(\+[A-Za-z0-9_-]+|joinchat\/[A-Za-z0-9_-]+|[A-Za-z0-9_]{4,})/gi;
+                  for (let round = 0; round < rounds; round++) {
+                    if (stopRequested) break;
+                    // Give the bot a moment to reply.
+                    await new Promise((r) => setTimeout(r, 2500));
+                    let recent: any[] = [];
+                    try { recent = await client.getMessages(botPeer, { limit: 5 }) as any[]; } catch { recent = []; }
+                    const candidates: string[] = [];
+                    for (const m of recent) {
+                      const text = String(m?.message ?? m?.text ?? "");
+                      let match: RegExpExecArray | null;
+                      while ((match = linkRe.exec(text)) !== null) candidates.push(match[1]);
+                      const rows: any[] = m?.replyMarkup?.rows ?? [];
+                      for (const row of rows) for (const btn of (row?.buttons ?? [])) {
+                        const url: string | undefined = btn?.url;
+                        if (!url) continue;
+                        const mm = linkRe.exec(url);
+                        linkRe.lastIndex = 0;
+                        if (mm) candidates.push(mm[1]);
+                      }
+                    }
+                    // Deduplicate + skip bot itself and already-joined.
+                    const targets = Array.from(new Set(candidates))
+                      .filter((c) => c && c.toLowerCase() !== parsed.username.toLowerCase() && !alreadyJoined.has(c.toLowerCase()));
+                    if (!targets.length) break;
+                    let joinedThisRound = 0;
+                    for (const target of targets) {
+                      if (stopRequested) break;
+                      alreadyJoined.add(target.toLowerCase());
+                      try {
+                        if (target.startsWith("+") || target.toLowerCase().startsWith("joinchat/")) {
+                          const hash = target.startsWith("+") ? target.slice(1) : target.split("/")[1];
+                          try {
+                            await client.invoke(new Api.messages.ImportChatInvite({ hash }));
+                            joinedThisRound++;
+                            send("log", { accountId, level: "success", target: botLabel, message: `Joined invite +${hash.slice(0, 8)}…` });
+                          } catch (e) {
+                            const em = errorText(e);
+                            if (/USER_ALREADY_PARTICIPANT|INVITE_HASH_EXPIRED|CHANNELS_TOO_MUCH/i.test(em)) {
+                              send("log", { accountId, level: "info", target: botLabel, message: `Invite +${hash.slice(0, 8)}: ${em}` });
+                            } else throw e;
+                          }
+                        } else {
+                          const ent: any = await client.getEntity(target);
+                          try {
+                            await client.invoke(new Api.channels.JoinChannel({ channel: ent }));
+                            joinedThisRound++;
+                            send("log", { accountId, level: "success", target: botLabel, message: `Joined @${target}` });
+                          } catch (e) {
+                            const em = errorText(e);
+                            if (/USER_ALREADY_PARTICIPANT|CHANNELS_TOO_MUCH/i.test(em)) {
+                              send("log", { accountId, level: "info", target: botLabel, message: `@${target}: ${em}` });
+                            } else throw e;
+                          }
+                        }
+                      } catch (e) {
+                        const em = errorText(e);
+                        const secs = await pauseAccountOnFlood(accountId, em);
+                        if (secs) {
+                          send("log", { accountId, level: "warn", target: botLabel, message: `FloodWait ${secs}s — account paused` });
+                          break;
+                        }
+                        send("log", { accountId, level: "warn", target: botLabel, message: `Join ${target}: ${em}` });
+                      }
+                      // Small pacing between joins.
+                      await new Promise((r) => setTimeout(r, jitter(body.minDelay, body.maxDelay)));
+                    }
+                    if (!joinedThisRound) break;
+                    // Re-fire /start so the bot re-verifies membership.
+                    try {
+                      await doStartBot();
+                      send("log", { accountId, level: "success", target: botLabel, message: `Re-started after joining ${joinedThisRound} chat(s)` });
+                    } catch (e) {
+                      send("log", { accountId, level: "warn", target: botLabel, message: `Re-start: ${errorText(e)}` });
+                    }
+                  }
                 }
 
                 for (const rawStep of op.steps) {
