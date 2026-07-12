@@ -401,6 +401,14 @@ function BotFlowPage() {
             <Button variant="destructive" onClick={stop} disabled={!running}>
               <Square className="mr-1 h-4 w-4" /> Stop
             </Button>
+            <label className="flex items-center gap-2 self-center text-xs text-muted-foreground">
+              <input
+                type="checkbox"
+                checked={autoJoinRequired}
+                onChange={(e) => setAutoJoinRequired(e.target.checked)}
+              />
+              Auto-join required channels & re-run /start
+            </label>
             {totals && (
               <div className="ml-auto self-center text-sm text-muted-foreground">
                 ok {totals.ok} · fail {totals.fail}
