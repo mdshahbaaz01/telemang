@@ -138,3 +138,141 @@ export async function solveImageAi(req: ImageSolveRequest): Promise<SolveResult>
     latencyMs: Date.now() - t0,
   };
 }
+
+// --- Advanced visual puzzles (Pro model for accuracy) ------------------------
+
+/** Grid puzzle: "click all squares with traffic lights". Returns "1,3,5" of matching cells. */
+export async function solveGridAi(req: ImagePlusRequest): Promise<SolveResult> {
+  const t0 = Date.now();
+  const rows = Number(req.extra?.rows ?? 3);
+  const cols = Number(req.extra?.cols ?? 3);
+  const prompt = req.hint || "Select all matching cells.";
+  const raw = await chat(
+    [
+      {
+        role: "user",
+        content: [
+          {
+            type: "text",
+            text:
+              `This is a ${rows}x${cols} grid captcha (numbered left→right, top→bottom starting at 1). ` +
+              `Task: ${prompt}. Return the numbers of ALL cells that match, as JSON {"cells":[1,3,...]}.`,
+          },
+          { type: "image_url", image_url: { url: `data:image/png;base64,${req.imageBase64}` } },
+        ],
+      },
+    ],
+    {
+      model: MODEL_PRO,
+      jsonSchema: {
+        type: "object",
+        additionalProperties: false,
+        required: ["cells"],
+        properties: { cells: { type: "array", items: { type: "integer", minimum: 1 } } },
+      },
+    },
+  );
+  let cells: number[] = [];
+  try {
+    cells = (JSON.parse(raw).cells as number[]).filter((n) => n >= 1 && n <= rows * cols);
+  } catch {
+    cells = raw.match(/\d+/g)?.map(Number).filter((n) => n >= 1 && n <= rows * cols) ?? [];
+  }
+  return { success: true, provider: "ai-vision-pro", answer: cells.join(","), latencyMs: Date.now() - t0 };
+}
+
+/** Click coordinates: return "x=W,y=H" of the point to click, using absolute pixels. */
+export async function solveCoordinatesAi(req: ImagePlusRequest): Promise<SolveResult> {
+  const t0 = Date.now();
+  const prompt = req.hint || "Click the correct object.";
+  const raw = await chat(
+    [
+      {
+        role: "user",
+        content: [
+          {
+            type: "text",
+            text:
+              `Captcha instruction: ${prompt}. Reply strictly as JSON {"x":<pixels_from_left>,"y":<pixels_from_top>}. ` +
+              `Use the image's own pixel dimensions.`,
+          },
+          { type: "image_url", image_url: { url: `data:image/png;base64,${req.imageBase64}` } },
+        ],
+      },
+    ],
+    {
+      model: MODEL_PRO,
+      jsonSchema: {
+        type: "object",
+        additionalProperties: false,
+        required: ["x", "y"],
+        properties: { x: { type: "integer", minimum: 0 }, y: { type: "integer", minimum: 0 } },
+      },
+    },
+  );
+  let x = 0, y = 0;
+  try { const j = JSON.parse(raw); x = Number(j.x) || 0; y = Number(j.y) || 0; } catch { /* ignore */ }
+  return { success: true, provider: "ai-vision-pro", answer: `${x},${y}`, latencyMs: Date.now() - t0 };
+}
+
+/** Rotate: return the angle (0..359) the image must be rotated clockwise to be upright. */
+export async function solveRotateAi(req: ImagePlusRequest): Promise<SolveResult> {
+  const t0 = Date.now();
+  const raw = await chat(
+    [
+      {
+        role: "user",
+        content: [
+          {
+            type: "text",
+            text:
+              "This image is rotated. Reply with the integer degrees (0-359) it must rotate CLOCKWISE to be upright. " +
+              'JSON only: {"angle":N}.',
+          },
+          { type: "image_url", image_url: { url: `data:image/png;base64,${req.imageBase64}` } },
+        ],
+      },
+    ],
+    {
+      model: MODEL_PRO,
+      jsonSchema: {
+        type: "object",
+        additionalProperties: false,
+        required: ["angle"],
+        properties: { angle: { type: "integer", minimum: 0, maximum: 359 } },
+      },
+    },
+  );
+  let angle = 0;
+  try { angle = Number(JSON.parse(raw).angle) || 0; } catch { /* ignore */ }
+  return { success: true, provider: "ai-vision-pro", answer: String(angle % 360), latencyMs: Date.now() - t0 };
+}
+
+/** Audio captcha: transcribe an audio clip to the spoken characters/digits. */
+export async function solveAudioAi(req: ImagePlusRequest): Promise<SolveResult> {
+  const t0 = Date.now();
+  const fmt = (req.extra?.format as string) || "mp3";
+  const answer = await chat(
+    [
+      {
+        role: "user",
+        content: [
+          {
+            type: "text",
+            text:
+              "Transcribe the spoken captcha in this audio. Reply with ONLY the characters/digits, " +
+              "no spaces, no punctuation, no explanation.",
+          },
+          { type: "input_audio", input_audio: { data: req.imageBase64, format: fmt } },
+        ],
+      },
+    ],
+    { model: MODEL_PRO },
+  );
+  return {
+    success: true,
+    provider: "ai-vision-pro",
+    answer: answer.replace(/[\s"'`.,-]/g, "").slice(0, 80),
+    latencyMs: Date.now() - t0,
+  };
+}
