@@ -976,12 +976,50 @@ export const Route = createFileRoute("/api/public/actions-stream")({
                 if (op.autoJoinRequired !== false) {
                   const rounds = Math.max(1, Math.min(15, op.maxJoinRounds ?? 10));
                   const linkRe = /(?:https?:\/\/)?(?:t(?:elegram)?\.me)\/(\+[A-Za-z0-9_-]+|joinchat\/[A-Za-z0-9_-]+|[A-Za-z0-9_]{4,})/gi;
+                  // Track everything the bot has ever asked for on this account
+                  // so the UI can show "N remaining" even across rounds.
+                  const requiredSeen = new Set<string>();
+                  const emitJoinProgress = (extra: Record<string, unknown> = {}) => {
+                    const remaining = Array.from(requiredSeen).filter((k) => !alreadyJoined.has(k));
+                    send("joinProgress", {
+                      accountId,
+                      total: requiredSeen.size,
+                      joined: alreadyJoined.size,
+                      remaining: remaining.length,
+                      remainingList: remaining.slice(0, 25),
+                      ...extra,
+                    });
+                  };
+                  const emitJoinStop = (reason: string, details?: Record<string, unknown>) => {
+                    const remaining = Array.from(requiredSeen).filter((k) => !alreadyJoined.has(k));
+                    send("joinStop", {
+                      accountId,
+                      reason,
+                      total: requiredSeen.size,
+                      joined: alreadyJoined.size,
+                      remaining: remaining.length,
+                      remainingList: remaining.slice(0, 25),
+                      ...(details ?? {}),
+                    });
+                    send("log", {
+                      accountId,
+                      level: reason === "all_joined" ? "success" : "warn",
+                      target: botLabel,
+                      message: `Auto-join stopped: ${reason}${remaining.length ? ` — ${remaining.length} still pending (${remaining.slice(0, 5).join(", ")}${remaining.length > 5 ? "…" : ""})` : ""}`,
+                    });
+                  };
+                  let lastRoundCompleted = -1;
                   for (let round = 0; round < rounds; round++) {
-                    if (stopRequested) break;
+                    if (stopRequested) { emitJoinStop("user_stopped", { round }); break; }
                     // Give the bot a brief moment to reply (short = fast).
                     await new Promise((r) => setTimeout(r, 900));
                     let recent: any[] = [];
-                    try { recent = await client.getMessages(botPeer, { limit: 5 }) as any[]; } catch { recent = []; }
+                    try {
+                      recent = await client.getMessages(botPeer, { limit: 5 }) as any[];
+                    } catch (e) {
+                      send("log", { accountId, level: "warn", target: botLabel, message: `Round ${round + 1}: fetch bot messages failed — ${errorText(e)}` });
+                      recent = [];
+                    }
                     const candidates: string[] = [];
                     let joinHintSeen = false;
                     for (const m of recent) {
@@ -1000,32 +1038,63 @@ export const Route = createFileRoute("/api/public/actions-stream")({
                       }
                     }
                     // Deduplicate + skip bot itself and already-joined.
-                    const targets = Array.from(new Set(candidates))
-                      .filter((c) => c && c.toLowerCase() !== parsed.username.toLowerCase() && !alreadyJoined.has(c.toLowerCase()));
+                    const allCandidates = Array.from(new Set(candidates))
+                      .filter((c) => c && c.toLowerCase() !== parsed.username.toLowerCase());
+                    for (const c of allCandidates) requiredSeen.add(c.toLowerCase());
+                    const targets = allCandidates.filter((c) => !alreadyJoined.has(c.toLowerCase()));
+                    send("log", {
+                      accountId,
+                      level: "info",
+                      target: botLabel,
+                      message: `Round ${round + 1}/${rounds}: detected ${allCandidates.length} link(s), ${targets.length} new to join, joinHint=${joinHintSeen}`,
+                    });
+                    emitJoinProgress({ round: round + 1, detected: allCandidates.length });
                     if (!targets.length) {
                       // Nothing new detected. If the bot is still asking to
                       // join, keep nudging with /start; only stop when the
                       // bot no longer signals a join requirement.
                       if (joinHintSeen) {
-                        try { await doStartBot(); } catch { /* noop */ }
+                        try {
+                          await doStartBot();
+                          send("log", { accountId, level: "info", target: botLabel, message: `Round ${round + 1}: no new links, join hint still present — re-fired /start` });
+                        } catch (e) {
+                          send("log", { accountId, level: "warn", target: botLabel, message: `Round ${round + 1}: /start retry failed — ${errorText(e)}` });
+                        }
+                        lastRoundCompleted = round;
                         continue;
                       }
+                      emitJoinStop("no_join_hint", { round: round + 1 });
                       break;
                     }
                     let joinedThisRound = 0;
                     let progressed = false;
+                    let floodedThisRound = 0;
+                    let skippedThisRound = 0;
                     // Serialize per-account joins with human pacing to avoid
                     // FLOOD_WAITs stacking; smartJoin handles small waits.
                     for (const t of targets) {
-                      if (stopRequested) break;
+                      if (stopRequested) { emitJoinStop("user_stopped", { round: round + 1 }); break; }
                       const r = await smartJoin(t);
                       if (r === "ok") { joinedThisRound++; progressed = true; }
-                      if (r === "skip") progressed = true; // marked done, move on
-                      if (r === "stop") break;
+                      if (r === "skip") { progressed = true; skippedThisRound++; }
+                      if (r === "flood") floodedThisRound++;
+                      if (r === "stop") { emitJoinStop("user_stopped", { round: round + 1 }); break; }
+                      emitJoinProgress({ round: round + 1, target: t, lastResult: r });
                     }
+                    if (stopRequested) break;
+                    send("log", {
+                      accountId,
+                      level: joinedThisRound ? "success" : "info",
+                      target: botLabel,
+                      message: `Round ${round + 1} summary: joined=${joinedThisRound}, skipped=${skippedThisRound}, floods=${floodedThisRound}`,
+                    });
+                    lastRoundCompleted = round;
                     // Keep looping while the bot still asks for joins, even
                     // if this round only hit floods — retry after pacing.
-                    if (!joinedThisRound && !progressed && !joinHintSeen) break;
+                    if (!joinedThisRound && !progressed && !joinHintSeen) {
+                      emitJoinStop("no_progress", { round: round + 1, floodedThisRound });
+                      break;
+                    }
                     // Re-fire /start so the bot re-verifies membership.
                     try {
                       await doStartBot();
@@ -1033,6 +1102,11 @@ export const Route = createFileRoute("/api/public/actions-stream")({
                     } catch (e) {
                       send("log", { accountId, level: "warn", target: botLabel, message: `Re-start: ${errorText(e)}` });
                     }
+                  }
+                  if (!stopRequested && lastRoundCompleted === rounds - 1) {
+                    const remaining = Array.from(requiredSeen).filter((k) => !alreadyJoined.has(k));
+                    if (remaining.length) emitJoinStop("max_rounds_reached", { rounds });
+                    else emitJoinStop("all_joined", { rounds });
                   }
                 }
 

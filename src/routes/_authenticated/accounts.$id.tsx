@@ -17,6 +17,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { ArrowLeft, Loader2, Send, Search, Reply, Trash2, Smile, RefreshCw, X, ExternalLink, Copy } from "lucide-react";
+import { copyWithToast } from "@/lib/clipboard";
 import { cn } from "@/lib/utils";
 import { getStealthSettings } from "./stealth";
 import { MiniAppDrawer, type MiniAppRequest } from "@/components/MiniAppDrawer";
@@ -685,7 +686,17 @@ function AccountViewerPage() {
             className="w-full max-w-md rounded-lg border bg-card p-4 shadow-lg"
             onClick={(e) => e.stopPropagation()}
           >
-            <div className="mb-2 text-sm font-semibold">Open external link?</div>
+            <div className="mb-2 flex items-center justify-between gap-2">
+              <div className="text-sm font-semibold">Open external link?</div>
+              <button
+                type="button"
+                className="rounded p-1 text-muted-foreground hover:bg-muted"
+                title="Copy link"
+                onClick={() => copyWithToast(confirmUrl, toast)}
+              >
+                <Copy className="h-3.5 w-3.5" />
+              </button>
+            </div>
             <p className="mb-3 break-all rounded-md border bg-muted p-2 text-xs">{confirmUrl}</p>
             <div className="flex justify-end gap-2">
               <Button variant="outline" size="sm" onClick={() => setConfirmUrl(null)}>
@@ -694,14 +705,7 @@ function AccountViewerPage() {
               <Button
                 variant="outline"
                 size="sm"
-                onClick={async () => {
-                  try {
-                    await navigator.clipboard.writeText(confirmUrl);
-                    toast.success("Link copied");
-                  } catch {
-                    toast.error("Failed to copy");
-                  }
-                }}
+                onClick={() => copyWithToast(confirmUrl, toast)}
               >
                 <Copy className="mr-1 h-4 w-4" /> Copy
               </Button>
@@ -828,6 +832,26 @@ function MessageRow({
                         <ExternalLink className="h-3 w-3" />
                       )}
                       <span className="max-w-[16rem] truncate">{btn.text}</span>
+                      {(btn.kind === "url" || btn.kind === "urlAuth") && (btn as any).url && (
+                        <span
+                          role="button"
+                          tabIndex={0}
+                          title="Copy link"
+                          className="ml-1 rounded p-0.5 hover:bg-background/40"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            copyWithToast((btn as any).url, toast);
+                          }}
+                          onKeyDown={(e) => {
+                            if (e.key === "Enter" || e.key === " ") {
+                              e.stopPropagation();
+                              copyWithToast((btn as any).url, toast);
+                            }
+                          }}
+                        >
+                          <Copy className="h-3 w-3" />
+                        </span>
+                      )}
                     </button>
                   );
                 })}
