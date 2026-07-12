@@ -1,11 +1,13 @@
 import { useQuery } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
+import { useSyncExternalStore } from "react";
 import { mintMiniAppProxyToken } from "@/lib/miniapp-token.functions";
 
 // Hook: mint (and auto-refresh) a proxy token and return the proxified URL.
 // Returns null until the token is ready. Token TTL is 1h; we refresh 5m early.
 export function useMiniAppProxyUrl(url: string | null | undefined, accountId: string, opts?: { captcha?: boolean }) {
   const mint = useServerFn(mintMiniAppProxyToken);
+  const globalCaptcha = useCaptchaAutoDetect();
   const tokenQuery = useQuery({
     queryKey: ["miniapp-proxy-token"],
     queryFn: () => mint({ data: {} }),
@@ -14,8 +16,31 @@ export function useMiniAppProxyUrl(url: string | null | undefined, accountId: st
     refetchOnWindowFocus: false,
   });
   const token = tokenQuery.data?.token ?? "";
-  const proxied = url && token ? proxifyMiniAppUrl(url, accountId, token, { captcha: opts?.captcha }) : null;
+  const cap = opts?.captcha ?? globalCaptcha;
+  const proxied = url && token ? proxifyMiniAppUrl(url, accountId, token, { captcha: cap }) : null;
   return { url: proxied, loading: tokenQuery.isPending, error: tokenQuery.error };
+}
+
+// Global user preference for auto-injecting the captcha detector into the
+// mini-app proxy. Default OFF — many bots do not have captchas and the
+// bridge adds unnecessary DOM work / postMessage traffic.
+const CAPTCHA_KEY = "miniapp.captchaAutoDetect";
+const captchaListeners = new Set<() => void>();
+function captchaSubscribe(cb: () => void) {
+  captchaListeners.add(cb);
+  return () => captchaListeners.delete(cb);
+}
+function captchaGet(): boolean {
+  if (typeof window === "undefined") return false;
+  try { return window.localStorage.getItem(CAPTCHA_KEY) === "1"; } catch { return false; }
+}
+export function setCaptchaAutoDetect(on: boolean) {
+  if (typeof window === "undefined") return;
+  try { window.localStorage.setItem(CAPTCHA_KEY, on ? "1" : "0"); } catch {}
+  captchaListeners.forEach((cb) => cb());
+}
+export function useCaptchaAutoDetect(): boolean {
+  return useSyncExternalStore(captchaSubscribe, captchaGet, () => false);
 }
 // Client helper to route a mini-app URL through the fingerprinting proxy.
 // A short-lived HMAC token (minted by an authenticated server function) is
