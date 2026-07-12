@@ -393,7 +393,7 @@ function InfoRow({ label, value, mono, link }: { label: string; value: string; m
   );
 }
 
-function MessageBubble({ m, onReply }: { m: any; onReply: () => void }) {
+function MessageBubble({ m, onReply, onPressButton, pressingKey }: { m: any; onReply: () => void; onPressButton: (btn: any, key: string) => void; pressingKey: string | null }) {
   const time = m.date ? IST_FMT.format(new Date(m.date)) : "";
   if (m.isService) {
     return (
@@ -418,6 +418,39 @@ function MessageBubble({ m, onReply }: { m: any; onReply: () => void }) {
           </div>
         )}
         {m.text && <div className="whitespace-pre-wrap text-sm break-words">{m.text}</div>}
+        {m.replyMarkup && (m.replyMarkup.kind === "inline" || m.replyMarkup.kind === "keyboard") && m.replyMarkup.rows?.length > 0 && (
+          <div className="mt-1.5 space-y-1" onClick={(e) => e.stopPropagation()}>
+            {m.replyMarkup.rows.map((row: any[], ri: number) => (
+              <div key={ri} className="flex flex-wrap gap-1">
+                {row.map((btn, ci) => {
+                  const key = `${m.id}:${ri}:${ci}`;
+                  const busy = pressingKey === key;
+                  const clickable = ["callback","url","urlAuth","webview","reply"].includes(btn.kind);
+                  const title = btn.kind === "url" || btn.kind === "urlAuth"
+                    ? `Opens: ${btn.url}`
+                    : btn.kind === "callback" ? "Callback"
+                    : btn.kind === "webview" ? "WebApp"
+                    : btn.kind === "reply" ? `Sends: ${btn.text}`
+                    : `${btn.kind} (not supported)`;
+                  return (
+                    <button
+                      key={ci}
+                      type="button"
+                      title={title}
+                      disabled={!clickable || busy}
+                      onClick={() => onPressButton(btn, key)}
+                      className={`inline-flex items-center gap-1 rounded-md border px-2 py-1 text-[11px] ${clickable ? "border-primary/40 bg-primary/10 hover:bg-primary/20" : "cursor-not-allowed border-border bg-muted opacity-60"}`}
+                    >
+                      {busy && <Loader2 className="h-3 w-3 animate-spin" />}
+                      {(btn.kind === "url" || btn.kind === "urlAuth") && <ExternalLink className="h-3 w-3" />}
+                      <span className="max-w-[16rem] truncate">{btn.text}</span>
+                    </button>
+                  );
+                })}
+              </div>
+            ))}
+          </div>
+        )}
         <div className="flex items-center gap-2 mt-0.5 text-[10px] text-muted-foreground">
           <span>#{m.id}</span>
           <span>{time}</span>
