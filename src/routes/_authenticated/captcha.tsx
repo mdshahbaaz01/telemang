@@ -140,8 +140,8 @@ function AboutTab() {
     {
       kind: "Image captcha (distorted text)",
       desc: "Bot sends a photo with letters/numbers to type back.",
-      who: "2Captcha → Anti-Captcha → CapSolver (priority order), then AI vision (OCR) fallback",
-      auto: "External provider key + small AI credits fallback",
+      who: "Built-in AI vision (OCR) — falls through to provider keys if you added any",
+      auto: "Free — no external key needed",
     },
     {
       kind: "reCAPTCHA v2 (checkbox)",
