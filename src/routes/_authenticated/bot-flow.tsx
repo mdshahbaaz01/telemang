@@ -389,8 +389,7 @@ function BotFlowPage() {
         return `${who}\t${r.url}`;
       });
     if (!lines.length) return toast.error("No links yet");
-    await navigator.clipboard.writeText(lines.join("\n"));
-    toast.success(`Copied ${lines.length} link(s)`);
+    await copyWithToast(lines.join("\n"), toast, `Copied ${lines.length} link(s)`);
   };
 
   // ─── Direct verification link runner ───────────────────────────────
