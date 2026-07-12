@@ -14,6 +14,8 @@ const runReactionsSchema = z.object({
   accountIds: z.array(z.string().uuid()).min(1).max(500),
   emojis: z.array(weightedEmoji).min(1).max(20),
   spreadSeconds: z.number().int().min(0).max(3600).default(0),
+  minDelay: z.number().int().min(0).max(3600).optional(),
+  maxDelay: z.number().int().min(0).max(3600).optional(),
   randomizeOrder: z.boolean().default(true),
   big: z.boolean().default(false),
 });
@@ -67,8 +69,11 @@ export async function executeReactions(
 
   await Promise.all(
     accountOrder.map(async (accountId, idx) => {
-      if (input.spreadSeconds > 0) {
-        await new Promise((r) => setTimeout(r, Math.random() * input.spreadSeconds * 1000));
+      const lo = Math.max(0, input.minDelay ?? 0);
+      const hi = Math.max(lo, input.maxDelay ?? input.spreadSeconds ?? 0);
+      if (hi > 0) {
+        const wait = (lo + Math.random() * (hi - lo)) * 1000;
+        await new Promise((r) => setTimeout(r, wait));
       }
       let client;
       try {
