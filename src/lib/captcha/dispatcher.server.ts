@@ -3,7 +3,15 @@ import type { CaptchaProvider, ProviderAdapter, SolveRequest, SolveResult } from
 import { twoCaptchaAdapter } from "./providers/twocaptcha.server";
 import { antiCaptchaAdapter } from "./providers/anticaptcha.server";
 import { capSolverAdapter } from "./providers/capsolver.server";
-import { solveButtonChoiceAi, solveImageAi, solveMathAi } from "./ai-vision.server";
+import {
+  solveButtonChoiceAi,
+  solveImageAi,
+  solveMathAi,
+  solveGridAi,
+  solveCoordinatesAi,
+  solveRotateAi,
+  solveAudioAi,
+} from "./ai-vision.server";
 
 export const ADAPTERS: Record<CaptchaProvider, ProviderAdapter> = {
   twocaptcha: twoCaptchaAdapter,
@@ -56,6 +64,11 @@ export async function dispatchSolve(
 
   if (req.kind === "math") return solveMathAi(req);
   if (req.kind === "buttonChoice") return solveButtonChoiceAi(req);
+  // Native AI visual solvers — no external key needed.
+  if (req.kind === "grid") return solveGridAi(req);
+  if (req.kind === "coordinates") return solveCoordinatesAi(req);
+  if (req.kind === "rotate") return solveRotateAi(req);
+  if (req.kind === "audio") return solveAudioAi(req);
 
   const eligible = solvers.filter((s) => ADAPTERS[s.provider]?.supports(req.kind));
 
@@ -71,9 +84,12 @@ export async function dispatchSolve(
     }
   }
 
-  if (req.kind === "image") {
+  if (req.kind === "image" || req.kind === "canvas") {
     try {
-      const res = await solveImageAi(req);
+      const res =
+        req.kind === "image"
+          ? await solveImageAi(req)
+          : await solveCoordinatesAi(req); // canvas → treat as coordinate pick
       return res;
     } catch (e) {
       errors.push(`ai-vision: ${(e as Error).message}`);
