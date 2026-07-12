@@ -190,7 +190,11 @@ async function downloadEntityAvatar(client: any, entity: any): Promise<string | 
 // ── listDialogs ─────────────────────────────────────────────────────────
 export const listDialogs = createServerFn({ method: "GET" })
   .middleware([requireSupabaseAuth])
-  .inputValidator((d: unknown) => z.object({ accountId: z.string().uuid(), limit: z.number().int().min(1).max(5000).default(1000) }).parse(d))
+  .inputValidator((d: unknown) => z.object({
+    accountId: z.string().uuid(),
+    limit: z.number().int().min(1).max(5000).default(1000),
+    withPhotos: z.boolean().default(true),
+  }).parse(d))
   .handler(async ({ data, context }) => {
     await assertAdmin(context.supabase);
     const { openClientForAccount } = await import("./cleanup.server");
@@ -223,12 +227,14 @@ export const listDialogs = createServerFn({ method: "GET" })
           _entity: entity,
         };
       }).filter((x: any) => x.peerKey);
-      const withPhotos = await Promise.all(rawOut.map(async (d: any) => {
-        const photoDataUrl = await downloadEntityAvatar(client, d._entity);
-        const { _entity, ...rest } = d;
-        return { ...rest, photoDataUrl };
-      }));
-      const mePhoto = await downloadEntityAvatar(client, me);
+      const withPhotos = data.withPhotos
+        ? await Promise.all(rawOut.map(async (d: any) => {
+            const photoDataUrl = await downloadEntityAvatar(client, d._entity);
+            const { _entity, ...rest } = d;
+            return { ...rest, photoDataUrl };
+          }))
+        : rawOut.map((d: any) => { const { _entity, ...rest } = d; return { ...rest, photoDataUrl: null }; });
+      const mePhoto = data.withPhotos ? await downloadEntityAvatar(client, me) : null;
       const meFirst = (me as any).firstName ?? "";
       const meLast = (me as any).lastName ?? "";
       const meName = `${meFirst} ${meLast}`.trim() || (me as any).username || "Me";
@@ -267,9 +273,6 @@ export const getHistory = createServerFn({ method: "GET" })
     try {
       const me = await client.getMe();
       const meId = String((me as any).id);
-      // Prime entity cache: GramJS can't resolve raw PeerUser/PeerChannel
-      // without access_hash unless the entity is in the session cache.
-      await client.getDialogs({ limit: 200 }).catch(() => {});
       const peer = await resolvePeerFromKey(client, Api, data.peerKey);
       const messages = await client.getMessages(peer, { limit: data.limit, offsetId: data.offsetId });
       // messages are newest→oldest; reverse for chronological order.
