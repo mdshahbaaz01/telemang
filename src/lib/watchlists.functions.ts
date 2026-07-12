@@ -97,13 +97,13 @@ export const scanWatchlist = createServerFn({ method: "POST" })
     const accountIds = (row.account_ids as string[]) ?? [];
     if (accountIds.length === 0) throw new Error("No accounts assigned");
 
-    const { getTelegramClient, releaseTelegramClient } = await import("@/lib/telegram-client.server");
+    const { openClientForAccount } = await import("@/lib/cleanup.server");
     const { resolveTargetEntity } = await import("@/lib/telegram-target-resolver.server");
     const { Api } = await import("telegram");
 
     // 1) Peek latest message id from first account
     const first = accountIds[0];
-    const peekClient = await getTelegramClient(first);
+    const peekClient = await openClientForAccount(context.supabase, first);
     let latestId = 0;
     try {
       const entity = await resolveTargetEntity(peekClient, Api, row.chat as string);
@@ -113,7 +113,7 @@ export const scanWatchlist = createServerFn({ method: "POST" })
       const msg = history?.messages?.[0];
       latestId = msg?.id ?? 0;
     } finally {
-      await releaseTelegramClient(first);
+      try { await peekClient.disconnect(); } catch {}
     }
 
     if (!latestId || latestId <= (row.last_msg_id ?? 0)) {
@@ -128,7 +128,7 @@ export const scanWatchlist = createServerFn({ method: "POST" })
     let reacted = 0;
     const errors: string[] = [];
     for (const accId of accountIds) {
-      const client = await getTelegramClient(accId);
+      const client = await openClientForAccount(context.supabase, accId);
       try {
         const entity = await resolveTargetEntity(client, Api, row.chat as string);
         // View bump then react
@@ -144,7 +144,7 @@ export const scanWatchlist = createServerFn({ method: "POST" })
       } catch (e) {
         errors.push(`${accId}: ${e instanceof Error ? e.message : String(e)}`);
       } finally {
-        await releaseTelegramClient(accId);
+        try { await client.disconnect(); } catch {}
       }
     }
 
