@@ -1,5 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { deriveMiniAppIdentity } from "@/lib/mini-app-identity.server";
+import { verifyMiniAppProxyToken, isBlockedProxyHost } from "@/lib/miniapp-token.server";
 
 // Cross-origin mini-app proxy that:
 //   1. strips X-Frame-Options / CSP so the app renders in an iframe;
