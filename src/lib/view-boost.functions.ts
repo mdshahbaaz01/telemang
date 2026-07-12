@@ -8,6 +8,8 @@ const runViewsSchema = z.object({
   source: z.object({ chat: z.string().min(1).max(200), msgIds: z.array(z.number().int().positive()).min(1).max(20) }),
   accountIds: z.array(z.string().uuid()).min(1).max(1000),
   spreadSeconds: z.number().int().min(0).max(3600).default(0),
+  minDelay: z.number().int().min(0).max(3600).optional(),
+  maxDelay: z.number().int().min(0).max(3600).optional(),
 });
 
 export type ViewsExecInput = z.infer<typeof runViewsSchema>;
@@ -39,8 +41,11 @@ export async function executeViewBoost(
 
   await Promise.all(
     input.accountIds.map(async (accountId) => {
-      if (input.spreadSeconds > 0) {
-        await new Promise((r) => setTimeout(r, Math.random() * input.spreadSeconds * 1000));
+      const lo = Math.max(0, input.minDelay ?? 0);
+      const hi = Math.max(lo, input.maxDelay ?? input.spreadSeconds ?? 0);
+      if (hi > 0) {
+        const wait = (lo + Math.random() * (hi - lo)) * 1000;
+        await new Promise((r) => setTimeout(r, wait));
       }
       let client;
       try {
