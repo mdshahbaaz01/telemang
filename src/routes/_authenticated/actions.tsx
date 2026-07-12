@@ -162,6 +162,29 @@ function formatIst(d: Date): string {
   return `${IST_FORMATTER.format(d)} IST`;
 }
 
+// Convert a Date to an IST wall-clock string suitable for <input type="datetime-local" step="1">.
+function dateToIstInput(d: Date): string {
+  const parts = new Intl.DateTimeFormat("en-CA", {
+    timeZone: "Asia/Kolkata",
+    year: "numeric", month: "2-digit", day: "2-digit",
+    hour: "2-digit", minute: "2-digit", second: "2-digit",
+    hour12: false,
+  }).formatToParts(d);
+  const g = (t: string) => parts.find((p) => p.type === t)?.value ?? "00";
+  return `${g("year")}-${g("month")}-${g("day")}T${g("hour")}:${g("minute")}:${g("second")}`;
+}
+
+type ReuseScheduleRow = {
+  id: string;
+  scheduledAt: string;
+  label: string | null;
+  kind: "broadcast" | "reply" | "forward" | "edit" | "deleteMessages";
+  summary: string;
+  payload: any;
+  minDelay: number;
+  maxDelay: number;
+};
+
 function ActionsPage() {
   return <ActionsPageInner />;
 }
