@@ -16,6 +16,7 @@ import { Route as AuthenticatedWorkspaceRouteImport } from './routes/_authentica
 import { Route as AuthenticatedWatchlistsRouteImport } from './routes/_authenticated/watchlists'
 import { Route as AuthenticatedSearchRouteImport } from './routes/_authenticated/search'
 import { Route as AuthenticatedReferralsRouteImport } from './routes/_authenticated/referrals'
+import { Route as AuthenticatedRecipesRouteImport } from './routes/_authenticated/recipes'
 import { Route as AuthenticatedProfileUpdaterRouteImport } from './routes/_authenticated/profile-updater'
 import { Route as AuthenticatedOwnerRouteImport } from './routes/_authenticated/owner'
 import { Route as AuthenticatedMediaRouteImport } from './routes/_authenticated/media'
@@ -73,6 +74,11 @@ const AuthenticatedSearchRoute = AuthenticatedSearchRouteImport.update({
 const AuthenticatedReferralsRoute = AuthenticatedReferralsRouteImport.update({
   id: '/referrals',
   path: '/referrals',
+  getParentRoute: () => AuthenticatedRouteRoute,
+} as any)
+const AuthenticatedRecipesRoute = AuthenticatedRecipesRouteImport.update({
+  id: '/recipes',
+  path: '/recipes',
   getParentRoute: () => AuthenticatedRouteRoute,
 } as any)
 const AuthenticatedProfileUpdaterRoute =
@@ -216,6 +222,7 @@ export interface FileRoutesByFullPath {
   '/media': typeof AuthenticatedMediaRoute
   '/owner': typeof AuthenticatedOwnerRoute
   '/profile-updater': typeof AuthenticatedProfileUpdaterRoute
+  '/recipes': typeof AuthenticatedRecipesRoute
   '/referrals': typeof AuthenticatedReferralsRoute
   '/search': typeof AuthenticatedSearchRoute
   '/watchlists': typeof AuthenticatedWatchlistsRoute
@@ -248,6 +255,7 @@ export interface FileRoutesByTo {
   '/media': typeof AuthenticatedMediaRoute
   '/owner': typeof AuthenticatedOwnerRoute
   '/profile-updater': typeof AuthenticatedProfileUpdaterRoute
+  '/recipes': typeof AuthenticatedRecipesRoute
   '/referrals': typeof AuthenticatedReferralsRoute
   '/search': typeof AuthenticatedSearchRoute
   '/watchlists': typeof AuthenticatedWatchlistsRoute
@@ -282,6 +290,7 @@ export interface FileRoutesById {
   '/_authenticated/media': typeof AuthenticatedMediaRoute
   '/_authenticated/owner': typeof AuthenticatedOwnerRoute
   '/_authenticated/profile-updater': typeof AuthenticatedProfileUpdaterRoute
+  '/_authenticated/recipes': typeof AuthenticatedRecipesRoute
   '/_authenticated/referrals': typeof AuthenticatedReferralsRoute
   '/_authenticated/search': typeof AuthenticatedSearchRoute
   '/_authenticated/watchlists': typeof AuthenticatedWatchlistsRoute
@@ -316,6 +325,7 @@ export interface FileRouteTypes {
     | '/media'
     | '/owner'
     | '/profile-updater'
+    | '/recipes'
     | '/referrals'
     | '/search'
     | '/watchlists'
@@ -348,6 +358,7 @@ export interface FileRouteTypes {
     | '/media'
     | '/owner'
     | '/profile-updater'
+    | '/recipes'
     | '/referrals'
     | '/search'
     | '/watchlists'
@@ -381,6 +392,7 @@ export interface FileRouteTypes {
     | '/_authenticated/media'
     | '/_authenticated/owner'
     | '/_authenticated/profile-updater'
+    | '/_authenticated/recipes'
     | '/_authenticated/referrals'
     | '/_authenticated/search'
     | '/_authenticated/watchlists'
@@ -460,6 +472,13 @@ declare module '@tanstack/react-router' {
       path: '/referrals'
       fullPath: '/referrals'
       preLoaderRoute: typeof AuthenticatedReferralsRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
+    '/_authenticated/recipes': {
+      id: '/_authenticated/recipes'
+      path: '/recipes'
+      fullPath: '/recipes'
+      preLoaderRoute: typeof AuthenticatedRecipesRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
     '/_authenticated/profile-updater': {
@@ -647,6 +666,7 @@ interface AuthenticatedRouteRouteChildren {
   AuthenticatedMediaRoute: typeof AuthenticatedMediaRoute
   AuthenticatedOwnerRoute: typeof AuthenticatedOwnerRoute
   AuthenticatedProfileUpdaterRoute: typeof AuthenticatedProfileUpdaterRoute
+  AuthenticatedRecipesRoute: typeof AuthenticatedRecipesRoute
   AuthenticatedReferralsRoute: typeof AuthenticatedReferralsRoute
   AuthenticatedSearchRoute: typeof AuthenticatedSearchRoute
   AuthenticatedWatchlistsRoute: typeof AuthenticatedWatchlistsRoute
@@ -671,6 +691,7 @@ const AuthenticatedRouteRouteChildren: AuthenticatedRouteRouteChildren = {
   AuthenticatedMediaRoute: AuthenticatedMediaRoute,
   AuthenticatedOwnerRoute: AuthenticatedOwnerRoute,
   AuthenticatedProfileUpdaterRoute: AuthenticatedProfileUpdaterRoute,
+  AuthenticatedRecipesRoute: AuthenticatedRecipesRoute,
   AuthenticatedReferralsRoute: AuthenticatedReferralsRoute,
   AuthenticatedSearchRoute: AuthenticatedSearchRoute,
   AuthenticatedWatchlistsRoute: AuthenticatedWatchlistsRoute,
