@@ -38,7 +38,8 @@ async function submit(apiKey: string, body: Record<string, string | number | boo
 export const twoCaptchaAdapter: ProviderAdapter = {
   id: "twocaptcha",
   supports(kind) {
-    return kind === "image" || kind === "recaptchaV2" || kind === "recaptchaV3" || kind === "hcaptcha" || kind === "turnstile";
+    // 2Captcha supports ~everything.
+    return kind !== "math" && kind !== "buttonChoice";
   },
   async balance(apiKey) {
     const r = await fetch(`${RES}?key=${encodeURIComponent(apiKey)}&action=getbalance&json=1`);
@@ -85,6 +86,57 @@ export const twoCaptchaAdapter: ProviderAdapter = {
       };
       if (req.data) body.data = req.data;
       if (req.action_turnstile) body.action = req.action_turnstile;
+      requestId = await submit(apiKey, body);
+    } else if (
+      req.kind === "geetest" || req.kind === "geetestV4" || req.kind === "funcaptcha" ||
+      req.kind === "keycaptcha" || req.kind === "capy" || req.kind === "mtcaptcha" ||
+      req.kind === "friendlyCaptcha" || req.kind === "amazonWaf" || req.kind === "datadome" ||
+      req.kind === "lemin" || req.kind === "cutcaptcha" || req.kind === "atbCaptcha" ||
+      req.kind === "prosopo" || req.kind === "tencent"
+    ) {
+      const methodMap: Record<string, string> = {
+        geetest: "geetest",
+        geetestV4: "geetest_v4",
+        funcaptcha: "funcaptcha",
+        keycaptcha: "keycaptcha",
+        capy: "capy",
+        mtcaptcha: "mt_captcha",
+        friendlyCaptcha: "friendly_captcha",
+        amazonWaf: "amazon_waf",
+        datadome: "datadome",
+        lemin: "lemin",
+        cutcaptcha: "cutcaptcha",
+        atbCaptcha: "atb_captcha",
+        prosopo: "prosopo",
+        tencent: "tencent",
+      };
+      const body: Record<string, string | number | boolean> = {
+        method: methodMap[req.kind],
+        sitekey: req.sitekey,
+        pageurl: req.pageUrl,
+        ...(req.extra ?? {}),
+      };
+      requestId = await submit(apiKey, body);
+    } else if (
+      req.kind === "coordinates" || req.kind === "grid" || req.kind === "canvas" ||
+      req.kind === "rotate" || req.kind === "audio"
+    ) {
+      const methodMap: Record<string, string> = {
+        coordinates: "base64",
+        grid: "base64",
+        canvas: "base64",
+        rotate: "rotatecaptcha",
+        audio: "audio",
+      };
+      const body: Record<string, string | number | boolean> = {
+        method: methodMap[req.kind],
+        body: req.imageBase64,
+        textinstructions: req.hint ?? "",
+        ...(req.kind === "coordinates" ? { coordinatescaptcha: 1 } : {}),
+        ...(req.kind === "grid" ? { recaptcha: 1 } : {}),
+        ...(req.kind === "canvas" ? { canvas: 1 } : {}),
+        ...(req.extra ?? {}),
+      };
       requestId = await submit(apiKey, body);
     } else {
       throw new Error(`2captcha: unsupported kind ${(req as SolveRequest).kind}`);
