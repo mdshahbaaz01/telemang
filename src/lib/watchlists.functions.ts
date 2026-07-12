@@ -96,6 +96,11 @@ export const scanWatchlist = createServerFn({ method: "POST" })
     if (!row.enabled) return { skipped: "disabled", newMsgId: row.last_msg_id, reacted: 0 };
     const accountIds = (row.account_ids as string[]) ?? [];
     if (accountIds.length === 0) throw new Error("No accounts assigned");
+    const emojiList = String(row.emoji ?? "👍")
+      .split(/[,\s]+/)
+      .map((e) => e.trim())
+      .filter(Boolean);
+    if (emojiList.length === 0) emojiList.push("👍");
 
     const { openClientForAccount } = await import("@/lib/cleanup.server");
     const { resolveTargetEntity } = await import("@/lib/telegram-target-resolver.server");
@@ -138,7 +143,7 @@ export const scanWatchlist = createServerFn({ method: "POST" })
         await client.invoke(new Api.messages.SendReaction({
           peer: entity,
           msgId: latestId,
-          reaction: [new Api.ReactionEmoji({ emoticon: row.emoji as string })],
+          reaction: [new Api.ReactionEmoji({ emoticon: emojiList[Math.floor(Math.random() * emojiList.length)] })],
         }));
         reacted++;
       } catch (e) {
