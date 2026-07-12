@@ -6,6 +6,7 @@ import { toast } from "sonner";
 import {
   listSolvers,
   saveSolver,
+  saveSolversBulk,
   deleteSolver,
   refreshSolverBalance,
   solveCaptcha,
@@ -41,9 +42,27 @@ export const Route = createFileRoute("/_authenticated/captcha")({
 });
 
 const PROVIDERS = [
-  { id: "twocaptcha", name: "2Captcha", url: "https://2captcha.com/enterpage" },
-  { id: "anticaptcha", name: "Anti-Captcha", url: "https://anti-captcha.com/clients/settings/apisetup" },
-  { id: "capsolver", name: "CapSolver", url: "https://dashboard.capsolver.com" },
+  {
+    id: "twocaptcha",
+    name: "2Captcha",
+    url: "https://2captcha.com/enterpage",
+    signup: "https://2captcha.com/auth/register",
+    note: "Best coverage: image, reCAPTCHA, hCaptcha, Turnstile, GeeTest, FunCaptcha, DataDome, MTCaptcha, Amazon WAF, Capy, Lemin, and more.",
+  },
+  {
+    id: "anticaptcha",
+    name: "Anti-Captcha",
+    url: "https://anti-captcha.com/clients/settings/apisetup",
+    signup: "https://anti-captcha.com/clients/entrance/register",
+    note: "Strong on reCAPTCHA v2/v3, hCaptcha, Turnstile, FunCaptcha, GeeTest.",
+  },
+  {
+    id: "capsolver",
+    name: "CapSolver",
+    url: "https://dashboard.capsolver.com",
+    signup: "https://dashboard.capsolver.com/passport/register",
+    note: "Great for reCAPTCHA, hCaptcha, Turnstile, DataDome, FunCaptcha, AWS WAF.",
+  },
 ] as const;
 
 type ProviderId = (typeof PROVIDERS)[number]["id"];
@@ -229,6 +248,7 @@ function SolversTab() {
   const qc = useQueryClient();
   const list = useServerFn(listSolvers);
   const save = useServerFn(saveSolver);
+  const saveBulk = useServerFn(saveSolversBulk);
   const del = useServerFn(deleteSolver);
   const refresh = useServerFn(refreshSolverBalance);
 
@@ -275,11 +295,68 @@ function SolversTab() {
     onError: (e) => toast.error((e as Error).message),
   });
 
+  const [bulk, setBulk] = useState<{ twocaptcha: string; anticaptcha: string; capsolver: string }>({
+    twocaptcha: "", anticaptcha: "", capsolver: "",
+  });
+  const bulkMut = useMutation({
+    mutationFn: () => saveBulk({ data: { keys: bulk } }),
+    onSuccess: (r) => {
+      const saved = r.results.filter((x) => x.action !== "skipped").length;
+      toast.success(saved ? `Saved ${saved} provider key${saved > 1 ? "s" : ""}` : "Nothing to save");
+      setBulk({ twocaptcha: "", anticaptcha: "", capsolver: "" });
+      invalidate();
+    },
+    onError: (e) => toast.error((e as Error).message),
+  });
+
   return (
+    <div className="space-y-4">
+      <Card className="border-primary/40">
+        <CardHeader>
+          <CardTitle className="text-base flex items-center gap-2">
+            <Zap className="h-4 w-4 text-primary" />
+            Save all providers at once
+          </CardTitle>
+          <p className="text-xs text-muted-foreground">
+            Paste any keys you have. Blank fields are skipped. Existing default rows are overwritten.
+            You can pick which one runs from Bot Flow / Watchlists.
+          </p>
+        </CardHeader>
+        <CardContent className="space-y-3">
+          {PROVIDERS.map((p) => (
+            <div key={p.id} className="grid gap-1">
+              <div className="flex items-center justify-between">
+                <Label className="text-sm">{p.name} API key</Label>
+                <div className="flex gap-2 text-[11px]">
+                  <a className="underline text-primary" href={p.url} target="_blank" rel="noreferrer">Get key ↗</a>
+                  <a className="underline text-muted-foreground" href={p.signup} target="_blank" rel="noreferrer">Sign up</a>
+                </div>
+              </div>
+              <Input
+                type="password"
+                placeholder={`Paste ${p.name} API key`}
+                value={bulk[p.id as keyof typeof bulk]}
+                onChange={(e) => setBulk({ ...bulk, [p.id]: e.target.value })}
+              />
+              <p className="text-[11px] text-muted-foreground">{p.note}</p>
+            </div>
+          ))}
+          <Button
+            className="w-full"
+            disabled={bulkMut.isPending || (!bulk.twocaptcha && !bulk.anticaptcha && !bulk.capsolver)}
+            onClick={() => bulkMut.mutate()}
+          >
+            {bulkMut.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Plus className="h-4 w-4 mr-1" />}
+            Save all keys
+          </Button>
+        </CardContent>
+      </Card>
+
     <div className="grid gap-4 md:grid-cols-2">
       <Card>
         <CardHeader>
-          <CardTitle className="text-base">Add / update solver</CardTitle>
+          <CardTitle className="text-base">Add / update single solver</CardTitle>
+          <p className="text-xs text-muted-foreground">Use this to add a second (backup) key per provider with its own label.</p>
         </CardHeader>
         <CardContent className="space-y-3">
           <div className="grid grid-cols-2 gap-3">
@@ -382,6 +459,7 @@ function SolversTab() {
         </CardContent>
       </Card>
     </div>
+    </div>
   );
 }
 
@@ -389,7 +467,13 @@ function SolversTab() {
 
 function PlaygroundTab() {
   const solve = useServerFn(solveCaptcha);
-  const [kind, setKind] = useState<"image" | "math" | "buttonChoice" | "recaptchaV2" | "hcaptcha" | "turnstile">("image");
+  const [kind, setKind] = useState<
+    | "image" | "math" | "buttonChoice"
+    | "recaptchaV2" | "recaptchaV3" | "hcaptcha" | "turnstile"
+    | "geetest" | "geetestV4" | "funcaptcha" | "datadome" | "mtcaptcha"
+    | "friendlyCaptcha" | "amazonWaf" | "capy" | "keycaptcha" | "lemin"
+    | "cutcaptcha" | "atbCaptcha" | "prosopo" | "tencent"
+  >("image");
   const [imageBase64, setImageBase64] = useState("");
   const [mathText, setMathText] = useState("What is 12 + 7?");
   const [prompt, setPrompt] = useState("Pick the cat");
@@ -419,9 +503,7 @@ function PlaygroundTab() {
       if (kind === "image") r = await solve({ data: { kind, imageBase64 } });
       else if (kind === "math") r = await solve({ data: { kind, text: mathText, imageBase64: imageBase64 || undefined } });
       else if (kind === "buttonChoice") r = await solve({ data: { kind, prompt, choices } });
-      else if (kind === "recaptchaV2") r = await solve({ data: { kind, sitekey, pageUrl } });
-      else if (kind === "hcaptcha") r = await solve({ data: { kind, sitekey, pageUrl } });
-      else r = await solve({ data: { kind: "turnstile", sitekey, pageUrl } });
+      else r = await solve({ data: { kind, sitekey, pageUrl } as never });
       setResult(JSON.stringify(r, null, 2));
     } catch (e) {
       setResult(`ERROR: ${(e as Error).message}`);
@@ -433,7 +515,11 @@ function PlaygroundTab() {
       <CardHeader><CardTitle className="text-base">Test the solver</CardTitle></CardHeader>
       <CardContent className="space-y-4">
         <div className="flex gap-2 flex-wrap">
-          {(["image", "math", "buttonChoice", "recaptchaV2", "hcaptcha", "turnstile"] as const).map((k) => (
+          {([
+            "image","math","buttonChoice","recaptchaV2","recaptchaV3","hcaptcha","turnstile",
+            "geetest","geetestV4","funcaptcha","datadome","mtcaptcha","friendlyCaptcha",
+            "amazonWaf","capy","keycaptcha","lemin","cutcaptcha","atbCaptcha","prosopo","tencent",
+          ] as const).map((k) => (
             <Button key={k} variant={kind === k ? "default" : "outline"} size="sm" onClick={() => setKind(k)}>{k}</Button>
           ))}
         </div>
@@ -465,7 +551,7 @@ function PlaygroundTab() {
           </>
         )}
 
-        {(kind === "recaptchaV2" || kind === "hcaptcha" || kind === "turnstile") && (
+        {kind !== "image" && kind !== "math" && kind !== "buttonChoice" && (
           <>
             <div><Label>Sitekey</Label><Input value={sitekey} onChange={(e) => setSitekey(e.target.value)} /></div>
             <div><Label>Page URL</Label><Input value={pageUrl} onChange={(e) => setPageUrl(e.target.value)} placeholder="https://…" /></div>
