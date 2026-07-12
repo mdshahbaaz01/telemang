@@ -1,4 +1,5 @@
 import { Link, useRouterState } from "@tanstack/react-router";
+import { useEffect, useMemo, useState } from "react";
 import {
   LayoutDashboard,
   ShieldCheck,
@@ -21,7 +22,27 @@ import {
   Image as ImageIcon,
   Eye,
   EyeOff,
+  Pencil,
+  Check,
+  GripVertical,
 } from "lucide-react";
+import {
+  DndContext,
+  PointerSensor,
+  KeyboardSensor,
+  closestCenter,
+  useSensor,
+  useSensors,
+  type DragEndEvent,
+} from "@dnd-kit/core";
+import {
+  SortableContext,
+  arrayMove,
+  sortableKeyboardCoordinates,
+  useSortable,
+  verticalListSortingStrategy,
+} from "@dnd-kit/sortable";
+import { CSS } from "@dnd-kit/utilities";
 import {
   Sidebar,
   SidebarContent,
@@ -33,8 +54,10 @@ import {
   SidebarMenuButton,
   SidebarMenuItem,
 } from "@/components/ui/sidebar";
+import { Button } from "@/components/ui/button";
 
 type Item = {
+  id: string;
   title: string;
   to: string;
   search?: Record<string, string>;
@@ -43,78 +66,191 @@ type Item = {
 };
 
 const items: Item[] = [
-  { title: "Dashboard", to: "/dashboard", icon: LayoutDashboard },
-  { title: "Owner Panel", to: "/owner", icon: ShieldCheck },
-  { title: "Cleanup", to: "/cleanup", icon: Brush },
+  { id: "dashboard", title: "Dashboard", to: "/dashboard", icon: LayoutDashboard },
+  { id: "owner", title: "Owner Panel", to: "/owner", icon: ShieldCheck },
+  { id: "cleanup", title: "Cleanup", to: "/cleanup", icon: Brush },
   {
+    id: "actions",
     title: "Actions",
     to: "/actions",
     icon: Radio,
     match: (p, s) => p === "/actions" && !s.includes("tab=broadcast"),
   },
   {
+    id: "broadcast",
     title: "Broadcast",
     to: "/actions",
     search: { tab: "broadcast" },
     icon: Megaphone,
     match: (p, s) => p === "/actions" && s.includes("tab=broadcast"),
   },
-  { title: "Bot Flow", to: "/bot-flow", icon: Bot },
-  { title: "Alerts", to: "/alerts", icon: BellRing },
-  { title: "Buttons", to: "/buttons", icon: MousePointerClick },
-  { title: "Bulk Mix", to: "/bulk-mix", icon: Sparkles },
-  { title: "Profile Updater", to: "/profile-updater", icon: UserCog },
-  { title: "Global Search", to: "/search", icon: Search },
-  { title: "Workspace", to: "/workspace", icon: Columns },
-  { title: "Bulk+", to: "/bulk-plus", icon: Rocket },
-  { title: "Bot Parser", to: "/bot-parser", icon: Cpu },
-  { title: "Referrals", to: "/referrals", icon: Users },
-  { title: "Analytics", to: "/analytics", icon: BarChart3 },
-  { title: "Recipes", to: "/recipes", icon: ChefHat },
-  { title: "Media Library", to: "/media", icon: ImageIcon },
-  { title: "Watchlists", to: "/watchlists", icon: Eye },
-  { title: "Stealth", to: "/stealth", icon: EyeOff },
+  { id: "bot-flow", title: "Bot Flow", to: "/bot-flow", icon: Bot },
+  { id: "alerts", title: "Alerts", to: "/alerts", icon: BellRing },
+  { id: "buttons", title: "Buttons", to: "/buttons", icon: MousePointerClick },
+  { id: "bulk-mix", title: "Bulk Mix", to: "/bulk-mix", icon: Sparkles },
+  { id: "profile-updater", title: "Profile Updater", to: "/profile-updater", icon: UserCog },
+  { id: "search", title: "Global Search", to: "/search", icon: Search },
+  { id: "workspace", title: "Workspace", to: "/workspace", icon: Columns },
+  { id: "bulk-plus", title: "Bulk+", to: "/bulk-plus", icon: Rocket },
+  { id: "bot-parser", title: "Bot Parser", to: "/bot-parser", icon: Cpu },
+  { id: "referrals", title: "Referrals", to: "/referrals", icon: Users },
+  { id: "analytics", title: "Analytics", to: "/analytics", icon: BarChart3 },
+  { id: "recipes", title: "Recipes", to: "/recipes", icon: ChefHat },
+  { id: "media", title: "Media Library", to: "/media", icon: ImageIcon },
+  { id: "watchlists", title: "Watchlists", to: "/watchlists", icon: Eye },
+  { id: "stealth", title: "Stealth", to: "/stealth", icon: EyeOff },
 ];
+
+const ORDER_KEY = "tm.sidebarOrder.v1";
+
+function loadOrder(): string[] {
+  if (typeof window === "undefined") return items.map((i) => i.id);
+  try {
+    const raw = window.localStorage.getItem(ORDER_KEY);
+    if (!raw) return items.map((i) => i.id);
+    const parsed = JSON.parse(raw) as string[];
+    const known = new Set(items.map((i) => i.id));
+    const filtered = parsed.filter((id) => known.has(id));
+    // append any new items not yet in saved order
+    for (const it of items) if (!filtered.includes(it.id)) filtered.push(it.id);
+    return filtered;
+  } catch {
+    return items.map((i) => i.id);
+  }
+}
+
+function SortableRow({
+  item,
+  active,
+  editing,
+}: {
+  item: Item;
+  active: boolean;
+  editing: boolean;
+}) {
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } =
+    useSortable({ id: item.id, disabled: !editing });
+  const style = {
+    transform: CSS.Transform.toString(transform),
+    transition,
+    opacity: isDragging ? 0.6 : 1,
+  };
+  const Icon = item.icon;
+  return (
+    <SidebarMenuItem ref={setNodeRef} style={style}>
+      <SidebarMenuButton
+        asChild={!editing}
+        isActive={active}
+        tooltip={item.title}
+        className="group/nav transition-all duration-300 ease-out hover:!bg-[#5353ff] hover:!text-white hover:translate-x-[1px] hover:-translate-y-[1px] active:scale-[0.99]"
+      >
+        {editing ? (
+          <div
+            className="flex w-full items-center gap-2 cursor-grab active:cursor-grabbing"
+            {...attributes}
+            {...listeners}
+          >
+            <GripVertical className="h-4 w-4 opacity-60" />
+            <Icon className="h-4 w-4" />
+            <span className="font-semibold">{item.title}</span>
+          </div>
+        ) : (
+          <Link
+            to={item.to}
+            search={item.search as never}
+            className="flex items-center gap-2"
+          >
+            <Icon className="h-4 w-4 transition-all duration-300 ease-out group-hover/nav:stroke-white" />
+            <span className="font-semibold">{item.title}</span>
+          </Link>
+        )}
+      </SidebarMenuButton>
+    </SidebarMenuItem>
+  );
+}
 
 export function AppSidebar() {
   const { pathname, search } = useRouterState({
     select: (r) => ({ pathname: r.location.pathname, search: r.location.searchStr }),
   });
 
+  const [order, setOrder] = useState<string[]>(() => items.map((i) => i.id));
+  const [editing, setEditing] = useState(false);
+
+  useEffect(() => {
+    setOrder(loadOrder());
+  }, []);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    window.localStorage.setItem(ORDER_KEY, JSON.stringify(order));
+  }, [order]);
+
+  const byId = useMemo(() => new Map(items.map((i) => [i.id, i])), []);
+  const orderedItems = useMemo(
+    () => order.map((id) => byId.get(id)).filter(Boolean) as Item[],
+    [order, byId],
+  );
+
   const isActive = (item: Item) =>
     item.match ? item.match(pathname, search) : pathname === item.to;
+
+  const sensors = useSensors(
+    useSensor(PointerSensor, { activationConstraint: { distance: 4 } }),
+    useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }),
+  );
+
+  const onDragEnd = (event: DragEndEvent) => {
+    const { active, over } = event;
+    if (!over || active.id === over.id) return;
+    setOrder((cur) => {
+      const oldIndex = cur.indexOf(String(active.id));
+      const newIndex = cur.indexOf(String(over.id));
+      if (oldIndex < 0 || newIndex < 0) return cur;
+      return arrayMove(cur, oldIndex, newIndex);
+    });
+  };
 
   return (
     <Sidebar collapsible="icon">
       <SidebarHeader>
-        <div className="px-2 py-1.5 text-sm font-semibold tracking-tight">
-          TeleManager Pro
+        <div className="flex items-center justify-between gap-2 px-2 py-1.5">
+          <span className="text-sm font-semibold tracking-tight">TeleManager Pro</span>
+          <Button
+            variant={editing ? "default" : "ghost"}
+            size="icon"
+            className="h-7 w-7"
+            onClick={() => setEditing((e) => !e)}
+            title={editing ? "Done" : "Edit sidebar order"}
+            aria-label={editing ? "Done editing sidebar" : "Edit sidebar order"}
+          >
+            {editing ? <Check className="h-3.5 w-3.5" /> : <Pencil className="h-3.5 w-3.5" />}
+          </Button>
         </div>
       </SidebarHeader>
       <SidebarContent>
         <SidebarGroup>
-          <SidebarGroupLabel>Navigation</SidebarGroupLabel>
+          <SidebarGroupLabel>
+            {editing ? "Drag to reorder" : "Navigation"}
+          </SidebarGroupLabel>
           <SidebarGroupContent>
             <SidebarMenu>
-              {items.map((item) => (
-                <SidebarMenuItem key={item.title}>
-                  <SidebarMenuButton
-                    asChild
-                    isActive={isActive(item)}
-                    tooltip={item.title}
-                    className="group/nav transition-all duration-300 ease-out hover:!bg-[#5353ff] hover:!text-white hover:translate-x-[1px] hover:-translate-y-[1px] active:scale-[0.99]"
-                  >
-                    <Link
-                      to={item.to}
-                      search={item.search as never}
-                      className="flex items-center gap-2"
-                    >
-                      <item.icon className="h-4 w-4 transition-all duration-300 ease-out group-hover/nav:stroke-white" />
-                      <span className="font-semibold">{item.title}</span>
-                    </Link>
-                  </SidebarMenuButton>
-                </SidebarMenuItem>
-              ))}
+              <DndContext
+                sensors={sensors}
+                collisionDetection={closestCenter}
+                onDragEnd={onDragEnd}
+              >
+                <SortableContext items={order} strategy={verticalListSortingStrategy}>
+                  {orderedItems.map((item) => (
+                    <SortableRow
+                      key={item.id}
+                      item={item}
+                      active={isActive(item)}
+                      editing={editing}
+                    />
+                  ))}
+                </SortableContext>
+              </DndContext>
             </SidebarMenu>
           </SidebarGroupContent>
         </SidebarGroup>
