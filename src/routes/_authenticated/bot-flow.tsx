@@ -767,10 +767,7 @@ function BotFlowPage() {
                           type="button"
                           className="rounded p-1 hover:bg-muted"
                           title="Copy URL"
-                          onClick={async () => {
-                            await navigator.clipboard.writeText(r.url!);
-                            toast.success("Copied");
-                          }}
+                          onClick={() => copyWithToast(r.url!, toast)}
                         >
                           <Copy className="h-3.5 w-3.5" />
                         </button>
