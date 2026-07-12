@@ -338,6 +338,17 @@ export async function executeReply(
       try {
         const sourcePeer = await resolveSourcePeer(client, Api, input.source);
         await ensureJoined(client, Api, sourcePeer);
+        // Bump view count on the source post like a real reader
+        try {
+          await client.invoke(
+            new Api.messages.GetMessagesViews({
+              peer: sourcePeer,
+              id: [input.source.msgId],
+              increment: true,
+            }),
+          );
+          push({ accountId, target: targetLabel, level: "info", message: "Viewed post" });
+        } catch {}
         let replyPeer: any = sourcePeer;
         let replyToId = input.source.msgId;
         let topMsgId: number | undefined;
