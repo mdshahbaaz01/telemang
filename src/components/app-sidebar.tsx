@@ -20,6 +20,7 @@ import {
   ChefHat,
   Image as ImageIcon,
   Eye,
+  EyeOff,
 } from "lucide-react";
 import {
   Sidebar,
@@ -72,6 +73,7 @@ const items: Item[] = [
   { title: "Recipes", to: "/recipes", icon: ChefHat },
   { title: "Media Library", to: "/media", icon: ImageIcon },
   { title: "Watchlists", to: "/watchlists", icon: Eye },
+  { title: "Stealth", to: "/stealth", icon: EyeOff },
 ];
 
 export function AppSidebar() {
