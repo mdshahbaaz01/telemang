@@ -108,11 +108,28 @@ export const listScheduledBroadcasts = createServerFn({ method: "GET" })
   .handler(async ({ context }) => {
     const { data, error } = await context.supabase
       .from("scheduled_broadcasts")
-      .select("id, scheduled_at, label, status, dispatched_at, completed_at, error, payload, created_at, total_items, processed_items")
+      .select("id, scheduled_at, label, status, dispatched_at, completed_at, error, payload, created_at, total_items, processed_items, source_id")
       .order("scheduled_at", { ascending: true })
       .limit(200);
     if (error) throw new Error(error.message);
-    return (data ?? []).map((r) => {
+    const rows = data ?? [];
+    const sourceIds = Array.from(
+      new Set(rows.map((r) => (r as any).source_id).filter(Boolean) as string[]),
+    );
+    const sourceMap = new Map<string, { label: string | null; scheduledAt: string }>();
+    if (sourceIds.length) {
+      const { data: srcs } = await context.supabase
+        .from("scheduled_broadcasts")
+        .select("id, label, scheduled_at")
+        .in("id", sourceIds);
+      for (const s of srcs ?? []) {
+        sourceMap.set(s.id as string, {
+          label: (s.label as string | null) ?? null,
+          scheduledAt: s.scheduled_at as string,
+        });
+      }
+    }
+    return rows.map((r) => {
       const payload = (r.payload as any) ?? {};
       const kind: "broadcast" | "reply" | "forward" | "edit" | "deleteMessages" =
         ["reply", "forward", "edit", "deleteMessages"].includes(payload.kind) ? payload.kind : "broadcast";
@@ -136,6 +153,8 @@ export const listScheduledBroadcasts = createServerFn({ method: "GET" })
         const ids = Array.isArray(payload.messageIds) ? payload.messageIds.length : 0;
         summary = `${accIds} account(s) · delete ${ids} message(s)`;
       }
+      const srcId = ((r as any).source_id as string | null) ?? null;
+      const src = srcId ? sourceMap.get(srcId) ?? null : null;
       return {
         id: r.id as string,
         scheduledAt: r.scheduled_at as string,
@@ -150,6 +169,12 @@ export const listScheduledBroadcasts = createServerFn({ method: "GET" })
         totalItems: Number((r as any).total_items ?? 0),
         processedItems: Number((r as any).processed_items ?? 0),
         createdAt: r.created_at as string,
+        payload: payload as any,
+        minDelay: Number(payload.minDelay ?? 1),
+        maxDelay: Number(payload.maxDelay ?? 2),
+        sourceId: srcId,
+        sourceLabel: src?.label ?? null,
+        sourceScheduledAt: src?.scheduledAt ?? null,
       };
     });
   });
@@ -174,6 +199,9 @@ export const rescheduleBroadcast = createServerFn({ method: "POST" })
       id: z.string().uuid(),
       scheduledAt: z.string().datetime({ offset: true }),
       label: z.string().max(120).optional(),
+      op: opSchema.optional(),
+      minDelay: z.number().int().min(0).max(60).optional(),
+      maxDelay: z.number().int().min(0).max(60).optional(),
     }).parse(d),
   )
   .handler(async ({ data, context }) => {
@@ -189,14 +217,27 @@ export const rescheduleBroadcast = createServerFn({ method: "POST" })
       .maybeSingle();
     if (sErr) throw new Error(sErr.message);
     if (!src) throw new Error("Source schedule not found");
+    const srcPayload = (src.payload as any) ?? {};
+    const newPayload = data.op
+      ? {
+          ...data.op,
+          minDelay: data.minDelay ?? Number(srcPayload.minDelay ?? 1),
+          maxDelay: data.maxDelay ?? Number(srcPayload.maxDelay ?? 2),
+        }
+      : {
+          ...srcPayload,
+          ...(data.minDelay !== undefined ? { minDelay: data.minDelay } : {}),
+          ...(data.maxDelay !== undefined ? { maxDelay: data.maxDelay } : {}),
+        };
     const { data: row, error } = await context.supabase
       .from("scheduled_broadcasts")
       .insert({
         user_id: context.userId,
         scheduled_at: when.toISOString(),
         label: data.label ?? (src.label as string | null) ?? null,
-        payload: src.payload as any,
+        payload: JSON.parse(JSON.stringify(newPayload)),
         status: "pending",
+        source_id: data.id,
       })
       .select("id, scheduled_at")
       .single();

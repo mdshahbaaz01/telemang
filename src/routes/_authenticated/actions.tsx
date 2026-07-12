@@ -162,6 +162,29 @@ function formatIst(d: Date): string {
   return `${IST_FORMATTER.format(d)} IST`;
 }
 
+// Convert a Date to an IST wall-clock string suitable for <input type="datetime-local" step="1">.
+function dateToIstInput(d: Date): string {
+  const parts = new Intl.DateTimeFormat("en-CA", {
+    timeZone: "Asia/Kolkata",
+    year: "numeric", month: "2-digit", day: "2-digit",
+    hour: "2-digit", minute: "2-digit", second: "2-digit",
+    hour12: false,
+  }).formatToParts(d);
+  const g = (t: string) => parts.find((p) => p.type === t)?.value ?? "00";
+  return `${g("year")}-${g("month")}-${g("day")}T${g("hour")}:${g("minute")}:${g("second")}`;
+}
+
+type ReuseScheduleRow = {
+  id: string;
+  scheduledAt: string;
+  label: string | null;
+  kind: "broadcast" | "reply" | "forward" | "edit" | "deleteMessages";
+  summary: string;
+  payload: any;
+  minDelay: number;
+  maxDelay: number;
+};
+
 function ActionsPage() {
   return <ActionsPageInner />;
 }
@@ -448,6 +471,7 @@ function ActionsPageInner() {
   const reportSchedFn = useServerFn(getScheduleReport);
   const [reportOpen, setReportOpen] = useState(false);
   const [reportId, setReportId] = useState<string | null>(null);
+  const [reuseSchedule, setReuseSchedule] = useState<ReuseScheduleRow | null>(null);
   const reportQ = useQuery({
     queryKey: ["schedule-report", reportId],
     queryFn: () => reportSchedFn({ data: { id: reportId! } }),
@@ -2191,6 +2215,18 @@ function ActionsPageInner() {
                         </span>
                         <span className={`text-xs uppercase tracking-wide ${statusColor}`}>{s.status}</span>
                         <span className="text-xs text-muted-foreground">· {s.summary}</span>
+                        {s.sourceId && (
+                          <span
+                            className="rounded bg-muted/60 px-1.5 py-0.5 text-[10px] text-muted-foreground"
+                            title={
+                              s.sourceScheduledAt
+                                ? `Reused from ${formatIst(new Date(s.sourceScheduledAt))}${s.sourceLabel ? ` · ${s.sourceLabel}` : ""}`
+                                : "Reused"
+                            }
+                          >
+                            ↩ reused{s.sourceLabel ? ` · ${s.sourceLabel}` : s.sourceScheduledAt ? ` · ${formatIst(new Date(s.sourceScheduledAt))}` : ""}
+                          </span>
+                        )}
                         {s.totalItems ? (
                           <span className="text-xs text-muted-foreground">
                             · {s.processedItems}/{s.totalItems}
@@ -2214,25 +2250,8 @@ function ActionsPageInner() {
                         <button
                           type="button"
                           className="text-xs text-primary underline"
-                          title="Reuse this schedule at the time picked in the scheduler above"
-                          onClick={async () => {
-                            if (!scheduledAt) {
-                              toast.error("Pick a new schedule time (with seconds) above first");
-                              return;
-                            }
-                            const when = istWallClockToDate(scheduledAt);
-                            if (Number.isNaN(when.getTime())) return toast.error("Invalid schedule time");
-                            if (when.getTime() < Date.now() + 5_000) {
-                              return toast.error("Pick a time at least 5 seconds in the future");
-                            }
-                            try {
-                              await rescheduleFn({ data: { id: s.id, scheduledAt: when.toISOString() } });
-                              toast.success(`Reused → ${formatIst(when)}`);
-                              await qc.invalidateQueries({ queryKey: ["scheduled-broadcasts"] });
-                            } catch (e) {
-                              toast.error((e as Error).message);
-                            }
-                          }}
+                          title="Open reuse dialog to review, edit, and reschedule"
+                          onClick={() => setReuseSchedule(s as any)}
                         >
                           Reuse
                         </button>
@@ -2383,6 +2402,17 @@ function ActionsPageInner() {
               )}
             </DialogContent>
           </Dialog>
+
+          <ReuseScheduleDialog
+            schedule={reuseSchedule}
+            defaultTimeIst={scheduledAt}
+            onClose={() => setReuseSchedule(null)}
+            onSubmitted={async () => {
+              setReuseSchedule(null);
+              await qc.invalidateQueries({ queryKey: ["scheduled-broadcasts"] });
+            }}
+            rescheduleFn={rescheduleFn}
+          />
 
           {errorLogs.length > 0 && (
             <div className="rounded-lg border border-destructive/40 bg-destructive/5 p-4">
@@ -3477,5 +3507,239 @@ function BroadcastRepliesDialog({
         </Dialog>
       )}
     </>
+  );
+}
+
+function ReuseScheduleDialog({
+  schedule,
+  defaultTimeIst,
+  onClose,
+  onSubmitted,
+  rescheduleFn,
+}: {
+  schedule: ReuseScheduleRow | null;
+  defaultTimeIst: string;
+  onClose: () => void;
+  onSubmitted: () => void | Promise<void>;
+  rescheduleFn: (args: { data: any }) => Promise<any>;
+}) {
+  const open = !!schedule;
+  const [when, setWhen] = useState("");
+  const [label, setLabel] = useState("");
+  const [minDelay, setMinDelay] = useState(1);
+  const [maxDelay, setMaxDelay] = useState(2);
+  const [payload, setPayload] = useState<any>(null);
+  const [submitting, setSubmitting] = useState(false);
+
+  useEffect(() => {
+    if (!schedule) return;
+    // Default new time: user-picked time from top scheduler, else original +1 min.
+    const nowPlus = new Date(Date.now() + 60_000);
+    const base =
+      defaultTimeIst && defaultTimeIst.length >= 16
+        ? defaultTimeIst
+        : dateToIstInput(nowPlus);
+    setWhen(base.length === 16 ? `${base}:00` : base);
+    setLabel(schedule.label ?? "");
+    setMinDelay(schedule.minDelay ?? 1);
+    setMaxDelay(schedule.maxDelay ?? 2);
+    setPayload(JSON.parse(JSON.stringify(schedule.payload ?? {})));
+  }, [schedule, defaultTimeIst]);
+
+  if (!schedule) return null;
+
+  const kind = schedule.kind;
+  const setRow = (idx: number, patch: any) => {
+    setPayload((p: any) => {
+      const rows = Array.isArray(p?.rows) ? [...p.rows] : [];
+      rows[idx] = { ...rows[idx], ...patch };
+      return { ...p, rows };
+    });
+  };
+
+  const submit = async () => {
+    if (!when) return toast.error("Pick a new schedule time");
+    const dt = istWallClockToDate(when);
+    if (Number.isNaN(dt.getTime())) return toast.error("Invalid schedule time");
+    if (dt.getTime() < Date.now() + 5_000) {
+      return toast.error("Pick a time at least 5 seconds in the future");
+    }
+    if (minDelay < 0 || maxDelay < 0 || maxDelay < minDelay) {
+      return toast.error("Delay range invalid");
+    }
+    // Reconstruct op (strip minDelay/maxDelay from payload — server merges).
+    const { minDelay: _a, maxDelay: _b, ...op } = payload ?? {};
+    setSubmitting(true);
+    try {
+      await rescheduleFn({
+        data: {
+          id: schedule.id,
+          scheduledAt: dt.toISOString(),
+          label: label.trim() || undefined,
+          op,
+          minDelay,
+          maxDelay,
+        },
+      });
+      toast.success(`Reused → ${formatIst(dt)}`);
+      await onSubmitted();
+    } catch (e) {
+      toast.error((e as Error).message);
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const rows: any[] = Array.isArray(payload?.rows) ? payload.rows : [];
+
+  return (
+    <Dialog open={open} onOpenChange={(o) => { if (!o) onClose(); }}>
+      <DialogContent className="max-w-2xl">
+        <DialogHeader>
+          <DialogTitle>Reuse scheduled broadcast</DialogTitle>
+        </DialogHeader>
+        <div className="space-y-4 text-sm">
+          <div className="rounded border border-border/60 bg-muted/30 p-3 text-xs space-y-1">
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="rounded bg-muted px-1.5 py-0.5 uppercase tracking-wide">{kind}</span>
+              <span className="font-medium">{schedule.label ?? "(no label)"}</span>
+            </div>
+            <div>
+              <span className="text-muted-foreground">Original time: </span>
+              <span className="font-mono">{formatIst(new Date(schedule.scheduledAt))}</span>
+            </div>
+            <div className="text-muted-foreground">{schedule.summary}</div>
+          </div>
+
+          <div className="grid gap-3 sm:grid-cols-2">
+            <div>
+              <Label>New schedule time (IST)</Label>
+              <Input
+                type="datetime-local"
+                step={1}
+                value={when}
+                onChange={(e) => setWhen(e.target.value)}
+              />
+            </div>
+            <div>
+              <Label>Label (optional)</Label>
+              <Input value={label} onChange={(e) => setLabel(e.target.value)} placeholder="Optional label" />
+            </div>
+            <div>
+              <Label>Min delay (s)</Label>
+              <Input type="number" min={0} max={60} value={minDelay} onChange={(e) => setMinDelay(Number(e.target.value))} />
+            </div>
+            <div>
+              <Label>Max delay (s)</Label>
+              <Input type="number" min={0} max={60} value={maxDelay} onChange={(e) => setMaxDelay(Number(e.target.value))} />
+            </div>
+          </div>
+
+          {(kind === "broadcast" || kind === "reply" || kind === "edit") && (
+            <div className="space-y-2">
+              <div className="text-xs font-medium text-muted-foreground">
+                {kind === "broadcast" ? "Rows (edit message / targets)" : kind === "reply" ? "Replies (edit message)" : "Edit message (shared)"}
+              </div>
+              {kind === "edit" ? (
+                <Textarea
+                  rows={4}
+                  value={String(payload?.message ?? "")}
+                  onChange={(e) => setPayload((p: any) => ({ ...p, message: e.target.value }))}
+                />
+              ) : (
+                <div className="max-h-64 space-y-2 overflow-auto rounded border border-border/50 p-2">
+                  {rows.length === 0 && <div className="text-xs text-muted-foreground">No rows.</div>}
+                  {rows.map((r, i) => (
+                    <div key={i} className="space-y-1 rounded border border-border/40 p-2">
+                      <div className="text-[10px] uppercase tracking-wide text-muted-foreground">
+                        Row {i + 1} · account {String(r.accountId ?? "").slice(0, 8)}
+                        {Array.isArray(r.attachments) && r.attachments.length > 0 && (
+                          <span className="ml-2">· {r.attachments.length} attachment(s) kept</span>
+                        )}
+                      </div>
+                      <Textarea
+                        rows={2}
+                        value={String(r.message ?? "")}
+                        onChange={(e) => setRow(i, { message: e.target.value })}
+                        placeholder="Message"
+                      />
+                      {kind === "broadcast" && (
+                        <Textarea
+                          rows={2}
+                          className="font-mono text-xs"
+                          value={Array.isArray(r.targets) ? r.targets.join("\n") : ""}
+                          onChange={(e) =>
+                            setRow(i, {
+                              targets: e.target.value
+                                .split(/[\n,]/)
+                                .map((s) => s.trim())
+                                .filter(Boolean),
+                            })
+                          }
+                          placeholder="Targets (one per line or comma-separated)"
+                        />
+                      )}
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+
+          {kind === "forward" && (
+            <div className="space-y-1">
+              <Label>Targets</Label>
+              <Textarea
+                rows={4}
+                className="font-mono text-xs"
+                value={Array.isArray(payload?.targets) ? payload.targets.join("\n") : ""}
+                onChange={(e) =>
+                  setPayload((p: any) => ({
+                    ...p,
+                    targets: e.target.value.split(/[\n,]/).map((s) => s.trim()).filter(Boolean),
+                  }))
+                }
+              />
+              <div className="text-[11px] text-muted-foreground">
+                {(payload?.accountIds?.length ?? 0)} account(s) will forward · source {payload?.source?.chat}/{payload?.source?.msgId}
+              </div>
+            </div>
+          )}
+
+          {kind === "deleteMessages" && (
+            <div className="space-y-1">
+              <Label>Message IDs (comma / newline separated)</Label>
+              <Textarea
+                rows={3}
+                className="font-mono text-xs"
+                value={Array.isArray(payload?.messageIds) ? payload.messageIds.join(", ") : ""}
+                onChange={(e) =>
+                  setPayload((p: any) => ({
+                    ...p,
+                    messageIds: e.target.value
+                      .split(/[\s,]+/)
+                      .map((s) => Number(s))
+                      .filter((n) => Number.isFinite(n) && n > 0),
+                  }))
+                }
+              />
+              <div className="text-[11px] text-muted-foreground">
+                {(payload?.accountIds?.length ?? 0)} account(s) · chat {payload?.chat}
+              </div>
+            </div>
+          )}
+
+          <div className="flex justify-end gap-2 pt-1">
+            <Button type="button" variant="outline" onClick={onClose} disabled={submitting}>
+              Cancel
+            </Button>
+            <Button type="button" onClick={submit} disabled={submitting || !when}>
+              {submitting ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <CalendarClock className="mr-2 h-4 w-4" />}
+              Schedule reuse
+            </Button>
+          </div>
+        </div>
+      </DialogContent>
+    </Dialog>
   );
 }
