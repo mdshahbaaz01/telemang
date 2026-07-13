@@ -56,6 +56,8 @@ export function TargetsPicker({
     setSelected(new Set());
     try {
       const res: any = await listDialogsFn({ data: { accountId: id, limit: 200 } });
+      // First pass: fast load without photos, up to 3000 dialogs.
+      const res: any = await listDialogsFn({ data: { accountId: id, limit: 3000, withPhotos: false } });
       setDialogs(res.dialogs ?? []);
     } catch (e: any) {
       toast.error(e?.message || "Failed to load chats");
