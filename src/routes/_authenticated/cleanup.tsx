@@ -82,12 +82,20 @@ function Cleanup() {
       <div className="mx-auto max-w-7xl space-y-6 px-4 py-8 md:px-8">
         <Tabs defaultValue="chats">
           <TabsList>
-            <TabsTrigger value="chats">Chats, Groups & Bots</TabsTrigger>
+            <TabsTrigger value="chats">Chats & Groups</TabsTrigger>
+            <TabsTrigger value="bots">Bots</TabsTrigger>
+            <TabsTrigger value="users">Users</TabsTrigger>
             <TabsTrigger value="personal">Personal Chats</TabsTrigger>
             <TabsTrigger value="links">Leave by link</TabsTrigger>
           </TabsList>
           <TabsContent value="chats" className="mt-4">
-            <CleanupPanel mode="chats" />
+            <CleanupPanel mode="chats" kind="groups" />
+          </TabsContent>
+          <TabsContent value="bots" className="mt-4">
+            <CleanupPanel mode="chats" kind="bots" />
+          </TabsContent>
+          <TabsContent value="users" className="mt-4">
+            <CleanupPanel mode="chats" kind="users" />
           </TabsContent>
           <TabsContent value="personal" className="mt-4">
             <CleanupPanel mode="personal" />
@@ -101,8 +109,9 @@ function Cleanup() {
   );
 }
 
-function CleanupPanel({ mode }: { mode: "chats" | "personal" }) {
-  return <CleanupPanelInner mode={mode} />;
+type KindFilter = "groups" | "bots" | "users";
+function CleanupPanel({ mode, kind }: { mode: "chats" | "personal"; kind?: KindFilter }) {
+  return <CleanupPanelInner mode={mode} kind={kind} />;
 }
 
 function LeaveByLinksPanel() {
@@ -286,13 +295,19 @@ function LeaveByLinksPanel() {
   );
 }
 
-function CleanupPanelInner({ mode }: { mode: "chats" | "personal" }) {
+function CleanupPanelInner({ mode, kind }: { mode: "chats" | "personal"; kind?: KindFilter }) {
   const listAcc = useServerFn(listAccounts);
   const queryClient = useQueryClient();
   const accountsQ = useQuery({ queryKey: ["accounts"], queryFn: () => listAcc() });
 
   const [accountIds, setAccountIds] = useState<Set<string>>(new Set());
-  const [action, setAction] = useState<Action>(mode === "personal" ? "deletePersonal" : "leave");
+  const defaultAction: Action =
+    mode === "personal"
+      ? "deletePersonal"
+      : kind === "bots" || kind === "users"
+        ? "block"
+        : "leave";
+  const [action, setAction] = useState<Action>(defaultAction);
   const [query, setQuery] = useState("");
   const [selectedByAcc, setSelectedByAcc] = useState<Record<string, Set<string>>>({});
   const [logs, setLogs] = useState<LogEntry[]>([]);
@@ -462,12 +477,25 @@ function CleanupPanelInner({ mode }: { mode: "chats" | "personal" }) {
                 <SelectItem value="deletePersonal">Delete personal chat (both sides)</SelectItem>
               </SelectContent>
             </Select>
+          ) : kind === "bots" || kind === "users" ? (
+            <Select value={action} onValueChange={(v) => { setAction(v as Action); setSelectedByAcc({}); }}>
+              <SelectTrigger><SelectValue /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="block">Block {kind === "bots" ? "bot" : "user"} + delete both sides</SelectItem>
+                <SelectItem value="deleteHistory">Delete history (my side)</SelectItem>
+                <SelectItem value="mute">Mute selected</SelectItem>
+                <SelectItem value="unmute">Unmute selected</SelectItem>
+                <SelectItem value="archive">Archive selected</SelectItem>
+                <SelectItem value="unarchive">Unarchive selected</SelectItem>
+                <SelectItem value="pin">Pin selected</SelectItem>
+                <SelectItem value="unpin">Unpin selected</SelectItem>
+              </SelectContent>
+            </Select>
           ) : (
             <Select value={action} onValueChange={(v) => { setAction(v as Action); setSelectedByAcc({}); }}>
               <SelectTrigger><SelectValue /></SelectTrigger>
               <SelectContent>
                 <SelectItem value="leave">Leave channels / groups</SelectItem>
-                <SelectItem value="block">Block bot/user + delete both sides</SelectItem>
                 <SelectItem value="deleteHistory">Delete history (my side)</SelectItem>
                 <SelectItem value="mute">Mute selected chats</SelectItem>
                 <SelectItem value="unmute">Unmute selected chats</SelectItem>
@@ -507,6 +535,7 @@ function CleanupPanelInner({ mode }: { mode: "chats" | "personal" }) {
               accountId={id}
               account={accountsQ.data?.find((a) => a.id === id)}
               mode={mode}
+              kind={kind}
               action={mode === "personal" ? "deletePersonal" : action}
               query={query}
               selected={selectedByAcc[id] ?? new Set()}
@@ -552,6 +581,7 @@ function AccountColumn({
   accountId,
   account,
   mode,
+  kind,
   action,
   query,
   selected,
@@ -562,6 +592,7 @@ function AccountColumn({
   accountId: string;
   account?: { first_name: string | null; username: string | null; phone: string } | undefined;
   mode: "chats" | "personal";
+  kind?: KindFilter;
   action: Action;
   query: string;
   selected: Set<string>;
@@ -580,6 +611,10 @@ function AccountColumn({
       if (mode === "personal") {
         // personal chats = users (non-bot) with 1:1 kind
         if (r.type !== "user") return false;
+      } else if (kind === "bots") {
+        if (r.type !== "bot") return false;
+      } else if (kind === "users") {
+        if (r.type !== "user") return false;
       } else {
         if (action === "leave" && !["channel", "megagroup", "chat"].includes(r.type)) return false;
         if (action === "block" && !["user", "bot"].includes(r.type)) return false;
@@ -591,7 +626,7 @@ function AccountColumn({
       }
       return true;
     });
-  }, [dialogs?.data, action, query, mode]);
+  }, [dialogs?.data, action, query, mode, kind]);
 
   const allSelected = filtered.length > 0 && filtered.every((r) => selected.has(r.key));
   const toggleAll = () => {
