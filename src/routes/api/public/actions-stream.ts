@@ -1215,6 +1215,7 @@ export const Route = createFileRoute("/api/public/actions-stream")({
                   }
                 }
 
+                if (!op.preJoinOnly)
                 for (const rawStep of op.steps) {
                   if (stopRequested) break;
                   const step = rawStep.trim();
