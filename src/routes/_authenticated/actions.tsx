@@ -3725,6 +3725,23 @@ function ReuseScheduleDialog({
               <div className="text-[11px] text-muted-foreground">
                 {(payload?.accountIds?.length ?? 0)} account(s) will forward · source {payload?.source?.chat}/{payload?.source?.msgId}
               </div>
+              <label className="mt-2 flex items-start gap-2 rounded border border-border/50 p-2 text-xs">
+                <input
+                  type="checkbox"
+                  className="mt-0.5"
+                  checked={payload?.dropAuthor === true}
+                  onChange={(e) =>
+                    setPayload((p: any) => ({ ...p, dropAuthor: e.target.checked }))
+                  }
+                />
+                <span>
+                  <span className="font-medium">Remove &quot;Forwarded from&quot; tag</span>{" "}
+                  <span className="text-muted-foreground">(optional)</span>
+                  <div className="text-[11px] text-muted-foreground">
+                    Send as a fresh copy without the forward header. Protected-content channels ignore this and will fail.
+                  </div>
+                </span>
+              </label>
             </div>
           )}
 
