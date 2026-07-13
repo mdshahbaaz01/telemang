@@ -333,6 +333,49 @@ export function PreJoinCard({ accounts }: { accounts: Account[] }) {
             )}
           </div>
 
+          {Object.keys(statuses).length > 0 && (
+            <div className="rounded-md border border-border bg-muted/10">
+              <div className="flex items-center gap-2 border-b border-border/60 px-2 py-1">
+                <div className="text-xs font-medium mr-auto">Per-channel status</div>
+                <Button size="sm" variant="ghost" onClick={() => setStatusOpen((v) => !v)}>
+                  {statusOpen ? "Hide" : "Show"}
+                </Button>
+              </div>
+              {statusOpen && (
+                <div className="max-h-64 overflow-auto p-2 space-y-1">
+                  {Object.entries(statuses).map(([ch, row]) => {
+                    const cells = Object.entries(row);
+                    const counts: Record<ChStatus, number> = { pending: 0, running: 0, joined: 0, skipped: 0, failed: 0 };
+                    let latest = 0;
+                    for (const [, c] of cells) { counts[c.status]++; if (c.ts > latest) latest = c.ts; }
+                    return (
+                      <div key={ch} className="rounded border border-border/50 bg-background/60 p-1.5 text-[11px]">
+                        <div className="flex flex-wrap items-center gap-2">
+                          <span className="font-mono truncate max-w-[220px]" title={ch}>{ch}</span>
+                          {(["joined","skipped","running","failed","pending"] as ChStatus[]).map((s) => counts[s] ? (
+                            <span key={s} className={`rounded px-1.5 py-0.5 ${STATUS_STYLES[s]}`}>{s} {counts[s]}</span>
+                          ) : null)}
+                          <span className="ml-auto text-muted-foreground">{latest ? new Date(latest).toLocaleTimeString() : ""}</span>
+                        </div>
+                        <div className="mt-1 flex flex-wrap gap-1">
+                          {cells.map(([aid, c]) => (
+                            <span
+                              key={aid}
+                              className={`rounded px-1.5 py-0.5 ${STATUS_STYLES[c.status]}`}
+                              title={`${nameOf(aid)} · ${c.status} · ${new Date(c.ts).toLocaleTimeString()}${c.message ? ` — ${c.message}` : ""}`}
+                            >
+                              {nameOf(aid)}
+                            </span>
+                          ))}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          )}
+
           {logs.length > 0 && (
             <div className="max-h-52 overflow-auto rounded-md border border-border bg-muted/20 p-2 font-mono text-[11px]">
               {logs.map((l, i) => (
