@@ -776,11 +776,10 @@ function BotFlowPage() {
               })}
             </div>
           )}
-        </section>
+        </CollapsibleSection>
 
         {/* ── Mini App launcher ─────────────────────────────────────── */}
-        <section className="rounded-lg border border-border bg-card p-4 space-y-4">
-          <h2 className="text-lg font-medium">Open Mini App on many accounts</h2>
+        <CollapsibleSection storageKey="botflow.miniapp" title="Open Mini App on many accounts" defaultOpen={false}>
           <p className="text-xs text-muted-foreground">
             Paste a Telegram mini app link (e.g. <code>https://t.me/wormcupbot?startapp=R84L82W</code>).
             Each selected account gets its own live mini app window below — use them independently.
@@ -897,19 +896,17 @@ function BotFlowPage() {
               })}
             </div>
           )}
-        </section>
+        </CollapsibleSection>
 
-        <section className="rounded-lg border border-border bg-card p-4 space-y-4">
-          <h2 className="text-lg font-medium">Verification Link Runner</h2>
+        <CollapsibleSection storageKey="botflow.verifyrunner" title="Verification Link Runner" defaultOpen={false}>
           <p className="text-xs text-muted-foreground">
             Paste the direct mini-app verification URL and open it with one account identity.
           </p>
 
           {/* ── Extract verify links per account ── */}
-        </section>
+        </CollapsibleSection>
 
-        <section className="rounded-lg border border-border bg-card p-4 space-y-4">
-          <h2 className="text-lg font-medium">Verification URL runner (single account)</h2>
+        <CollapsibleSection storageKey="botflow.verifysingle" title="Verification URL runner (single account)" defaultOpen={false}>
           <p className="text-xs text-muted-foreground">
             Paste a direct mini-app verification URL and open it inside a specific account's proxy.
           </p>
