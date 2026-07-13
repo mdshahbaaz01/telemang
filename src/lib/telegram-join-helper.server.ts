@@ -15,6 +15,7 @@ export type SmartTelegramJoinResult = {
   canonicalTarget: string | null;
   errorCode: string | null;
   verified: boolean;
+  canonicalChannelId: string | null;
 };
 
 type Logger = (level: JoinLogLevel, message: string) => void;
@@ -70,6 +71,40 @@ async function verifyMembership(client: any, Api: any, channel: any): Promise<bo
   }
 }
 
+function idOf(entity: any): string | null {
+  const raw = entity?.id ?? entity?.channelId ?? entity?.chatId;
+  if (raw === null || raw === undefined) return null;
+  try {
+    return typeof raw === "bigint" ? raw.toString() : String(raw);
+  } catch {
+    return null;
+  }
+}
+
+async function verifyCanonicalMatch(
+  client: any,
+  Api: any,
+  expected: any,
+  label: string,
+  log?: Logger,
+): Promise<string> {
+  const expectedId = idOf(expected);
+  if (!expectedId) throw new Error(`JOIN_CANONICAL_MISMATCH: ${label} missing id`);
+  const inputChannel = await client.getInputEntity(expected);
+  const resp: any = await client.invoke(new Api.channels.GetChannels({ id: [inputChannel] }));
+  const returned = Array.isArray(resp?.chats) && resp.chats.length ? resp.chats[0] : null;
+  const returnedId = idOf(returned);
+  if (!returnedId) throw new Error(`JOIN_CANONICAL_MISMATCH: ${label} returned no chat`);
+  if (returnedId !== expectedId) {
+    log?.("error", `Canonical mismatch for ${label}: expected=${expectedId} got=${returnedId}`);
+    throw new Error(`JOIN_CANONICAL_MISMATCH: ${label} expected=${expectedId} got=${returnedId}`);
+  }
+  if (returned?.left === true) {
+    throw new Error(`JOIN_CANONICAL_MISMATCH: ${label} chat reports left=true after join`);
+  }
+  return returnedId;
+}
+
 async function joinEntityVerified(
   client: any,
   Api: any,
@@ -86,7 +121,8 @@ async function joinEntityVerified(
   }
   const verified = await verifyMembership(client, Api, entity);
   if (!verified) throw new Error(`JOIN_NOT_VERIFIED: ${label}`);
-  log?.("success", `Verified joined ${label} (path=${path})`);
+  const canonicalChannelId = await verifyCanonicalMatch(client, Api, entity, label, log);
+  log?.("success", `Verified joined ${label} (path=${path}, channelId=${canonicalChannelId})`);
   return {
     status: "joined",
     path,
@@ -95,6 +131,7 @@ async function joinEntityVerified(
     canonicalTarget: typeof label === "string" && label.startsWith("@") ? label.slice(1) : null,
     errorCode: null,
     verified: true,
+    canonicalChannelId,
   };
 }
 
@@ -155,6 +192,13 @@ export async function joinTelegramTargetVerified(args: {
       if (cn === "ChatInviteAlready" && chat) {
         const verified = await verifyMembership(client, Api, chat);
         if (!verified) throw new Error(`JOIN_NOT_VERIFIED: already ${chat?.username ? "@" + chat.username : chat?.title ?? inviteHash}`);
+        const canonicalChannelId = await verifyCanonicalMatch(
+          client,
+          Api,
+          chat,
+          chat?.username ? "@" + chat.username : chat?.title ?? `+${inviteHash.slice(0, 8)}…`,
+          log,
+        );
         return {
           status: "already",
           path: "peek_already",
@@ -163,6 +207,7 @@ export async function joinTelegramTargetVerified(args: {
           canonicalTarget: chat.username ?? null,
           errorCode: null,
           verified: true,
+          canonicalChannelId,
         };
       }
 
@@ -199,6 +244,13 @@ export async function joinTelegramTargetVerified(args: {
     if (importedChat) {
       const verified = await verifyMembership(client, Api, importedChat);
       if (!verified) throw new Error(`JOIN_NOT_VERIFIED: +${inviteHash.slice(0, 8)}…`);
+      const canonicalChannelId = await verifyCanonicalMatch(
+        client,
+        Api,
+        importedChat,
+        `+${inviteHash.slice(0, 8)}…`,
+        log,
+      );
       return {
         status: "joined",
         path: "import_invite",
@@ -207,6 +259,7 @@ export async function joinTelegramTargetVerified(args: {
         canonicalTarget: importedChat.username ?? null,
         errorCode: null,
         verified: true,
+        canonicalChannelId,
       };
     }
     throw new Error(`JOIN_NOT_VERIFIED: +${inviteHash.slice(0, 8)}… returned no chat`);
@@ -221,6 +274,7 @@ export async function joinTelegramTargetVerified(args: {
         canonicalTarget: null,
         errorCode: extractTelegramErrorCode(msg),
         verified: false,
+        canonicalChannelId: null,
       };
     }
     throw error;
