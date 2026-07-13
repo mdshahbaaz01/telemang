@@ -550,6 +550,14 @@ function BotFlowPage() {
               />
               Auto-join required channels & re-run /start
             </label>
+            <label className="flex items-center gap-2 self-center text-xs text-muted-foreground" title="If an invite link (t.me/+hash) fails with INVITE_HASH_INVALID / EXPIRED / CHANNEL_PRIVATE, peek it and join the channel by its @username when it is actually public.">
+              <input
+                type="checkbox"
+                checked={publicInviteFallback}
+                onChange={(e) => setPublicInviteFallback(e.target.checked)}
+              />
+              Public invite auto-join fallback
+            </label>
             {totals && (
               <div className="ml-auto self-center text-sm text-muted-foreground">
                 ok {totals.ok} · fail {totals.fail}
