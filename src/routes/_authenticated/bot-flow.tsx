@@ -455,6 +455,8 @@ function BotFlowPage() {
         </Link>
         <h1 className="text-2xl font-semibold tracking-tight">Bot Flow</h1>
 
+        <PreJoinCard accounts={accountList} />
+
         <CaptchaErrorBoundary scope="bot-flow-card" autoDisable>
           <BotFlowCaptchaCard />
         </CaptchaErrorBoundary>
