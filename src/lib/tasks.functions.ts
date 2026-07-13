@@ -553,6 +553,42 @@ export const processNextJoin = createServerFn({ method: "POST" })
       return { done: true };
     }
 
+    // Strict cross-run dedupe: if THIS account has already joined/requested
+    // this exact target in any previous task, skip immediately. Re-hitting
+    // the same invite is what triggers FloodWait after ~5 joins.
+    {
+      const norm = (s: string) => s.trim().toLowerCase()
+        .replace(/^@/, "")
+        .replace(/[?#].*$/, "")
+        .replace(/^(?:https?:\/\/)?(?:www\.)?(?:t(?:elegram)?\.me)\//i, "")
+        .replace(/^joinchat\//i, "+");
+      const wanted = norm(item.target);
+      const { data: acctTasks } = await supabase
+        .from("join_tasks")
+        .select("id")
+        .eq("account_id", acct.id);
+      const taskIds = (acctTasks ?? []).map((t: { id: string }) => t.id);
+      if (taskIds.length) {
+        const { data: prior } = await supabase
+          .from("join_task_items")
+          .select("id, target, status")
+          .in("task_id", taskIds)
+          .in("status", ["joined", "requested"])
+          .neq("id", item.id);
+        const hit = (prior ?? []).find((p: { target: string }) => norm(p.target) === wanted) as
+          | { status: string } | undefined;
+        if (hit) {
+          await supabase.from("join_task_items").update({
+            status: hit.status,
+            error: "skipped — already joined by this account",
+            processed_at: new Date().toISOString(),
+          }).eq("id", item.id);
+          await log(task.id, "info", `Skipped @${item.target} — already ${hit.status} by this account (dedupe)`);
+          return { done: false, paused: false, target: item.target };
+        }
+      }
+    }
+
     const apiHash = await decryptString(acct.api_hash_enc);
     const sessionStr = await decryptString(acct.session_enc);
     const client = await createTgClient(acct.api_id, apiHash, sessionStr, acct.id);
