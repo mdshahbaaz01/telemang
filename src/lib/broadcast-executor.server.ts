@@ -59,6 +59,7 @@ export type ForwardExecInput = {
   minDelay: number;
   maxDelay: number;
   concurrency?: number;
+  dropAuthor?: boolean;
 };
 
 function jitter(min: number, max: number) {
@@ -490,10 +491,11 @@ export async function executeForward(
                 id: [input.source.msgId],
                 randomId: [bigInt(Math.floor(Math.random() * 1e18))],
                 toPeer: dest,
+                dropAuthor: input.dropAuthor === true,
               }),
             );
             ok++;
-            push({ accountId, target: t, level: "success", message: `Forwarded to ${t}` });
+            push({ accountId, target: t, level: "success", message: input.dropAuthor ? `Forwarded to ${t} (no tag)` : `Forwarded to ${t}` });
           } catch (e) {
             fail++;
             push({ accountId, target: t, level: "error", message: errorText(e) });
