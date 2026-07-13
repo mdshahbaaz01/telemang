@@ -854,6 +854,46 @@ export const processBatchJoin = createServerFn({ method: "POST" })
       return { done: true, paused: false, processed: 0 };
     }
 
+    // Strict cross-run dedupe: skip items this account already joined/requested.
+    const norm = (s: string) => s.trim().toLowerCase()
+      .replace(/^@/, "")
+      .replace(/[?#].*$/, "")
+      .replace(/^(?:https?:\/\/)?(?:www\.)?(?:t(?:elegram)?\.me)\//i, "")
+      .replace(/^joinchat\//i, "+");
+    const priorMap = new Map<string, string>();
+    try {
+      const { data: acctTasks } = await supabase
+        .from("join_tasks").select("id").eq("account_id", acct.id);
+      const taskIds = (acctTasks ?? []).map((t: { id: string }) => t.id);
+      if (taskIds.length) {
+        const { data: prior } = await supabase
+          .from("join_task_items")
+          .select("target, status")
+          .in("task_id", taskIds)
+          .in("status", ["joined", "requested"]);
+        for (const p of (prior ?? []) as Array<{ target: string; status: string }>) {
+          priorMap.set(norm(p.target), p.status);
+        }
+      }
+    } catch { /* best effort */ }
+    const pending: Array<{ id: string; target: string }> = [];
+    for (const it of items) {
+      const hitStatus = priorMap.get(norm(it.target));
+      if (hitStatus) {
+        await supabase.from("join_task_items").update({
+          status: hitStatus,
+          error: "skipped — already joined by this account",
+          processed_at: new Date().toISOString(),
+        }).eq("id", it.id);
+        await log(task.id, "info", `Skipped @${it.target} — already ${hitStatus} by this account (dedupe)`);
+      } else {
+        pending.push(it);
+      }
+    }
+    if (!pending.length) {
+      return { done: false, paused: false, processed: items.length };
+    }
+
     const apiHash = await decryptString(acct.api_hash_enc);
     const sessionStr = await decryptString(acct.session_enc);
     const client = await createTgClient(acct.api_id, apiHash, sessionStr, acct.id);
@@ -978,10 +1018,10 @@ export const processBatchJoin = createServerFn({ method: "POST" })
 
     try {
       // Serialize per-account with human pacing to avoid FLOOD_WAITs stacking.
-      for (const item of items) {
+      for (const item of pending) {
         if (floodPaused) break;
         await processOne(item);
-        await new Promise((r) => setTimeout(r, 2500 + Math.random() * 2500));
+        await new Promise((r) => setTimeout(r, 800 + Math.random() * 700));
       }
       const newSession = (client.session as InstanceType<typeof StringSession>).save();
       if (newSession && newSession !== sessionStr) {
