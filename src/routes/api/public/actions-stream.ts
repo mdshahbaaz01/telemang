@@ -2,6 +2,16 @@ import { createFileRoute } from "@tanstack/react-router";
 import { createClient } from "@supabase/supabase-js";
 import type { Database } from "@/integrations/supabase/types";
 import { z } from "zod";
+import {
+  getPacingConfig,
+  loadCacheForAccount,
+  tryAcquireJoinLock,
+  finalizeJoinLock,
+  logJoinAttempt,
+  jitteredDelayMs,
+  normalizeTargetKey,
+  type PacingConfig,
+} from "@/lib/join-cache.server";
 
 // A single Telegram message reference: `t.me/<user>/<id>` or `t.me/c/<internalId>/<id>`
 const msgRefSchema = z.object({
