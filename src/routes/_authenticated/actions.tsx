@@ -1006,7 +1006,7 @@ function ActionsPageInner() {
       await createSchedFn({
         data: {
           scheduledAt: when.toISOString(),
-          op: { kind: "forward", source: src, accountIds: runAccountIds, targets: list },
+          op: { kind: "forward", source: src, accountIds: runAccountIds, targets: list, dropAuthor: dropForwardAuthor },
           minDelay,
           maxDelay,
         },
