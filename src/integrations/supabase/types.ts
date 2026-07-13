@@ -407,6 +407,39 @@ export type Database = {
         }
         Relationships: []
       }
+      idempotency_keys: {
+        Row: {
+          completed_at: string | null
+          created_at: string
+          expires_at: string
+          key: string
+          result: Json | null
+          scope: string
+          status: string
+          user_id: string
+        }
+        Insert: {
+          completed_at?: string | null
+          created_at?: string
+          expires_at?: string
+          key: string
+          result?: Json | null
+          scope: string
+          status?: string
+          user_id: string
+        }
+        Update: {
+          completed_at?: string | null
+          created_at?: string
+          expires_at?: string
+          key?: string
+          result?: Json | null
+          scope?: string
+          status?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       inline_button_clicks: {
         Row: {
           account_id: string | null
@@ -1357,6 +1390,15 @@ export type Database = {
         Returns: boolean
       }
       is_admin: { Args: never; Returns: boolean }
+      recent_account_health: {
+        Args: { _account_id: string }
+        Returns: {
+          attempts: number
+          failures: number
+          floods: number
+          max_flood_seconds: number
+        }[]
+      }
       run_log_retention: { Args: never; Returns: Json }
     }
     Enums: {

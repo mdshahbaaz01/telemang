@@ -14,3 +14,12 @@ export {
   joinTelegramTargetVerified,
   extractTelegramErrorCode,
 } from "../telegram-join-helper.server";
+
+// Phase 5 — executor primitives (idempotency + adaptive pacing)
+export {
+  withIdempotency,
+  adaptivePacing,
+  idemKey,
+  type IdempotencyOptions,
+  type IdempotencyOutcome,
+} from "./executor.server";
