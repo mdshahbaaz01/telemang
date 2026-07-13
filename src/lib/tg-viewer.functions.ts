@@ -472,10 +472,9 @@ export const pressInlineButtonAs = createServerFn({ method: "POST" })
           url: res?.url ? String(res.url) : null,
         };
       } catch (e) {
-        const em = (e as Error).message || String(e);
-        const m = em.match(/FLOOD_WAIT_(\d+)/i);
-        if (m) {
-          const secs = Number(m[1]);
+        const fw = parseFloodWait(e);
+        if (fw) {
+          const secs = fw.seconds;
           await context.supabase
             .from("telegram_accounts")
             .update({
