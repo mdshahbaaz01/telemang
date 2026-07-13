@@ -905,29 +905,17 @@ export const Route = createFileRoute("/api/public/actions-stream")({
                 // the whole account. Returns "ok" | "stop" | "flood" | "skip".
                  const alreadyJoined = new Set<string>();
                  const attemptedThisRun = new Set<string>();
-                 // Cross-run dedupe: pre-populate with everything this account
-                 // has EVER successfully joined/requested via join_task_items,
-                 // so bot-flow never re-hits the same invite from same account.
+                 // Cross-run dedupe from persistent join_cache (all sources).
+                 let pacing: PacingConfig;
                  try {
-                   const { data: acctTasks } = await supabase
-                     .from("join_tasks")
-                     .select("id")
-                     .eq("account_id", accountId);
-                   const taskIds = (acctTasks ?? []).map((t: any) => t.id as string);
-                   if (taskIds.length) {
-                     const { data: prior } = await supabase
-                       .from("join_task_items")
-                       .select("target")
-                       .in("task_id", taskIds)
-                       .in("status", ["joined", "requested"]);
-                     for (const p of (prior ?? []) as Array<{ target: string }>) {
-                       const s = String(p.target ?? "").trim()
-                         .replace(/^@/, "")
-                         .replace(/[?#].*$/, "")
-                         .replace(/^(?:https?:\/\/)?(?:www\.)?(?:t(?:elegram)?\.me)\//i, "")
-                         .replace(/^joinchat\//i, "+");
-                       if (s) alreadyJoined.add(s.toLowerCase());
-                     }
+                   pacing = await getPacingConfig(supabase, userId);
+                 } catch {
+                   pacing = { min_delay_ms: 800, max_delay_ms: 1500, batch_size: 5, cache_ttl_hours: 720, lock_ttl_seconds: 90 };
+                 }
+                 try {
+                   const cache = await loadCacheForAccount(supabase, accountId);
+                   for (const [k, status] of cache.entries()) {
+                     if (status === "joined" || status === "requested") alreadyJoined.add(k);
                    }
                  } catch { /* dedupe is best-effort */ }
                 const smartJoin = async (rawTarget: string): Promise<"ok" | "stop" | "flood" | "skip"> => {
@@ -938,7 +926,24 @@ export const Route = createFileRoute("/api/public/actions-stream")({
                   if (alreadyJoined.has(key)) return "skip";
                   if (key === parsed.username.toLowerCase()) return "skip";
                    attemptedThisRun.add(key);
-                  const attempt = async (): Promise<"ok" | "flood" | "skip"> => {
+                   // Acquire per-(account, channel) lock — atomic across all workers.
+                   const lock = await tryAcquireJoinLock(supabase, {
+                     userId, accountId, target: rawTarget,
+                     source: "bot_flow",
+                     lockTtlSeconds: pacing.lock_ttl_seconds,
+                   });
+                   if (lock.outcome !== "acquired") {
+                     alreadyJoined.add(key);
+                     await logJoinAttempt(supabase, {
+                       userId, accountId, target: rawTarget, source: "bot_flow",
+                       result: lock.outcome === "skipped_cached" ? "skipped_cached" : "skipped_locked",
+                       metadata: { reason: lock.status ?? null },
+                     });
+                     send("log", { accountId, level: "info", target: botLabel, message: `Skip ${target} — ${lock.outcome === "skipped_cached" ? "already cached" : "in-flight elsewhere"}` });
+                     return "skip";
+                   }
+                   const t0 = Date.now();
+                   const attempt = async (): Promise<"ok" | "flood" | "skip"> => {
                     try {
                       if (target.startsWith("+") || target.toLowerCase().startsWith("joinchat/")) {
                         const hash = target.startsWith("+") ? target.slice(1) : target.split("/")[1];
@@ -976,13 +981,28 @@ export const Route = createFileRoute("/api/public/actions-stream")({
                     // one retry after the local sleep for short waits
                     out = await attempt();
                   }
+                   const waitMs = Date.now() - t0;
+                   const errLike = out === "flood" ? "FLOOD_WAIT" : null;
+                   const fw = errLike ? floodWaitSeconds(errLike) : null;
+                   const finalStatus: "joined" | "requested" | "failed" | "skipped" =
+                     out === "ok" ? "joined" : out === "flood" ? "failed" : "skipped";
+                   await finalizeJoinLock(supabase, {
+                     accountId, target: rawTarget, status: finalStatus,
+                     cacheTtlHours: pacing.cache_ttl_hours,
+                     error: out === "flood" ? "FLOOD_WAIT" : null,
+                   });
+                   await logJoinAttempt(supabase, {
+                     userId, accountId, target: rawTarget, source: "bot_flow",
+                     result: out === "ok" ? "joined" : out === "flood" ? "flood" : "skipped",
+                     waitMs, floodWaitSeconds: fw,
+                     metadata: { normalized: normalizeTargetKey(rawTarget) },
+                   });
                    // Only mark as permanently handled if we actually joined
                    // or the target is unreachable/already-participant. Leave
                    // transient failures retryable in later rounds.
                    if (out === "ok" || out === "skip") alreadyJoined.add(key);
-                  // Fast pacing between joins — enough to look human but keep
-                  // total run short. FloodWait is handled per-attempt.
-                  await new Promise((r) => setTimeout(r, 800 + Math.random() * 700));
+                   // Human-like pacing between joins from configured pacing.
+                   await new Promise((r) => setTimeout(r, jitteredDelayMs(pacing)));
                   return out;
                 };
 
