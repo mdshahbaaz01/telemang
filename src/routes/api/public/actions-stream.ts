@@ -895,6 +895,31 @@ export const Route = createFileRoute("/api/public/actions-stream")({
                 // the whole account. Returns "ok" | "stop" | "flood" | "skip".
                  const alreadyJoined = new Set<string>();
                  const attemptedThisRun = new Set<string>();
+                 // Cross-run dedupe: pre-populate with everything this account
+                 // has EVER successfully joined/requested via join_task_items,
+                 // so bot-flow never re-hits the same invite from same account.
+                 try {
+                   const { data: acctTasks } = await supabase
+                     .from("join_tasks")
+                     .select("id")
+                     .eq("account_id", accountId);
+                   const taskIds = (acctTasks ?? []).map((t: any) => t.id as string);
+                   if (taskIds.length) {
+                     const { data: prior } = await supabase
+                       .from("join_task_items")
+                       .select("target")
+                       .in("task_id", taskIds)
+                       .in("status", ["joined", "requested"]);
+                     for (const p of (prior ?? []) as Array<{ target: string }>) {
+                       const s = String(p.target ?? "").trim()
+                         .replace(/^@/, "")
+                         .replace(/[?#].*$/, "")
+                         .replace(/^(?:https?:\/\/)?(?:www\.)?(?:t(?:elegram)?\.me)\//i, "")
+                         .replace(/^joinchat\//i, "+");
+                       if (s) alreadyJoined.add(s.toLowerCase());
+                     }
+                   }
+                 } catch { /* dedupe is best-effort */ }
                 const smartJoin = async (rawTarget: string): Promise<"ok" | "stop" | "flood" | "skip"> => {
                   if (stopRequested) return "stop";
                   const target = extractHandle(rawTarget);
@@ -945,15 +970,28 @@ export const Route = createFileRoute("/api/public/actions-stream")({
                    // or the target is unreachable/already-participant. Leave
                    // transient failures retryable in later rounds.
                    if (out === "ok" || out === "skip") alreadyJoined.add(key);
-                  // Human-pace between joins so we don't stack floods.
-                  await new Promise((r) => setTimeout(r, 2500 + Math.random() * 2500));
+                  // Fast pacing between joins — enough to look human but keep
+                  // total run short. FloodWait is handled per-attempt.
+                  await new Promise((r) => setTimeout(r, 800 + Math.random() * 700));
                   return out;
                 };
 
                 // ── Pre-join user-supplied channels ─────────────────────
                 if (op.preJoinChannels?.length) {
-                  send("log", { accountId, level: "info", target: botLabel, message: `Pre-joining ${op.preJoinChannels.length} channel(s)…` });
+                  // Dedupe pre-join list — same channel listed multiple times
+                  // must only be attempted once per account.
+                  const seen = new Set<string>();
+                  const uniquePre: string[] = [];
                   for (const raw of op.preJoinChannels) {
+                    const h = extractHandle(raw);
+                    if (!h) continue;
+                    const k = h.toLowerCase();
+                    if (seen.has(k) || alreadyJoined.has(k)) continue;
+                    seen.add(k);
+                    uniquePre.push(raw);
+                  }
+                  send("log", { accountId, level: "info", target: botLabel, message: `Pre-joining ${uniquePre.length} unique channel(s) (of ${op.preJoinChannels.length})…` });
+                  for (const raw of uniquePre) {
                     if (stopRequested) break;
                     const r = await smartJoin(raw);
                     if (r === "stop") break;
@@ -1009,10 +1047,10 @@ export const Route = createFileRoute("/api/public/actions-stream")({
                     });
                   };
                   let lastRoundCompleted = -1;
-                  for (let round = 0; round < rounds; round++) {
+                   for (let round = 0; round < rounds; round++) {
                     if (stopRequested) { emitJoinStop("user_stopped", { round }); break; }
                     // Give the bot a brief moment to reply (short = fast).
-                    await new Promise((r) => setTimeout(r, 900));
+                    await new Promise((r) => setTimeout(r, 500));
                     let recent: any[] = [];
                     try {
                       recent = await client.getMessages(botPeer, { limit: 5 }) as any[];
