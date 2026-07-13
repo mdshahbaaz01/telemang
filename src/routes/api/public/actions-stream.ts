@@ -1266,7 +1266,12 @@ export const Route = createFileRoute("/api/public/actions-stream")({
                         },
                       )
                     : body.op.kind === "botflow"
-                      ? await runWithConcurrency(body.accountIds, body.concurrency, (id) => runBotFlowForAccount(id, body.op as any))
+                      // Bot flow: force strictly sequential accounts. Running
+                      // multiple accounts in parallel makes them all hit the
+                      // same required invite at the same instant, which
+                      // triggers FloodWait after ~5 joins. One account finishes
+                      // ALL its channels before the next starts.
+                      ? await runWithConcurrency(body.accountIds, 1, (id) => runBotFlowForAccount(id, body.op as any))
                       : await runWithConcurrency(body.accountIds, Math.max(body.concurrency, 1), (id) => runOne(id));
               for (const r of results) {
                 totalOk += r.ok;
