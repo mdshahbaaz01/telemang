@@ -1389,6 +1389,7 @@ export type Database = {
         }
         Returns: boolean
       }
+      health_metrics: { Args: { _window_minutes?: number }; Returns: Json }
       is_admin: { Args: never; Returns: boolean }
       recent_account_health: {
         Args: { _account_id: string }
