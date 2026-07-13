@@ -1045,6 +1045,27 @@ export const processBatchJoin = createServerFn({ method: "POST" })
         }
       }
       await supabase.from("join_task_items").update(statusUpdate).eq("id", item.id);
+      // Finalize cache lock + attempt log for this item.
+      const finalStatus: "joined" | "requested" | "failed" | "skipped" =
+        statusUpdate.status === "joined" || statusUpdate.status === "requested"
+          ? (statusUpdate.status as "joined" | "requested")
+          : statusUpdate.status === "failed" ? "failed" : "skipped";
+      await finalizeJoinLock(supabase, {
+        accountId: acct.id, target: item.target, status: finalStatus,
+        cacheTtlHours: pacing.cache_ttl_hours, error: statusUpdate.error,
+      });
+      const fwm = (statusUpdate.error || "").match(/FloodWait\s+(\d+)/i) || (statusUpdate.error || "").match(/Rate-limited\s+(\d+)/i);
+      await logJoinAttempt(supabase, {
+        userId: context.userId, accountId: acct.id, target: item.target,
+        source: "batch_join",
+        result:
+          statusUpdate.status === "joined" ? "joined" :
+          statusUpdate.status === "requested" ? "requested" :
+          statusUpdate.status === "failed" ? "failed" :
+          fwm ? "flood" : "skipped",
+        floodWaitSeconds: fwm ? Number(fwm[1]) : null,
+        error: statusUpdate.error,
+      });
     };
 
     try {
@@ -1052,7 +1073,7 @@ export const processBatchJoin = createServerFn({ method: "POST" })
       for (const item of pending) {
         if (floodPaused) break;
         await processOne(item);
-        await new Promise((r) => setTimeout(r, 800 + Math.random() * 700));
+        await new Promise((r) => setTimeout(r, jitteredDelayMs(pacing)));
       }
       const newSession = (client.session as InstanceType<typeof StringSession>).save();
       if (newSession && newSession !== sessionStr) {
