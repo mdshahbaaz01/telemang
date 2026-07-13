@@ -1002,6 +1002,7 @@ export const Route = createFileRoute("/api/public/actions-stream")({
                    const fw = errLike ? floodWaitSeconds(errLike) : null;
                    const finalStatus: "joined" | "requested" | "failed" | "skipped" =
                      out === "flood" ? "failed" : out === "ok" ? "joined" : joinFinalStatus;
+                   const loggedFinalStatus = finalStatus as "joined" | "requested" | "failed" | "skipped";
                    await finalizeJoinLock(supabase, {
                      accountId, target: rawTarget, status: finalStatus,
                      cacheTtlHours: pacing.cache_ttl_hours,
@@ -1009,7 +1010,7 @@ export const Route = createFileRoute("/api/public/actions-stream")({
                    });
                    await logJoinAttempt(supabase, {
                      userId, accountId, target: rawTarget, source: "bot_flow",
-                     result: out === "flood" ? "flood" : finalStatus === "requested" ? "requested" : finalStatus === "joined" ? "joined" : "skipped",
+                     result: out === "flood" ? "flood" : loggedFinalStatus === "requested" ? "requested" : loggedFinalStatus === "joined" ? "joined" : "skipped",
                      waitMs, floodWaitSeconds: fw,
                       metadata: {
                         normalized: normalizeTargetKey(rawTarget),
