@@ -126,7 +126,12 @@ export async function joinTelegramTargetVerified(args: {
   log?: Logger;
 }): Promise<SmartTelegramJoinResult> {
   const { client, Api, log } = args;
-  const target = args.target.trim().replace(/^@/, "");
+  const target = args.target
+    .trim()
+    .replace(/^@/, "")
+    .replace(/[?#].*$/, "")
+    .replace(/^(?:https?:\/\/)?(?:www\.)?(?:t\.me|telegram\.me)\//i, "")
+    .replace(/^@/, "");
   const inviteHash = target.startsWith("+")
     ? target.slice(1)
     : target.toLowerCase().startsWith("joinchat/")
