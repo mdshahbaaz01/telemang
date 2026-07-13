@@ -19,6 +19,7 @@ import {
   cancelScheduledBroadcast,
   getScheduleReport,
   clearScheduledHistory,
+  deleteScheduledBroadcast,
   rescheduleBroadcast,
 } from "@/lib/schedule.functions";
 import { Button } from "@/components/ui/button";
@@ -469,6 +470,7 @@ function ActionsPageInner() {
   const createSchedFn = useServerFn(createScheduledBroadcast);
   const cancelSchedFn = useServerFn(cancelScheduledBroadcast);
   const clearSchedHistoryFn = useServerFn(clearScheduledHistory);
+  const deleteSchedFn = useServerFn(deleteScheduledBroadcast);
   const rescheduleFn = useServerFn(rescheduleBroadcast);
   const reportSchedFn = useServerFn(getScheduleReport);
   const [reportOpen, setReportOpen] = useState(false);
@@ -2286,6 +2288,25 @@ function ActionsPageInner() {
                             }}
                           >
                             Cancel
+                          </button>
+                        )}
+                        {s.status !== "running" && (
+                          <button
+                            type="button"
+                            className="text-xs text-destructive underline"
+                            title="Delete this schedule from history"
+                            onClick={async () => {
+                              if (!confirm(`Delete this ${s.status} schedule permanently?`)) return;
+                              try {
+                                await deleteSchedFn({ data: { id: s.id } });
+                                toast.success("Deleted");
+                                await qc.invalidateQueries({ queryKey: ["scheduled-broadcasts"] });
+                              } catch (e) {
+                                toast.error((e as Error).message);
+                              }
+                            }}
+                          >
+                            Delete
                           </button>
                         )}
                       </div>
