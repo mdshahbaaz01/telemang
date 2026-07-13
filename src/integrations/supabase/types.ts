@@ -74,6 +74,27 @@ export type Database = {
         }
         Relationships: []
       }
+      account_pick_memory: {
+        Row: {
+          account_ids: Json
+          kind: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          account_ids?: Json
+          kind: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          account_ids?: Json
+          kind?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       action_logs: {
         Row: {
           account_id: string | null
@@ -111,6 +132,36 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      action_presets: {
+        Row: {
+          created_at: string
+          id: string
+          kind: string
+          name: string
+          payload: Json
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          kind: string
+          name: string
+          payload?: Json
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          kind?: string
+          name?: string
+          payload?: Json
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
       }
       action_recipes: {
         Row: {
@@ -617,11 +668,17 @@ export type Database = {
           auto_leave_after_days: number | null
           created_at: string
           group_id: string | null
+          heartbeat_at: string | null
           id: string
           max_delay: number
           min_delay: number
           name: string | null
+          progress_cursor: number
+          resume_count: number
+          resumed_at: string | null
+          source_task_id: string | null
           status: string
+          status_checkpoint: Json | null
           updated_at: string
           user_id: string
         }
@@ -630,11 +687,17 @@ export type Database = {
           auto_leave_after_days?: number | null
           created_at?: string
           group_id?: string | null
+          heartbeat_at?: string | null
           id?: string
           max_delay?: number
           min_delay?: number
           name?: string | null
+          progress_cursor?: number
+          resume_count?: number
+          resumed_at?: string | null
+          source_task_id?: string | null
           status?: string
+          status_checkpoint?: Json | null
           updated_at?: string
           user_id: string
         }
@@ -643,11 +706,17 @@ export type Database = {
           auto_leave_after_days?: number | null
           created_at?: string
           group_id?: string | null
+          heartbeat_at?: string | null
           id?: string
           max_delay?: number
           min_delay?: number
           name?: string | null
+          progress_cursor?: number
+          resume_count?: number
+          resumed_at?: string | null
+          source_task_id?: string | null
           status?: string
+          status_checkpoint?: Json | null
           updated_at?: string
           user_id?: string
         }
@@ -1016,14 +1085,19 @@ export type Database = {
           created_at: string
           dispatched_at: string | null
           error: string | null
+          heartbeat_at: string | null
           id: string
           label: string | null
           payload: Json
           processed_items: number
+          progress_cursor: number
+          resume_count: number
+          resumed_at: string | null
           run_id: string | null
           scheduled_at: string
           source_id: string | null
           status: string
+          status_checkpoint: Json | null
           total_items: number
           updated_at: string
           user_id: string
@@ -1033,14 +1107,19 @@ export type Database = {
           created_at?: string
           dispatched_at?: string | null
           error?: string | null
+          heartbeat_at?: string | null
           id?: string
           label?: string | null
           payload: Json
           processed_items?: number
+          progress_cursor?: number
+          resume_count?: number
+          resumed_at?: string | null
           run_id?: string | null
           scheduled_at: string
           source_id?: string | null
           status?: string
+          status_checkpoint?: Json | null
           total_items?: number
           updated_at?: string
           user_id: string
@@ -1050,14 +1129,19 @@ export type Database = {
           created_at?: string
           dispatched_at?: string | null
           error?: string | null
+          heartbeat_at?: string | null
           id?: string
           label?: string | null
           payload?: Json
           processed_items?: number
+          progress_cursor?: number
+          resume_count?: number
+          resumed_at?: string | null
           run_id?: string | null
           scheduled_at?: string
           source_id?: string | null
           status?: string
+          status_checkpoint?: Json | null
           total_items?: number
           updated_at?: string
           user_id?: string
@@ -1161,6 +1245,42 @@ export type Database = {
           updated_at?: string
           user_id?: string
           username?: string | null
+        }
+        Relationships: []
+      }
+      user_favorites: {
+        Row: {
+          created_at: string
+          href: string | null
+          icon: string | null
+          id: string
+          kind: string
+          label: string
+          ref_id: string | null
+          sort_order: number
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          href?: string | null
+          icon?: string | null
+          id?: string
+          kind: string
+          label: string
+          ref_id?: string | null
+          sort_order?: number
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          href?: string | null
+          icon?: string | null
+          id?: string
+          kind?: string
+          label?: string
+          ref_id?: string | null
+          sort_order?: number
+          user_id?: string
         }
         Relationships: []
       }
