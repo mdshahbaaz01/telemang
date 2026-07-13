@@ -9,6 +9,30 @@ type Account = { id: string; first_name?: string | null; username?: string | nul
 
 type PreJoinLog = { level: "info" | "success" | "warn" | "error"; message: string; ts: number; target?: string; accountId?: string };
 
+type ChStatus = "pending" | "running" | "joined" | "skipped" | "failed";
+type ChCell = { status: ChStatus; ts: number; message?: string };
+type ChMap = Record<string, Record<string, ChCell>>; // channel -> accountId -> cell
+
+function normalizeTarget(t: string): string {
+  return t.trim().replace(/^https?:\/\/(t\.me|telegram\.me)\//i, "").replace(/^@/, "").toLowerCase();
+}
+
+function classify(level: string, message: string): ChStatus {
+  const m = (message || "").toLowerCase();
+  if (/already|member/.test(m) && !/error|fail/.test(m)) return "skipped";
+  if (level === "success" || /\bjoined\b|join ok|success/.test(m)) return "joined";
+  if (level === "error" || /\bfail|error|flood|invalid|forbidden|banned\b/.test(m)) return "failed";
+  return "running";
+}
+
+const STATUS_STYLES: Record<ChStatus, string> = {
+  pending: "bg-muted text-muted-foreground",
+  running: "bg-blue-500/15 text-blue-600 dark:text-blue-400",
+  joined: "bg-green-500/15 text-green-600 dark:text-green-400",
+  skipped: "bg-yellow-500/15 text-yellow-700 dark:text-yellow-400",
+  failed: "bg-destructive/15 text-destructive",
+};
+
 type PreJoinHistoryEntry = {
   id: string;
   startedAt: number;
@@ -51,6 +75,8 @@ export function PreJoinCard({ accounts }: { accounts: Account[] }) {
   const [publicInviteFallback, setPublicInviteFallback] = useState(true);
   const [logs, setLogs] = useState<PreJoinLog[]>([]);
   const [totals, setTotals] = useState<{ ok: number; fail: number } | null>(null);
+  const [statuses, setStatuses] = useState<ChMap>({});
+  const [statusOpen, setStatusOpen] = useState(true);
   const [history, setHistory] = useState<PreJoinHistoryEntry[]>(() => loadHistory());
   const abortRef = useRef<AbortController | null>(null);
   const currentEntryRef = useRef<PreJoinHistoryEntry | null>(null);
@@ -71,6 +97,16 @@ export function PreJoinCard({ accounts }: { accounts: Account[] }) {
     const entry: PreJoinLog = { ...l, ts: Date.now() };
     setLogs((prev) => [entry, ...prev].slice(0, 500));
     if (currentEntryRef.current) currentEntryRef.current.logs.unshift(entry);
+  };
+
+  const updateStatus = (channel: string, accountId: string, status: ChStatus, message?: string) => {
+    const key = normalizeTarget(channel);
+    if (!key) return;
+    setStatuses((prev) => {
+      const row = { ...(prev[key] || {}) };
+      row[accountId] = { status, ts: Date.now(), message };
+      return { ...prev, [key]: row };
+    });
   };
 
   const commitCurrent = (patch: Partial<PreJoinHistoryEntry>) => {
@@ -94,6 +130,17 @@ export function PreJoinCard({ accounts }: { accounts: Account[] }) {
 
     setLogs([]);
     setTotals(null);
+    // seed pending matrix
+    {
+      const seed: ChMap = {};
+      const ts = Date.now();
+      for (const ch of channels) {
+        const key = normalizeTarget(ch);
+        seed[key] = {};
+        for (const id of ids) seed[key][id] = { status: "pending", ts };
+      }
+      setStatuses(seed);
+    }
     setRunning(true);
     const entry: PreJoinHistoryEntry = {
       id: `${Date.now()}`,
@@ -153,7 +200,12 @@ export function PreJoinCard({ accounts }: { accounts: Account[] }) {
           let data: any = {};
           try { data = JSON.parse(dataLine.slice(6)); } catch {}
           if (event === "start") addLog({ level: "info", message: "Pre-join started" });
-          else if (event === "log") addLog({ accountId: data.accountId, level: data.level ?? "info", target: data.target, message: data.message ?? "" });
+          else if (event === "log") {
+            addLog({ accountId: data.accountId, level: data.level ?? "info", target: data.target, message: data.message ?? "" });
+            if (data.target && data.accountId) {
+              updateStatus(data.target, data.accountId, classify(data.level ?? "info", data.message ?? ""), data.message);
+            }
+          }
           else if (event === "done") {
             ok += Number(data.ok ?? 0);
             fail += Number(data.fail ?? 0);
@@ -280,6 +332,49 @@ export function PreJoinCard({ accounts }: { accounts: Account[] }) {
               </div>
             )}
           </div>
+
+          {Object.keys(statuses).length > 0 && (
+            <div className="rounded-md border border-border bg-muted/10">
+              <div className="flex items-center gap-2 border-b border-border/60 px-2 py-1">
+                <div className="text-xs font-medium mr-auto">Per-channel status</div>
+                <Button size="sm" variant="ghost" onClick={() => setStatusOpen((v) => !v)}>
+                  {statusOpen ? "Hide" : "Show"}
+                </Button>
+              </div>
+              {statusOpen && (
+                <div className="max-h-64 overflow-auto p-2 space-y-1">
+                  {Object.entries(statuses).map(([ch, row]) => {
+                    const cells = Object.entries(row);
+                    const counts: Record<ChStatus, number> = { pending: 0, running: 0, joined: 0, skipped: 0, failed: 0 };
+                    let latest = 0;
+                    for (const [, c] of cells) { counts[c.status]++; if (c.ts > latest) latest = c.ts; }
+                    return (
+                      <div key={ch} className="rounded border border-border/50 bg-background/60 p-1.5 text-[11px]">
+                        <div className="flex flex-wrap items-center gap-2">
+                          <span className="font-mono truncate max-w-[220px]" title={ch}>{ch}</span>
+                          {(["joined","skipped","running","failed","pending"] as ChStatus[]).map((s) => counts[s] ? (
+                            <span key={s} className={`rounded px-1.5 py-0.5 ${STATUS_STYLES[s]}`}>{s} {counts[s]}</span>
+                          ) : null)}
+                          <span className="ml-auto text-muted-foreground">{latest ? new Date(latest).toLocaleTimeString() : ""}</span>
+                        </div>
+                        <div className="mt-1 flex flex-wrap gap-1">
+                          {cells.map(([aid, c]) => (
+                            <span
+                              key={aid}
+                              className={`rounded px-1.5 py-0.5 ${STATUS_STYLES[c.status]}`}
+                              title={`${nameOf(aid)} · ${c.status} · ${new Date(c.ts).toLocaleTimeString()}${c.message ? ` — ${c.message}` : ""}`}
+                            >
+                              {nameOf(aid)}
+                            </span>
+                          ))}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          )}
 
           {logs.length > 0 && (
             <div className="max-h-52 overflow-auto rounded-md border border-border bg-muted/20 p-2 font-mono text-[11px]">
