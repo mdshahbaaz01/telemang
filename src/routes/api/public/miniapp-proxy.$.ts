@@ -683,12 +683,47 @@ async function handle(request: Request, params: { _splat?: string }) {
 
   let upstream: Response;
   try {
-    upstream = await fetch(target, {
-      method: request.method,
-      headers: upstreamHeaders,
-      body: request.method === "GET" || request.method === "HEAD" ? undefined : await request.arrayBuffer(),
-      redirect: "follow",
-    });
+    // SSRF-safe redirect handling: follow redirects manually and re-run the
+    // block-list guard against every hop's hostname. Prevents a redirect (or
+    // DNS-rebound host) from steering the outbound fetch at loopback,
+    // link-local, RFC1918, or cloud-metadata addresses after the initial
+    // hostname check passed.
+    const method = request.method;
+    const bodyBuf = method === "GET" || method === "HEAD" ? undefined : await request.arrayBuffer();
+    let currentUrl = target;
+    const MAX_REDIRECTS = 5;
+    let hop = 0;
+    while (true) {
+      const resp = await fetch(currentUrl, {
+        method,
+        headers: upstreamHeaders,
+        body: bodyBuf,
+        redirect: "manual",
+      });
+      if (resp.status >= 300 && resp.status < 400 && resp.headers.get("location")) {
+        if (++hop > MAX_REDIRECTS) {
+          return new Response("Too many redirects", { status: 502 });
+        }
+        let next: URL;
+        try {
+          next = new URL(resp.headers.get("location")!, currentUrl);
+        } catch {
+          return new Response("Invalid redirect target", { status: 502 });
+        }
+        if (next.protocol !== "http:" && next.protocol !== "https:") {
+          return new Response("Redirect scheme not permitted", { status: 502 });
+        }
+        if (isBlockedProxyHost(next.hostname)) {
+          return new Response("Redirect target host is not permitted", { status: 403 });
+        }
+        currentUrl = next.toString();
+        upstreamHeaders.set("origin", next.origin);
+        upstreamHeaders.set("referer", `${next.origin}/`);
+        continue;
+      }
+      upstream = resp;
+      break;
+    }
   } catch (e) {
     return new Response(`Upstream fetch failed: ${(e as Error).message}`, { status: 502 });
   }
