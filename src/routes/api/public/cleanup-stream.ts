@@ -102,6 +102,11 @@ export const Route = createFileRoute("/api/public/cleanup-stream")({
 
         const abortSignal = request.signal;
 
+        const minD = Math.max(0, body.minDelayMs ?? 350);
+        const maxD = Math.max(minD, body.maxDelayMs ?? minD);
+        const jitterDelay = () =>
+          new Promise<void>((r) => setTimeout(r, minD + Math.floor(Math.random() * (maxD - minD + 1))));
+
         const stream = new ReadableStream<Uint8Array>({
           async start(controller) {
             const send = (event: string, data: unknown) => {
