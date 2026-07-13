@@ -1,41 +1,129 @@
-# Workload Reducer Pack
+# Refactoring & System Optimization Plan
 
-Ship 6 features that cut clicks and prevent lost work across every bulk flow.
+A phased plan to reduce technical debt, improve runtime performance, and harden reliability across the Telegram Management app — without changing user-facing behavior.
 
-## 1. One-click "Repeat last run"
-- Add "Run again" button on every row of Recent Tasks, Scheduled Broadcasts, Bulk Mix history, and Bot Flow history.
-- Clones the source payload (accounts, targets, delays, media, message HTML) into a new task queued immediately, no form re-open.
-- If any account is now missing/banned, prompt once with a diff and let user proceed / drop / substitute.
+---
 
-## 2. Saved presets per action
-- New `action_presets` table: `(id, user_id, kind, name, payload jsonb, created_at)`.
-- "Save as preset" button on Join, Broadcast, Bulk Mix, Reactions, Cleanup, DM Blast forms captures the current form state.
-- Preset dropdown at the top of each form loads a saved payload in one click. Rename/delete inline.
+## Phase 1 — Audit & Baseline (day 1)
 
-## 3. Global Favorites bar
-- Pin up to 8 items (preset / recipe / bot flow / scheduled template) to a bar under the sidebar header.
-- New `user_favorites` table `(id, user_id, kind, ref_id, label, sort_order)` with dnd-kit reordering.
-- Clicking a favorite deep-links straight to the launcher with the preset pre-loaded and focuses the "Run" button.
+**Goal:** know what we have before we change it.
 
-## 4. Bulk target paste with auto-detect
-- New `parseMixedTargets(text)` util classifies each line as: username, invite link, post link, numeric id, phone, junk.
-- Paste box in every targets picker shows a live classified table (icon per type + count badges).
-- Auto-routes classified items to correct fields (e.g., post links go to Bulk Mix post inputs, invites to join list). One-click "Fix junk" opens rejected lines for editing.
+1. Generate a dependency map: `src/lib/*.functions.ts`, `*.server.ts`, `routes/api/public/*`, and their callers.
+2. Run bundle analysis (`vite build --report`) to find heaviest routes/components.
+3. Capture Supabase slow queries (`supabase--slow_queries`) and DB linter warnings.
+4. Enable structured logging counters for: FloodWait, join failures, task heartbeats, captcha events.
+5. Snapshot current metrics: build size per route, TTI on /workspace, avg task latency, error rate.
 
-## 5. Smart account picker memory
-- Persist last account selection per `(user_id, action_kind)` in `account_pick_memory` table `(user_id, kind, account_ids jsonb, updated_at)`.
-- Account pickers pre-check the remembered set; show a small "Restored 12 accounts from last run" hint with an "Ignore" link.
-- Auto-drops accounts that are now inactive/banned so restored sets stay clean.
+**Deliverable:** `.lovable/audit-baseline.md` with numbers we'll compare against.
 
-## 7. Auto-resume interrupted runs
-- Add `progress_cursor int` and `status_checkpoint jsonb` columns to `join_tasks` and `scheduled_broadcasts`.
-- Task executor writes the cursor after every completed (account, target) pair.
-- On worker start (and via a `/api/public/hooks/resume-stuck` cron every 5 min), pick up tasks in `running` status with no heartbeat for >2 min and continue from `progress_cursor` — no duplicate work.
-- UI badge on Recent Tasks: "Auto-resumed at 47/120".
+---
 
-## Technical notes
-- New tables all follow the `has_role` + user-scoped RLS pattern already used by `join_tasks`; add `GRANT` for `authenticated`/`service_role`.
-- `action_presets` and `user_favorites` are shared across every launcher via a small `<PresetBar kind="broadcast" />` component.
-- Auto-resume needs a `heartbeat_at timestamptz` column on `join_tasks` and `scheduled_broadcasts`, updated inside the runner loops.
-- Repeat-run reuses existing `createTask` / `scheduleBroadcast` server functions; only a `clonePayload(sourceId)` helper is added.
-- Paste parser is pure client-side, lives in `src/lib/target-parser.ts` with tests.
+## Phase 2 — Code Structure Refactor (days 2–4)
+
+**Goal:** consistent, discoverable modules.
+
+1. **Standardize server module split**
+   - `*.functions.ts` — only `createServerFn` wrappers + validation.
+   - `*.server.ts` — pure server helpers (no `createServerFn`).
+   - Move stray logic out of route files.
+2. **Centralize Telegram primitives** into `src/lib/telegram/`:
+   - `client.server.ts` (GramJS session build)
+   - `join.server.ts` (peek → import → verify — already exists, consolidate callers)
+   - `resolve.server.ts` (target resolver)
+   - `send.server.ts` (broadcast/DM/edit unified sender)
+   - `errors.server.ts` (FloodWait parsing, retry classification)
+3. **Delete dead code**: unused components, orphan hooks, duplicated dialogs (Reuse/Schedule share a dialog now).
+4. **Type hardening**: replace `any` in task payloads with discriminated unions per task type.
+5. **Component boundaries**: split any file >400 lines (workspace, bot-flow, broadcast).
+
+---
+
+## Phase 3 — Data Layer Optimization (days 5–6)
+
+1. **Indexes** on hot paths:
+   - `tasks(status, updated_at)` for resume-stuck scan
+   - `join_attempts(account_id, channel_id, created_at)`
+   - `join_cache(account_id, target_key)` unique
+   - `bot_flow_history(created_at desc)`
+   - `broadcast_targets(broadcast_id, status)`
+2. **RLS review**: audit every public table for correct grants; remove any anon SELECT not needed.
+3. **Retention jobs** (pg_cron): purge `join_attempts`, `inline_button_clicks`, `task_logs` older than 30 days.
+4. **Payload slimming**: store large logs in `text` column separate from row hot fields; select subset by default.
+5. **Realtime**: replace polling with Supabase channels for task status, join progress, captcha log.
+
+---
+
+## Phase 4 — Runtime Performance (days 7–8)
+
+1. **Route-level code splitting**: lazy-load `/workspace`, `/captcha`, `/bot-flow` heavy tabs.
+2. **Query cache**: set stable `queryKey` + `staleTime` on account lists, groups, presets.
+3. **Virtualize** long lists (targets picker, member scan, task history) via `@tanstack/react-virtual`.
+4. **Memoize** expensive selectors (PastedTargetsBox classifier, spintax expander).
+5. **Debounce** all filter inputs (300 ms) and TargetsPicker search.
+6. **Worker offload**: move spintax expansion and target dedup to a Web Worker.
+
+---
+
+## Phase 5 — Telegram Executor Hardening (days 9–11)
+
+1. **Unified execution loop** with pluggable steps: `resolve → precheck → act → verify → log`.
+2. **Adaptive pacing**: per-account rolling FloodWait window; back off globally when hit-rate > threshold.
+3. **Sequential-per-account, parallel-across-accounts** enforced in one scheduler (remove ad-hoc loops).
+4. **Idempotency keys** on broadcast/DM sends to survive retries without dupes.
+5. **Heartbeat + resume**: promote existing `resume-stuck` to a Postgres advisory-lock scheduler.
+6. **Circuit breaker** per account: auto-pause after N consecutive auth/deactivated errors.
+
+---
+
+## Phase 6 — Observability (day 12)
+
+1. **Structured log schema** (`level, task_id, account_id, target, path, latency_ms, error_code`).
+2. **Log viewer** at `/logs` with filters + tail mode (reuses captcha log UI).
+3. **Metrics dashboard**: success rate, FloodWait/min, join verify rate, captcha solve rate.
+4. **Client error boundary** already exists — extend `logClientError` to hit a `/api/public/client-errors` sink.
+
+---
+
+## Phase 7 — UX & Accessibility Pass (day 13)
+
+1. Keyboard shortcuts (`?` help panel, `g d` = dashboard, `g w` = workspace, `n` = new task).
+2. ARIA labels on icon buttons; focus rings audit.
+3. Skeleton loaders replace spinners on primary lists.
+4. Empty states with actionable CTAs everywhere.
+
+---
+
+## Phase 8 — Security Sweep (day 14)
+
+1. Run `security--run_security_scan`; fix all High/Medium.
+2. Audit `/api/public/*` — every handler must verify `CRON_SECRET` or signature.
+3. Move any lingering secrets from code to `secrets--add_secret`.
+4. Rotate anon-key usages that should be authenticated.
+
+---
+
+## Phase 9 — Verification & Rollout (day 15)
+
+1. Re-measure Phase 1 metrics; require ≥30% bundle reduction on top 3 routes, ≥50% fewer FloodWaits, zero orphan `.server` imports in client graph.
+2. Playwright smoke: login → create task → run → verify → cleanup.
+3. Publish and monitor 24h.
+
+---
+
+## Non-Goals
+
+- No new user-facing features.
+- No visual redesign (Noir & Gold / Paper & Ink stays).
+- No swap of GramJS or Supabase.
+
+---
+
+## Risks & Mitigation
+
+| Risk | Mitigation |
+|---|---|
+| Executor refactor breaks live tasks | Ship behind `executor_v2` flag; canary 10% of tasks |
+| Index migrations lock tables | Use small tables first; schedule big ones off-peak |
+| Realtime channel limits | Fall back to 5 s polling if channel count > quota |
+
+Proceed phase by phase; each phase ends with a green build, passing smoke test, and a short changelog entry.
