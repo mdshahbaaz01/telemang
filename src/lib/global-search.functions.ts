@@ -15,6 +15,7 @@ type TgPeer = {
   className?: string;
   title?: string;
   firstName?: string;
+  lastName?: string;
   username?: string;
   megagroup?: boolean;
   broadcast?: boolean;
