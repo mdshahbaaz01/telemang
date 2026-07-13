@@ -4,7 +4,7 @@ type Theme = "light" | "dark" | "system";
 type Accent = "slate" | "emerald" | "rose" | "amber";
 
 const ACCENTS: Record<Accent, { primary: string; primaryForeground: string }> = {
-  slate: { primary: "oklch(0.208 0.042 265.755)", primaryForeground: "oklch(0.984 0.003 247.858)" },
+  slate: { primary: "oklch(0.78 0.13 82)", primaryForeground: "oklch(0.14 0.02 82)" },
   emerald: { primary: "oklch(0.56 0.145 156)", primaryForeground: "oklch(0.985 0.01 156)" },
   rose: { primary: "oklch(0.58 0.22 22)", primaryForeground: "oklch(0.985 0.01 22)" },
   amber: { primary: "oklch(0.69 0.16 76)", primaryForeground: "oklch(0.16 0.03 76)" },
@@ -18,7 +18,7 @@ const ThemeContext = createContext<{
 } | null>(null);
 
 export function ThemeProvider({ children }: { children: ReactNode }) {
-  const [theme, setThemeState] = useState<Theme>("system");
+  const [theme, setThemeState] = useState<Theme>("dark");
   const [accent, setAccentState] = useState<Accent>("slate");
 
   useEffect(() => {
