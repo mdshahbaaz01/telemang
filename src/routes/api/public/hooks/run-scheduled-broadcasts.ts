@@ -197,6 +197,7 @@ async function executeQueueItem(admin: AdminClient, item: QueueItem) {
       maxDelay: 0,
       accountIds: [item.account_id],
       targets: item.target ? [item.target] : [],
+      dropAuthor: payload.dropAuthor === true,
     });
   }
   if (item.kind === "edit" || item.kind === "deleteMessages") {

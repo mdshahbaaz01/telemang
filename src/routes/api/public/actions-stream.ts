@@ -33,6 +33,7 @@ const forwardSchema = z.object({
   kind: z.literal("forward"),
   source: msgRefSchema,
   targets: z.array(z.string().min(1).max(200)).min(1).max(500),
+  dropAuthor: z.boolean().optional(),
 });
 
 const voteSchema = z.object({
@@ -577,10 +578,11 @@ export const Route = createFileRoute("/api/public/actions-stream")({
                           id: [src.msgId],
                           randomId: [bigInt(Math.floor(Math.random() * 1e18))],
                           toPeer: dest,
+                          dropAuthor: op.dropAuthor === true,
                         }),
                       );
                       ok++;
-                      const m = `Forwarded to ${t}`;
+                      const m = op.dropAuthor ? `Forwarded to ${t} (no tag)` : `Forwarded to ${t}`;
                       send("log", { accountId, level: "success", target: t, message: m });
                       await logDb(accountId, t, "success", m);
                     } catch (e) {

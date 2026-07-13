@@ -410,6 +410,7 @@ function ActionsPageInner() {
   const [emoji, setEmoji] = useState("👍");
   const [customEmojiId, setCustomEmojiId] = useState("");
   const [targets, setTargets] = useState("");
+  const [dropForwardAuthor, setDropForwardAuthor] = useState(false);
   const [options, setOptions] = useState("0");
   const [pollInfo, setPollInfo] = useState<{
     question: string;
@@ -596,7 +597,7 @@ function ActionsPageInner() {
         .map((s) => s.trim())
         .filter(Boolean);
       if (!list.length) return toast.error("Enter at least one destination");
-      op = { kind: "forward", source: src, targets: list };
+      op = { kind: "forward", source: src, targets: list, dropAuthor: dropForwardAuthor };
     } else if (tab === "vote") {
       const opts = pollSelected.length
         ? [...pollSelected].sort((a, b) => a - b)
@@ -1005,7 +1006,7 @@ function ActionsPageInner() {
       await createSchedFn({
         data: {
           scheduledAt: when.toISOString(),
-          op: { kind: "forward", source: src, accountIds: runAccountIds, targets: list },
+          op: { kind: "forward", source: src, accountIds: runAccountIds, targets: list, dropAuthor: dropForwardAuthor },
           minDelay,
           maxDelay,
         },
@@ -1331,6 +1332,20 @@ function ActionsPageInner() {
                     />
                   </div>
                 </div>
+                <label className="flex items-start gap-2 rounded-md border border-border/60 bg-muted/30 p-3 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    className="mt-1 h-4 w-4 accent-primary"
+                    checked={dropForwardAuthor}
+                    onChange={(e) => setDropForwardAuthor(e.target.checked)}
+                  />
+                  <div className="text-sm">
+                    <div className="font-medium">Remove &quot;Forwarded from&quot; tag <span className="text-xs text-muted-foreground">(optional)</span></div>
+                    <div className="text-xs text-muted-foreground">
+                      Send the message as if it originated from your account — no forward header shown. Note: the source channel must allow this (protected content channels ignore the flag and will fail).
+                    </div>
+                  </div>
+                </label>
               </>
             )}
 
