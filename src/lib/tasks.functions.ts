@@ -618,11 +618,25 @@ export const processNextJoin = createServerFn({ method: "POST" })
         let result: { status: "joined" | "requested"; message: string; note: string | null };
 
         if (inviteHash) {
-          // Always attempt ImportChatInvite; CheckChatInvite can return
-          // ChatInviteAlready even when the account isn't actually a member
-          // (stale server state / previously left). USER_ALREADY_PARTICIPANT
-          // is caught below.
+          // Peek FIRST: many +hash invites point to public channels with a
+          // @username — joining via username is more reliable than
+          // ImportChatInvite, which frequently fails with
+          // INVITE_HASH_INVALID/EXPIRED for those targets.
+          let joinedViaPeek = false;
           try {
+            const info: any = await client.invoke(new Api.messages.CheckChatInvite({ hash: inviteHash }));
+            const chat: any = info?.chat ?? info?.chats?.[0];
+            if (info?.className === "ChatInviteAlready" && chat) {
+              result = { status: "joined", message: `Already member of ${chat.username ? "@" + chat.username : chat.title || item.target}`, note: null };
+              joinedViaPeek = true;
+            } else if (chat?.username) {
+              const ent: any = await client.getEntity(chat.username);
+              await client.invoke(new Api.channels.JoinChannel({ channel: ent }));
+              result = { status: "joined", message: `Joined @${chat.username} (public fallback from +${inviteHash.slice(0,8)}…)`, note: null };
+              joinedViaPeek = true;
+            }
+          } catch { /* fall through to ImportChatInvite */ }
+          if (!joinedViaPeek) try {
             await client.invoke(new Api.messages.ImportChatInvite({ hash: inviteHash }));
             result = { status: "joined", message: `Joined ${item.target}`, note: null };
           } catch (impErr) {
@@ -638,28 +652,13 @@ export const processNextJoin = createServerFn({ method: "POST" })
                 note: "waiting for channel approval",
               };
             } else if (/INVITE_HASH_INVALID|INVITE_HASH_EXPIRED|CHANNEL_PRIVATE/i.test(impMsg)) {
-              // Fallback: bot-shared invite link but channel is actually public.
-              // Peek invite → resolve via @username → JoinChannel.
-              try {
-                const info: any = await client.invoke(new Api.messages.CheckChatInvite({ hash: inviteHash }));
-                const chat = info?.chat ?? info?.chats?.[0];
-                if (chat?.username) {
-                  const ent: any = await client.getEntity(chat.username);
-                  await client.invoke(new Api.channels.JoinChannel({ channel: ent }));
-                  result = { status: "joined", message: `Joined @${chat.username} (public fallback)`, note: null };
-                } else if (chat) {
-                  await client.invoke(new Api.channels.JoinChannel({ channel: chat }));
-                  result = { status: "joined", message: `Joined ${chat.title || item.target}`, note: null };
-                } else {
-                  throw impErr;
-                }
-              } catch {
-                throw impErr;
-              }
+              throw impErr;
             } else {
               throw impErr;
             }
           }
+          // TS: result must be defined below
+          if (!result!) throw new Error("join failed");
         } else {
           await client.invoke(new Api.channels.JoinChannel({ channel: target }));
           result = { status: "joined", message: `Joined @${target}`, note: null };
