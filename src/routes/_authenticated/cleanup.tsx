@@ -380,8 +380,12 @@ function CleanupPanelInner({ mode, kind }: { mode: "chats" | "personal"; kind?: 
           "content-type": "application/json",
           authorization: `Bearer ${token}`,
         },
-        body: JSON.stringify({ action, jobs }),
-        // sent below
+        body: JSON.stringify({
+          action,
+          jobs,
+          minDelayMs: Math.max(0, Math.floor(minDelay * 1000)),
+          maxDelayMs: Math.max(0, Math.floor(maxDelay * 1000)),
+        }),
         signal: ac.signal,
       });
       if (!res.ok || !res.body) {
