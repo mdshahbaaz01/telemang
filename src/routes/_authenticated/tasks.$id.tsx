@@ -19,6 +19,7 @@ import { AdminGate } from "@/components/AdminGate";
 import { Trash2, RotateCw } from "lucide-react";
 import { cloneJoinTask } from "@/lib/clone.functions";
 import { useNavigate } from "@tanstack/react-router";
+import { VirtualList } from "@/components/VirtualList";
 
 export const Route = createFileRoute("/_authenticated/tasks/$id")({
   component: () => (
@@ -190,28 +191,28 @@ function TaskDetail() {
 
         <section className="rounded-lg border border-border bg-card p-4">
           <h2 className="mb-2 text-sm font-semibold">Live logs</h2>
-          <div className="max-h-96 overflow-auto rounded bg-muted/40 p-2 font-mono text-xs">
-            {(logsQ.data ?? []).length === 0 ? (
-              <div className="text-muted-foreground">No activity yet</div>
-            ) : (
-              (logsQ.data as LogRow[]).map((l) => (
-                <div
-                  key={l.id}
-                  className={
-                    l.level === "error"
-                      ? "text-destructive"
-                      : l.level === "warn"
-                        ? "text-yellow-500"
-                        : l.level === "success"
-                          ? "text-green-500"
-                          : "text-foreground"
-                  }
-                >
-                  [{new Date(l.created_at).toLocaleTimeString()}] {l.message}
-                </div>
-              ))
+          <VirtualList<LogRow>
+            items={(logsQ.data ?? []) as LogRow[]}
+            estimateSize={20}
+            className="h-96 overflow-auto rounded bg-muted/40 p-2 font-mono text-xs"
+            emptyState={<div className="text-muted-foreground">No activity yet</div>}
+            getKey={(l) => l.id}
+            renderItem={(l) => (
+              <div
+                className={
+                  l.level === "error"
+                    ? "text-destructive"
+                    : l.level === "warn"
+                      ? "text-yellow-500"
+                      : l.level === "success"
+                        ? "text-green-500"
+                        : "text-foreground"
+                }
+              >
+                [{new Date(l.created_at).toLocaleTimeString()}] {l.message}
+              </div>
             )}
-          </div>
+          />
         </section>
 
         <section className="rounded-lg border border-border bg-card p-4">
@@ -229,9 +230,14 @@ function TaskDetail() {
               </Button>
             </div>
           </div>
-          <ul className="max-h-72 space-y-1 overflow-auto text-sm">
-            {items.map((i) => (
-              <li key={i.id} className="flex items-center justify-between border-b border-border/50 py-1">
+          <VirtualList
+            items={items}
+            estimateSize={32}
+            className="h-72 overflow-auto text-sm"
+            emptyState={<div className="text-muted-foreground text-xs">No targets yet</div>}
+            getKey={(i) => i.id}
+            renderItem={(i) => (
+              <div className="flex items-center justify-between border-b border-border/50 py-1">
                 <span>@{i.target}</span>
                 <div className="flex items-center gap-2">
                   <span
@@ -255,9 +261,9 @@ function TaskDetail() {
                     <Trash2 className="h-3.5 w-3.5" />
                   </button>
                 </div>
-              </li>
-            ))}
-          </ul>
+              </div>
+            )}
+          />
         </section>
       </div>
     </main>
