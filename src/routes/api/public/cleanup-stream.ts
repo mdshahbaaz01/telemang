@@ -41,6 +41,8 @@ const bodySchema = z.object({
     )
     .min(1)
     .max(50),
+  minDelayMs: z.number().int().min(0).max(120000).optional(),
+  maxDelayMs: z.number().int().min(0).max(120000).optional(),
 });
 
 function sseEncode(event: string, data: unknown): Uint8Array {
@@ -99,6 +101,11 @@ export const Route = createFileRoute("/api/public/cleanup-stream")({
         }
 
         const abortSignal = request.signal;
+
+        const minD = Math.max(0, body.minDelayMs ?? 350);
+        const maxD = Math.max(minD, body.maxDelayMs ?? minD);
+        const jitterDelay = () =>
+          new Promise<void>((r) => setTimeout(r, minD + Math.floor(Math.random() * (maxD - minD + 1))));
 
         const stream = new ReadableStream<Uint8Array>({
           async start(controller) {
@@ -212,7 +219,7 @@ export const Route = createFileRoute("/api/public/cleanup-stream")({
                       fail++;
                       send("log", { accountId, kind: "error", target: label, message: (err as Error).message || String(err) });
                     }
-                    await new Promise((r) => setTimeout(r, 350));
+                    await jitterDelay();
                   }
                   return;
                 }
@@ -339,7 +346,7 @@ export const Route = createFileRoute("/api/public/cleanup-stream")({
                       message: (err as Error).message || String(err),
                     });
                   }
-                  await new Promise((r) => setTimeout(r, 350));
+                  await jitterDelay();
                 }
               } finally {
                 await client.disconnect().catch(() => {});

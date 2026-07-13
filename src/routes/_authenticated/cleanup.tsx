@@ -309,6 +309,18 @@ function CleanupPanelInner({ mode, kind }: { mode: "chats" | "personal"; kind?: 
         : "leave";
   const [action, setAction] = useState<Action>(defaultAction);
   const [query, setQuery] = useState("");
+  const defaultDelays = useMemo<{ min: number; max: number }>(() => {
+    if (kind === "bots") return { min: 8, max: 20 };
+    if (kind === "users") return { min: 10, max: 25 };
+    if (mode === "personal") return { min: 6, max: 15 };
+    return { min: 2, max: 6 };
+  }, [kind, mode]);
+  const [minDelay, setMinDelay] = useState<number>(defaultDelays.min);
+  const [maxDelay, setMaxDelay] = useState<number>(defaultDelays.max);
+  useEffect(() => {
+    setMinDelay(defaultDelays.min);
+    setMaxDelay(defaultDelays.max);
+  }, [defaultDelays]);
   const [selectedByAcc, setSelectedByAcc] = useState<Record<string, Set<string>>>({});
   const [logs, setLogs] = useState<LogEntry[]>([]);
   const [running, setRunning] = useState(false);
@@ -368,7 +380,12 @@ function CleanupPanelInner({ mode, kind }: { mode: "chats" | "personal"; kind?: 
           "content-type": "application/json",
           authorization: `Bearer ${token}`,
         },
-        body: JSON.stringify({ action, jobs }),
+        body: JSON.stringify({
+          action,
+          jobs,
+          minDelayMs: Math.max(0, Math.floor(minDelay * 1000)),
+          maxDelayMs: Math.max(0, Math.floor(maxDelay * 1000)),
+        }),
         signal: ac.signal,
       });
       if (!res.ok || !res.body) {
@@ -467,7 +484,7 @@ function CleanupPanelInner({ mode, kind }: { mode: "chats" | "personal"; kind?: 
       </div>
 
       {/* Controls */}
-      <div className="grid gap-3 rounded-lg border border-border bg-card p-4 md:grid-cols-3">
+      <div className="grid gap-3 rounded-lg border border-border bg-card p-4 md:grid-cols-4">
         <div>
           <label className="mb-1 block text-xs text-muted-foreground">Action</label>
           {mode === "personal" ? (
@@ -507,10 +524,41 @@ function CleanupPanelInner({ mode, kind }: { mode: "chats" | "personal"; kind?: 
             </Select>
           )}
         </div>
-        <div className="md:col-span-2">
+        <div className="md:col-span-1">
           <label className="mb-1 block text-xs text-muted-foreground">Search</label>
           <Input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Title or @username" />
         </div>
+        <div>
+          <label className="mb-1 block text-xs text-muted-foreground">Min delay (sec)</label>
+          <Input
+            type="number"
+            min={0}
+            max={120}
+            value={minDelay}
+            onChange={(e) => setMinDelay(Math.max(0, Number(e.target.value) || 0))}
+            disabled={running}
+          />
+        </div>
+        <div>
+          <label className="mb-1 block text-xs text-muted-foreground">Max delay (sec)</label>
+          <Input
+            type="number"
+            min={0}
+            max={120}
+            value={maxDelay}
+            onChange={(e) => setMaxDelay(Math.max(0, Number(e.target.value) || 0))}
+            disabled={running}
+          />
+        </div>
+        <p className="text-xs text-muted-foreground md:col-span-4">
+          {kind === "bots"
+            ? "Bots: recommended 8–20s to avoid contacts.Block FloodWait. Block auto-skips if rate-limited (chat still gets deleted)."
+            : kind === "users"
+              ? "Users: recommended 10–25s. Same FloodWait fallback as bots."
+              : mode === "personal"
+                ? "Personal chats: 6–15s is safe for two-sided delete."
+                : "Channels/groups: 2–6s is usually fine for leaves."}
+        </p>
       </div>
 
       {/* Run / Stop */}
