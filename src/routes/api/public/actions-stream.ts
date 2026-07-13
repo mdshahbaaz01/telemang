@@ -1010,7 +1010,7 @@ export const Route = createFileRoute("/api/public/actions-stream")({
                    });
                    await logJoinAttempt(supabase, {
                      userId, accountId, target: rawTarget, source: "bot_flow",
-                     result: out === "flood" ? "flood" : loggedFinalStatus === "requested" ? "requested" : loggedFinalStatus === "joined" ? "joined" : "skipped",
+                     result: out === "flood" ? "flood" : joinFinalStatus === "requested" ? "requested" : loggedFinalStatus === "joined" ? "joined" : "skipped",
                      waitMs, floodWaitSeconds: fw,
                       metadata: {
                         normalized: normalizeTargetKey(rawTarget),
