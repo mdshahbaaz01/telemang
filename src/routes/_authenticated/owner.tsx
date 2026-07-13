@@ -618,23 +618,25 @@ function AccountGroupsSection({ accounts }: { accounts: AccountLite[] }) {
   const label = (a: AccountLite) => a.first_name || a.username || a.phone || a.id;
 
   return (
-    <section className="rounded-lg border border-border bg-card p-4 md:p-6">
-      <div className="mb-4 flex items-center gap-2">
-        <Users className="h-4 w-4 text-muted-foreground" />
-        <h2 className="text-lg font-semibold">Account groups ({q.data?.length ?? 0})</h2>
-        <span className="ml-2 text-xs text-muted-foreground">Reusable tags — pick a whole group in any action</span>
-      </div>
-      <div className="flex gap-2 mb-4">
+    <OwnerCard
+      icon={Users}
+      title="Account groups"
+      count={q.data?.length ?? 0}
+      subtitle="Reusable tags — pick a whole group in any action"
+    >
+      <div className="mb-4 grid grid-cols-[minmax(0,1fr)_auto] items-center gap-2 sm:flex sm:flex-wrap">
         <Input
           value={newName}
           onChange={(e) => setNewName(e.target.value)}
           placeholder="e.g. India warm, Aged 2024, Test5"
-          className="max-w-xs"
+          className="min-w-0 sm:max-w-xs"
+          aria-label="New group name"
         />
         <Button
           size="sm"
           disabled={!newName.trim() || create.isPending}
           onClick={() => create.mutate(newName.trim())}
+          className="shrink-0"
         >
           <Plus className="h-3.5 w-3.5 mr-1" /> Add group
         </Button>
@@ -648,25 +650,32 @@ function AccountGroupsSection({ accounts }: { accounts: AccountLite[] }) {
           const dirty = pendingMembers[g.id] && (pendingMembers[g.id].length !== g.accountIds.length ||
             pendingMembers[g.id].some((id) => !g.accountIds.includes(id)));
           return (
-            <div key={g.id} className="rounded border border-border/70">
-              <div className="flex items-center gap-2 px-3 py-2">
+            <div key={g.id} className="owner-row-card !p-0">
+              <div className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-2 px-3 py-2 sm:flex sm:flex-wrap">
                 <Input
                   defaultValue={g.name}
                   onBlur={(e) => {
                     const v = e.target.value.trim();
                     if (v && v !== g.name) rename.mutate({ id: g.id, name: v });
                   }}
-                  className="max-w-xs h-8 text-sm"
+                  className="min-w-0 h-8 text-sm sm:max-w-xs"
+                  aria-label={`Rename group ${g.name}`}
                 />
-                <span className="text-xs text-muted-foreground">{g.accountIds.length} account(s)</span>
-                <Button size="sm" variant="ghost" onClick={() => setExpanded(isOpen ? null : g.id)}>
-                  {isOpen ? "Hide" : "Members"}
-                </Button>
-                <Button size="sm" variant="ghost" className="text-destructive" onClick={() => {
-                  if (confirm(`Delete group "${g.name}"?`)) del.mutate(g.id);
-                }}>
-                  <Trash2 className="h-3.5 w-3.5" />
-                </Button>
+                <div className="col-span-2 flex items-center gap-2 sm:col-span-1">
+                  <Badge variant="outline" className="owner-badge-muted">{g.accountIds.length} member{g.accountIds.length === 1 ? "" : "s"}</Badge>
+                  <Button size="sm" variant="ghost" onClick={() => setExpanded(isOpen ? null : g.id)} aria-expanded={isOpen}>
+                    {isOpen ? "Hide" : "Members"}
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    className="text-destructive"
+                    aria-label={`Delete group ${g.name}`}
+                    onClick={() => { if (confirm(`Delete group "${g.name}"?`)) del.mutate(g.id); }}
+                  >
+                    <Trash2 className="h-3.5 w-3.5" />
+                  </Button>
+                </div>
               </div>
               {isOpen && (
                 <div className="border-t border-border/50 px-3 py-2 space-y-2">
@@ -717,6 +726,6 @@ function AccountGroupsSection({ accounts }: { accounts: AccountLite[] }) {
           );
         })}
       </div>
-    </section>
+    </OwnerCard>
   );
 }
