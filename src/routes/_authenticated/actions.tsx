@@ -410,6 +410,7 @@ function ActionsPageInner() {
   const [emoji, setEmoji] = useState("👍");
   const [customEmojiId, setCustomEmojiId] = useState("");
   const [targets, setTargets] = useState("");
+  const [dropForwardAuthor, setDropForwardAuthor] = useState(false);
   const [options, setOptions] = useState("0");
   const [pollInfo, setPollInfo] = useState<{
     question: string;
