@@ -33,6 +33,7 @@ const forwardSchema = z.object({
   kind: z.literal("forward"),
   source: msgRefSchema,
   targets: z.array(z.string().min(1).max(200)).min(1).max(500),
+  dropAuthor: z.boolean().optional(),
 });
 
 const voteSchema = z.object({
