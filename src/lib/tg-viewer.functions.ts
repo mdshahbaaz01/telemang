@@ -1,6 +1,7 @@
 import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
+import { parseFloodWait } from "./telegram/errors";
 
 async function assertAdmin(supabase: any) {
   const { data, error } = await supabase.rpc("is_admin");
@@ -472,6 +473,7 @@ export const pressInlineButtonAs = createServerFn({ method: "POST" })
           url: res?.url ? String(res.url) : null,
         };
       } catch (e) {
+        const em = (e as Error).message || String(e);
         const fw = parseFloodWait(e);
         if (fw) {
           const secs = fw.seconds;
