@@ -21,6 +21,7 @@ import { Route as AuthenticatedRecipesRouteImport } from './routes/_authenticate
 import { Route as AuthenticatedProfileUpdaterRouteImport } from './routes/_authenticated/profile-updater'
 import { Route as AuthenticatedOwnerRouteImport } from './routes/_authenticated/owner'
 import { Route as AuthenticatedMediaRouteImport } from './routes/_authenticated/media'
+import { Route as AuthenticatedJoinPacingRouteImport } from './routes/_authenticated/join-pacing'
 import { Route as AuthenticatedDashboardRouteImport } from './routes/_authenticated/dashboard'
 import { Route as AuthenticatedCleanupRouteImport } from './routes/_authenticated/cleanup'
 import { Route as AuthenticatedCaptchaRouteImport } from './routes/_authenticated/captcha'
@@ -102,6 +103,11 @@ const AuthenticatedOwnerRoute = AuthenticatedOwnerRouteImport.update({
 const AuthenticatedMediaRoute = AuthenticatedMediaRouteImport.update({
   id: '/media',
   path: '/media',
+  getParentRoute: () => AuthenticatedRouteRoute,
+} as any)
+const AuthenticatedJoinPacingRoute = AuthenticatedJoinPacingRouteImport.update({
+  id: '/join-pacing',
+  path: '/join-pacing',
   getParentRoute: () => AuthenticatedRouteRoute,
 } as any)
 const AuthenticatedDashboardRoute = AuthenticatedDashboardRouteImport.update({
@@ -232,6 +238,7 @@ export interface FileRoutesByFullPath {
   '/captcha': typeof AuthenticatedCaptchaRoute
   '/cleanup': typeof AuthenticatedCleanupRoute
   '/dashboard': typeof AuthenticatedDashboardRoute
+  '/join-pacing': typeof AuthenticatedJoinPacingRoute
   '/media': typeof AuthenticatedMediaRoute
   '/owner': typeof AuthenticatedOwnerRoute
   '/profile-updater': typeof AuthenticatedProfileUpdaterRoute
@@ -267,6 +274,7 @@ export interface FileRoutesByTo {
   '/captcha': typeof AuthenticatedCaptchaRoute
   '/cleanup': typeof AuthenticatedCleanupRoute
   '/dashboard': typeof AuthenticatedDashboardRoute
+  '/join-pacing': typeof AuthenticatedJoinPacingRoute
   '/media': typeof AuthenticatedMediaRoute
   '/owner': typeof AuthenticatedOwnerRoute
   '/profile-updater': typeof AuthenticatedProfileUpdaterRoute
@@ -304,6 +312,7 @@ export interface FileRoutesById {
   '/_authenticated/captcha': typeof AuthenticatedCaptchaRoute
   '/_authenticated/cleanup': typeof AuthenticatedCleanupRoute
   '/_authenticated/dashboard': typeof AuthenticatedDashboardRoute
+  '/_authenticated/join-pacing': typeof AuthenticatedJoinPacingRoute
   '/_authenticated/media': typeof AuthenticatedMediaRoute
   '/_authenticated/owner': typeof AuthenticatedOwnerRoute
   '/_authenticated/profile-updater': typeof AuthenticatedProfileUpdaterRoute
@@ -341,6 +350,7 @@ export interface FileRouteTypes {
     | '/captcha'
     | '/cleanup'
     | '/dashboard'
+    | '/join-pacing'
     | '/media'
     | '/owner'
     | '/profile-updater'
@@ -376,6 +386,7 @@ export interface FileRouteTypes {
     | '/captcha'
     | '/cleanup'
     | '/dashboard'
+    | '/join-pacing'
     | '/media'
     | '/owner'
     | '/profile-updater'
@@ -412,6 +423,7 @@ export interface FileRouteTypes {
     | '/_authenticated/captcha'
     | '/_authenticated/cleanup'
     | '/_authenticated/dashboard'
+    | '/_authenticated/join-pacing'
     | '/_authenticated/media'
     | '/_authenticated/owner'
     | '/_authenticated/profile-updater'
@@ -531,6 +543,13 @@ declare module '@tanstack/react-router' {
       path: '/media'
       fullPath: '/media'
       preLoaderRoute: typeof AuthenticatedMediaRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
+    '/_authenticated/join-pacing': {
+      id: '/_authenticated/join-pacing'
+      path: '/join-pacing'
+      fullPath: '/join-pacing'
+      preLoaderRoute: typeof AuthenticatedJoinPacingRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
     '/_authenticated/dashboard': {
@@ -702,6 +721,7 @@ interface AuthenticatedRouteRouteChildren {
   AuthenticatedCaptchaRoute: typeof AuthenticatedCaptchaRoute
   AuthenticatedCleanupRoute: typeof AuthenticatedCleanupRoute
   AuthenticatedDashboardRoute: typeof AuthenticatedDashboardRoute
+  AuthenticatedJoinPacingRoute: typeof AuthenticatedJoinPacingRoute
   AuthenticatedMediaRoute: typeof AuthenticatedMediaRoute
   AuthenticatedOwnerRoute: typeof AuthenticatedOwnerRoute
   AuthenticatedProfileUpdaterRoute: typeof AuthenticatedProfileUpdaterRoute
@@ -729,6 +749,7 @@ const AuthenticatedRouteRouteChildren: AuthenticatedRouteRouteChildren = {
   AuthenticatedCaptchaRoute: AuthenticatedCaptchaRoute,
   AuthenticatedCleanupRoute: AuthenticatedCleanupRoute,
   AuthenticatedDashboardRoute: AuthenticatedDashboardRoute,
+  AuthenticatedJoinPacingRoute: AuthenticatedJoinPacingRoute,
   AuthenticatedMediaRoute: AuthenticatedMediaRoute,
   AuthenticatedOwnerRoute: AuthenticatedOwnerRoute,
   AuthenticatedProfileUpdaterRoute: AuthenticatedProfileUpdaterRoute,

@@ -26,6 +26,7 @@ import {
   Check,
   GripVertical,
   ShieldAlert,
+  Gauge,
 } from "lucide-react";
 import {
   DndContext,
@@ -101,6 +102,7 @@ const items: Item[] = [
   { id: "watchlists", title: "Watchlists", to: "/watchlists", icon: Eye },
   { id: "stealth", title: "Stealth", to: "/stealth", icon: EyeOff },
   { id: "captcha", title: "Captcha Solver", to: "/captcha", icon: ShieldAlert },
+  { id: "join-pacing", title: "Join Pacing", to: "/join-pacing", icon: Gauge },
 ];
 
 const ORDER_KEY = "tm.sidebarOrder.v1";
