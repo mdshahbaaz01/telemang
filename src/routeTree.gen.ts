@@ -42,6 +42,7 @@ import { Route as AuthenticatedGroupsIdRouteImport } from './routes/_authenticat
 import { Route as AuthenticatedAccountsIdRouteImport } from './routes/_authenticated/accounts.$id'
 import { Route as ApiPublicMiniappProxySplatRouteImport } from './routes/api/public/miniapp-proxy.$'
 import { Route as ApiPublicHooksRunScheduledBroadcastsRouteImport } from './routes/api/public/hooks/run-scheduled-broadcasts'
+import { Route as ApiPublicHooksRetentionRouteImport } from './routes/api/public/hooks/retention'
 import { Route as ApiPublicHooksResumeStuckRouteImport } from './routes/api/public/hooks/resume-stuck'
 import { Route as ApiPublicHooksDailySummaryRouteImport } from './routes/api/public/hooks/daily-summary'
 import { Route as ApiPublicHooksAutoLeaveRouteImport } from './routes/api/public/hooks/auto-leave'
@@ -213,6 +214,11 @@ const ApiPublicHooksRunScheduledBroadcastsRoute =
     path: '/api/public/hooks/run-scheduled-broadcasts',
     getParentRoute: () => rootRouteImport,
   } as any)
+const ApiPublicHooksRetentionRoute = ApiPublicHooksRetentionRouteImport.update({
+  id: '/api/public/hooks/retention',
+  path: '/api/public/hooks/retention',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const ApiPublicHooksResumeStuckRoute =
   ApiPublicHooksResumeStuckRouteImport.update({
     id: '/api/public/hooks/resume-stuck',
@@ -265,6 +271,7 @@ export interface FileRoutesByFullPath {
   '/api/public/hooks/auto-leave': typeof ApiPublicHooksAutoLeaveRoute
   '/api/public/hooks/daily-summary': typeof ApiPublicHooksDailySummaryRoute
   '/api/public/hooks/resume-stuck': typeof ApiPublicHooksResumeStuckRoute
+  '/api/public/hooks/retention': typeof ApiPublicHooksRetentionRoute
   '/api/public/hooks/run-scheduled-broadcasts': typeof ApiPublicHooksRunScheduledBroadcastsRoute
   '/api/public/miniapp-proxy/$': typeof ApiPublicMiniappProxySplatRoute
 }
@@ -302,6 +309,7 @@ export interface FileRoutesByTo {
   '/api/public/hooks/auto-leave': typeof ApiPublicHooksAutoLeaveRoute
   '/api/public/hooks/daily-summary': typeof ApiPublicHooksDailySummaryRoute
   '/api/public/hooks/resume-stuck': typeof ApiPublicHooksResumeStuckRoute
+  '/api/public/hooks/retention': typeof ApiPublicHooksRetentionRoute
   '/api/public/hooks/run-scheduled-broadcasts': typeof ApiPublicHooksRunScheduledBroadcastsRoute
   '/api/public/miniapp-proxy/$': typeof ApiPublicMiniappProxySplatRoute
 }
@@ -341,6 +349,7 @@ export interface FileRoutesById {
   '/api/public/hooks/auto-leave': typeof ApiPublicHooksAutoLeaveRoute
   '/api/public/hooks/daily-summary': typeof ApiPublicHooksDailySummaryRoute
   '/api/public/hooks/resume-stuck': typeof ApiPublicHooksResumeStuckRoute
+  '/api/public/hooks/retention': typeof ApiPublicHooksRetentionRoute
   '/api/public/hooks/run-scheduled-broadcasts': typeof ApiPublicHooksRunScheduledBroadcastsRoute
   '/api/public/miniapp-proxy/$': typeof ApiPublicMiniappProxySplatRoute
 }
@@ -380,6 +389,7 @@ export interface FileRouteTypes {
     | '/api/public/hooks/auto-leave'
     | '/api/public/hooks/daily-summary'
     | '/api/public/hooks/resume-stuck'
+    | '/api/public/hooks/retention'
     | '/api/public/hooks/run-scheduled-broadcasts'
     | '/api/public/miniapp-proxy/$'
   fileRoutesByTo: FileRoutesByTo
@@ -417,6 +427,7 @@ export interface FileRouteTypes {
     | '/api/public/hooks/auto-leave'
     | '/api/public/hooks/daily-summary'
     | '/api/public/hooks/resume-stuck'
+    | '/api/public/hooks/retention'
     | '/api/public/hooks/run-scheduled-broadcasts'
     | '/api/public/miniapp-proxy/$'
   id:
@@ -455,6 +466,7 @@ export interface FileRouteTypes {
     | '/api/public/hooks/auto-leave'
     | '/api/public/hooks/daily-summary'
     | '/api/public/hooks/resume-stuck'
+    | '/api/public/hooks/retention'
     | '/api/public/hooks/run-scheduled-broadcasts'
     | '/api/public/miniapp-proxy/$'
   fileRoutesById: FileRoutesById
@@ -469,6 +481,7 @@ export interface RootRouteChildren {
   ApiPublicHooksAutoLeaveRoute: typeof ApiPublicHooksAutoLeaveRoute
   ApiPublicHooksDailySummaryRoute: typeof ApiPublicHooksDailySummaryRoute
   ApiPublicHooksResumeStuckRoute: typeof ApiPublicHooksResumeStuckRoute
+  ApiPublicHooksRetentionRoute: typeof ApiPublicHooksRetentionRoute
   ApiPublicHooksRunScheduledBroadcastsRoute: typeof ApiPublicHooksRunScheduledBroadcastsRoute
   ApiPublicMiniappProxySplatRoute: typeof ApiPublicMiniappProxySplatRoute
 }
@@ -706,6 +719,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiPublicHooksRunScheduledBroadcastsRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/api/public/hooks/retention': {
+      id: '/api/public/hooks/retention'
+      path: '/api/public/hooks/retention'
+      fullPath: '/api/public/hooks/retention'
+      preLoaderRoute: typeof ApiPublicHooksRetentionRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/api/public/hooks/resume-stuck': {
       id: '/api/public/hooks/resume-stuck'
       path: '/api/public/hooks/resume-stuck'
@@ -799,6 +819,7 @@ const rootRouteChildren: RootRouteChildren = {
   ApiPublicHooksAutoLeaveRoute: ApiPublicHooksAutoLeaveRoute,
   ApiPublicHooksDailySummaryRoute: ApiPublicHooksDailySummaryRoute,
   ApiPublicHooksResumeStuckRoute: ApiPublicHooksResumeStuckRoute,
+  ApiPublicHooksRetentionRoute: ApiPublicHooksRetentionRoute,
   ApiPublicHooksRunScheduledBroadcastsRoute:
     ApiPublicHooksRunScheduledBroadcastsRoute,
   ApiPublicMiniappProxySplatRoute: ApiPublicMiniappProxySplatRoute,
