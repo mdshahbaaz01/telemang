@@ -352,11 +352,10 @@
 /* Fancy checkbox — adapted from Uiverse (m-muzammal), scaled + noir/gold themed */
 .fancy-checkbox {
   --fc-size: 1.15rem;
-  --fc-shadow: 0 2px 4px;
   width: var(--fc-size);
   height: var(--fc-size);
   background-image: linear-gradient(43deg, #4158d0 0%, #c850c0 46%, #ffcc70 100%);
-  box-shadow: 0 var(--fc-shadow) rgba(0, 0, 0, 0.35);
+  box-shadow: none;
   transition: transform 0.2s ease, background-image 0.2s ease, box-shadow 0.2s ease;
   display: inline-block;
   vertical-align: middle;
@@ -368,7 +367,6 @@
   position: absolute;
   top: 50%; left: 50%;
   width: 70%; height: 70%;
-  background: hsl(var(--background) / 1);
   background-color: #fff;
   border-radius: 9999px;
   transform: translate(-50%, -50%);
@@ -376,31 +374,40 @@
 }
 .fancy-checkbox:hover .fc-inner { width: 55%; height: 55%; }
 .fancy-checkbox[data-state="checked"] {
-  background-image: linear-gradient(43deg, #f7805c 0%, #fb4545 46%, #e1236a 100%);
-  box-shadow: rgba(0, 0, 0, 0.3) 0 8px 18px, rgba(0, 0, 0, 0.22) 0 6px 6px;
+  background-image: linear-gradient(43deg, #4158d0 0%, #c850c0 46%, #ffcc70 100%);
+  box-shadow: none;
 }
 .fancy-checkbox[data-state="checked"] .fc-inner { width: 0; height: 0; opacity: 0; }
 .fancy-checkbox .fc-tick {
   position: absolute;
-  inset: 0;
+  top: 50%; left: 50%;
+  width: 60%; height: 60%;
+  transform: translate(-50%, -55%) rotate(-40deg);
   pointer-events: none;
 }
 .fancy-checkbox .fc-tick-a,
 .fancy-checkbox .fc-tick-b {
   position: absolute;
-  top: 50%; left: 50%;
-  width: 40%; height: 10%;
   background: #fff;
   border-radius: 2px;
   opacity: 0;
-  transform: translate(-50%, -50%);
   transition: transform 0.2s ease, opacity 0.2s ease;
+}
+.fancy-checkbox .fc-tick-a {
+  left: 0; bottom: 0;
+  width: 16%; height: 50%;
+  transform: translateY(-68%);
+}
+.fancy-checkbox .fc-tick-b {
+  left: 0; bottom: 0;
+  width: 100%; height: 16%;
+  transform: translateX(78%);
 }
 .fancy-checkbox[data-state="checked"] .fc-tick-a {
   opacity: 1;
-  transform: translate(-50%, -50%) rotate(45deg);
+  transform: translate(0, 0);
 }
 .fancy-checkbox[data-state="checked"] .fc-tick-b {
   opacity: 1;
-  transform: translate(-50%, -50%) rotate(-45deg);
+  transform: translate(0, 0);
 }
