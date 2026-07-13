@@ -12,6 +12,7 @@ import {
   normalizeTargetKey,
   type PacingConfig,
 } from "@/lib/join-cache.server";
+import { adaptivePacing } from "@/lib/telegram/executor.server";
 
 // A single Telegram message reference: `t.me/<user>/<id>` or `t.me/c/<internalId>/<id>`
 const msgRefSchema = z.object({
@@ -917,6 +918,14 @@ export const Route = createFileRoute("/api/public/actions-stream")({
                  } catch {
                    pacing = { min_delay_ms: 800, max_delay_ms: 1500, batch_size: 5, cache_ttl_hours: 720, lock_ttl_seconds: 90 };
                  }
+                 // Phase 5b: widen pacing if this account has been floodwaited recently.
+                 try {
+                   const adaptive = await adaptivePacing(supabase, accountId, pacing);
+                   if (adaptive.multiplier > 1.1) {
+                     send("log", { accountId, level: "info", target: botLabel, message: `Adaptive pacing ${adaptive.multiplier.toFixed(2)}x (floods=${adaptive.floods}, failures=${adaptive.failures})` });
+                   }
+                   pacing = { ...pacing, min_delay_ms: adaptive.min_delay_ms, max_delay_ms: adaptive.max_delay_ms };
+                 } catch { /* fall back to base pacing */ }
                  try {
                    const cache = await loadCacheForAccount(supabase, accountId);
                    for (const [k, status] of cache.entries()) {

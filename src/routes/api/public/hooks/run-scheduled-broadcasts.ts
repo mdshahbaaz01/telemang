@@ -226,6 +226,8 @@ async function executeQueueItem(admin: AdminClient, item: QueueItem) {
   return executeBroadcast(admin, {
     minDelay: 0,
     maxDelay: 0,
+    runId: item.id,
+    userId: item.user_id,
     rows: [{
       accountId: item.account_id,
       message: payload.message ?? "",
