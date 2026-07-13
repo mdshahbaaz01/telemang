@@ -18,6 +18,7 @@ import { copyWithToast } from "@/lib/clipboard";
 import { useBotFlowCaptchaConfig, CAPTCHA_KIND_OPTIONS, CAPTCHA_PROVIDER_OPTIONS } from "@/lib/bot-flow-captcha-config";
 import { CaptchaErrorBoundary } from "@/components/CaptchaErrorBoundary";
 import { PreJoinCard } from "@/components/PreJoinCard";
+import { CollapsibleSection } from "@/components/CollapsibleSection";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
 
@@ -93,6 +94,7 @@ function BotFlowPage() {
   const [referLink, setReferLink] = useState("");
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [autoJoinRequired, setAutoJoinRequired] = useState(true);
+  const [publicInviteFallback, setPublicInviteFallback] = useState(true);
   const [logs, setLogs] = useState<LogEntry[]>([]);
   const [running, setRunning] = useState(false);
   const [totals, setTotals] = useState<{ ok: number; fail: number } | null>(null);
@@ -226,6 +228,7 @@ function BotFlowPage() {
             steps: ["wait:2"],
             autoJoinRequired,
             maxJoinRounds: 10,
+            publicInviteFallback,
           },
         }),
         signal: ac.signal,
@@ -461,8 +464,7 @@ function BotFlowPage() {
           <BotFlowCaptchaCard />
         </CaptchaErrorBoundary>
 
-        <section className="rounded-lg border border-border bg-card p-4 space-y-4">
-          <h2 className="text-lg font-medium">Run a bot with your referral link</h2>
+        <CollapsibleSection storageKey="botflow.run" title="Run a bot with your referral link">
 
           <div>
             <Label>Bot referral link</Label>
@@ -547,6 +549,14 @@ function BotFlowPage() {
                 onChange={(e) => setAutoJoinRequired(e.target.checked)}
               />
               Auto-join required channels & re-run /start
+            </label>
+            <label className="flex items-center gap-2 self-center text-xs text-muted-foreground" title="If an invite link (t.me/+hash) fails with INVITE_HASH_INVALID / EXPIRED / CHANNEL_PRIVATE, peek it and join the channel by its @username when it is actually public.">
+              <input
+                type="checkbox"
+                checked={publicInviteFallback}
+                onChange={(e) => setPublicInviteFallback(e.target.checked)}
+              />
+              Public invite auto-join fallback
             </label>
             {totals && (
               <div className="ml-auto self-center text-sm text-muted-foreground">
@@ -656,10 +666,9 @@ function BotFlowPage() {
               )}
             </div>
           )}
-        </section>
+        </CollapsibleSection>
 
-        <section className="rounded-lg border border-border bg-card p-4 space-y-4">
-          <h2 className="text-lg font-medium">Extract verify links (per account)</h2>
+        <CollapsibleSection storageKey="botflow.extract" title="Extract verify links (per account)" defaultOpen={false}>
           <p className="text-xs text-muted-foreground">
             Paste a bot link/username. For each selected account, the system will
             <code className="mx-1">/start</code> the bot, find the inline
@@ -777,11 +786,10 @@ function BotFlowPage() {
               })}
             </div>
           )}
-        </section>
+        </CollapsibleSection>
 
         {/* ── Mini App launcher ─────────────────────────────────────── */}
-        <section className="rounded-lg border border-border bg-card p-4 space-y-4">
-          <h2 className="text-lg font-medium">Open Mini App on many accounts</h2>
+        <CollapsibleSection storageKey="botflow.miniapp" title="Open Mini App on many accounts" defaultOpen={false}>
           <p className="text-xs text-muted-foreground">
             Paste a Telegram mini app link (e.g. <code>https://t.me/wormcupbot?startapp=R84L82W</code>).
             Each selected account gets its own live mini app window below — use them independently.
@@ -898,19 +906,17 @@ function BotFlowPage() {
               })}
             </div>
           )}
-        </section>
+        </CollapsibleSection>
 
-        <section className="rounded-lg border border-border bg-card p-4 space-y-4">
-          <h2 className="text-lg font-medium">Verification Link Runner</h2>
+        <CollapsibleSection storageKey="botflow.verifyrunner" title="Verification Link Runner" defaultOpen={false}>
           <p className="text-xs text-muted-foreground">
             Paste the direct mini-app verification URL and open it with one account identity.
           </p>
 
           {/* ── Extract verify links per account ── */}
-        </section>
+        </CollapsibleSection>
 
-        <section className="rounded-lg border border-border bg-card p-4 space-y-4">
-          <h2 className="text-lg font-medium">Verification URL runner (single account)</h2>
+        <CollapsibleSection storageKey="botflow.verifysingle" title="Verification URL runner (single account)" defaultOpen={false}>
           <p className="text-xs text-muted-foreground">
             Paste a direct mini-app verification URL and open it inside a specific account's proxy.
           </p>
@@ -1009,10 +1015,9 @@ function BotFlowPage() {
               />
             </div>
           )}
-        </section>
+        </CollapsibleSection>
 
-        <section className="rounded-lg border border-border bg-card p-4">
-          <div className="mb-2 text-sm font-medium">Live logs</div>
+        <CollapsibleSection storageKey="botflow.logs" title="Live logs">
           <div className="max-h-[50vh] space-y-1 overflow-auto font-mono text-xs">
             {logs.length === 0 && <p className="text-muted-foreground">No activity yet.</p>}
             {logs.map((l, i) => {
@@ -1036,7 +1041,7 @@ function BotFlowPage() {
               );
             })}
           </div>
-        </section>
+        </CollapsibleSection>
       </div>
     </main>
   );

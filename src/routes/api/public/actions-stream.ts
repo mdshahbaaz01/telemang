@@ -91,6 +91,7 @@ const botFlowSchema = z.object({
   maxJoinRounds: z.number().int().min(1).max(15).optional(),
   preJoinChannels: z.array(z.string().min(1).max(300)).max(100).optional(),
   preJoinOnly: z.boolean().optional(),
+  publicInviteFallback: z.boolean().optional(),
 });
 
 const editSchema = z.object({
@@ -852,7 +853,7 @@ export const Route = createFileRoute("/api/public/actions-stream")({
               return { username: s, startParam };
             };
 
-            const runBotFlowForAccount = async (accountId: string, op: { bot: string; startParam?: string; steps: string[]; autoJoinRequired?: boolean; maxJoinRounds?: number; preJoinChannels?: string[]; preJoinOnly?: boolean }) => {
+            const runBotFlowForAccount = async (accountId: string, op: { bot: string; startParam?: string; steps: string[]; autoJoinRequired?: boolean; maxJoinRounds?: number; preJoinChannels?: string[]; preJoinOnly?: boolean; publicInviteFallback?: boolean }) => {
               send("log", { accountId, level: "info", message: "Connecting…" });
               let client;
               try {
@@ -946,18 +947,30 @@ export const Route = createFileRoute("/api/public/actions-stream")({
                      return "skip";
                    }
                    const t0 = Date.now();
+                    // Track which code-path the join actually used so operators
+                    // can see it in structured logs / DB metadata.
+                    let joinPath: "import_invite" | "peek_already" | "peek_username" | "peek_chat" | "direct_username" | "none" = "none";
+                    let joinErrorCode: string | null = null;
+                    const extractErrCode = (s: string): string | null => {
+                      const m = s.match(/\b([A-Z][A-Z0-9_]{2,})\b/);
+                      return m ? m[1] : null;
+                    };
                    const attempt = async (): Promise<"ok" | "flood" | "skip"> => {
                     try {
                       if (target.startsWith("+") || target.toLowerCase().startsWith("joinchat/")) {
                         const hash = target.startsWith("+") ? target.slice(1) : target.split("/")[1];
                         try {
                           await client.invoke(new Api.messages.ImportChatInvite({ hash }));
+                           joinPath = "import_invite";
                           send("log", { accountId, level: "success", target: botLabel, message: `Joined invite +${hash.slice(0, 8)}…` });
                         } catch (impErr) {
                           const im = errorText(impErr);
+                           joinErrorCode = extractErrCode(im);
                           // Fallback: some bot-shared invite links point to PUBLIC channels.
                           // Peek the invite, then join via @username / channel entity directly.
-                          if (/INVITE_HASH_INVALID|INVITE_HASH_EXPIRED|INVITE_REQUEST_SENT|USER_ALREADY_PARTICIPANT|CHANNEL_PRIVATE/i.test(im)) {
+                            const publicFallback = op.publicInviteFallback !== false;
+                            if (publicFallback && /INVITE_HASH_INVALID|INVITE_HASH_EXPIRED|INVITE_REQUEST_SENT|USER_ALREADY_PARTICIPANT|CHANNEL_PRIVATE/i.test(im)) {
+                              send("log", { accountId, level: "info", target: botLabel, message: `ImportChatInvite failed (${joinErrorCode ?? "err"}) — peeking public fallback…` });
                             try {
                               const info: any = await client.invoke(new Api.messages.CheckChatInvite({ hash }));
                               const chat = info?.chat ?? info?.chats?.[0];
@@ -965,33 +978,43 @@ export const Route = createFileRoute("/api/public/actions-stream")({
                                 if (info?.className === "ChatInviteAlready" || info?.className === "ChatInvitePeek") {
                                   // Already a member or peekable — try JoinChannel via the chat entity.
                                   try { await client.invoke(new Api.channels.JoinChannel({ channel: chat })); } catch { /* may already be joined */ }
+                                   joinPath = "peek_already";
                                   send("log", { accountId, level: "success", target: botLabel, message: `Joined via invite peek (${chat.username ? "@" + chat.username : chat.title || "channel"})` });
                                   return "ok";
                                 }
                                 if (chat.username) {
                                   const ent: any = await client.getEntity(chat.username);
                                   await client.invoke(new Api.channels.JoinChannel({ channel: ent }));
+                                   joinPath = "peek_username";
                                   send("log", { accountId, level: "success", target: botLabel, message: `Joined @${chat.username} (public fallback from +${hash.slice(0,8)}…)` });
                                   return "ok";
                                 }
                                 try {
                                   await client.invoke(new Api.channels.JoinChannel({ channel: chat }));
+                                   joinPath = "peek_chat";
                                   send("log", { accountId, level: "success", target: botLabel, message: `Joined ${chat.title || "channel"} via chat fallback` });
                                   return "ok";
                                 } catch { /* fallthrough */ }
                               }
-                            } catch { /* fallthrough — rethrow original */ }
-                          }
+                              } catch (peekErr) {
+                                const pm = errorText(peekErr);
+                                send("log", { accountId, level: "warn", target: botLabel, message: `CheckChatInvite failed: ${extractErrCode(pm) ?? pm}` });
+                              }
+                            } else if (!publicFallback) {
+                              send("log", { accountId, level: "info", target: botLabel, message: `Public invite fallback disabled — not peeking` });
+                            }
                           throw impErr;
                         }
                       } else {
                         const ent: any = await client.getEntity(target);
                         await client.invoke(new Api.channels.JoinChannel({ channel: ent }));
+                         joinPath = "direct_username";
                         send("log", { accountId, level: "success", target: botLabel, message: `Joined @${target}` });
                       }
                       return "ok";
                     } catch (e) {
                       const em = errorText(e);
+                       joinErrorCode = joinErrorCode ?? extractErrCode(em);
                       if (/USER_ALREADY_PARTICIPANT|INVITE_HASH_EXPIRED|CHANNELS_TOO_MUCH|INVITE_REQUEST_SENT/i.test(em)) {
                         send("log", { accountId, level: "info", target: botLabel, message: `${target}: ${em}` });
                         return "skip";
@@ -1007,7 +1030,7 @@ export const Route = createFileRoute("/api/public/actions-stream")({
                         send("log", { accountId, level: "warn", target: botLabel, message: `FloodWait ${p ?? secs}s — account paused` });
                         return "flood";
                       }
-                      send("log", { accountId, level: "warn", target: botLabel, message: `Join ${target}: ${em}` });
+                       send("log", { accountId, level: "warn", target: botLabel, message: `Join ${target} (path=${joinPath}, code=${joinErrorCode ?? "?"}): ${em}` });
                       return "skip";
                     }
                   };
@@ -1030,7 +1053,12 @@ export const Route = createFileRoute("/api/public/actions-stream")({
                      userId, accountId, target: rawTarget, source: "bot_flow",
                      result: out === "ok" ? "joined" : out === "flood" ? "flood" : "skipped",
                      waitMs, floodWaitSeconds: fw,
-                     metadata: { normalized: normalizeTargetKey(rawTarget) },
+                      metadata: {
+                        normalized: normalizeTargetKey(rawTarget),
+                        path: joinPath,
+                        errorCode: joinErrorCode,
+                        publicInviteFallback: op.publicInviteFallback !== false,
+                      },
                    });
                    // Only mark as permanently handled if we actually joined
                    // or the target is unreachable/already-participant. Leave
