@@ -6,6 +6,7 @@ import { AppSidebar } from "@/components/app-sidebar";
 import { ThemeCustomizer } from "@/components/theme-customizer";
 import { Button } from "@/components/ui/button";
 import { ChatViewerHost } from "@/components/chat/ChatViewerDrawer";
+import { FavoritesBar } from "@/components/FavoritesBar";
 
 export const Route = createFileRoute("/_authenticated")({
   ssr: false,
@@ -38,6 +39,7 @@ function AuthenticatedLayout() {
             </div>
           </header>
           <div className="flex-1">
+            <FavoritesBar />
             <Outlet />
           </div>
           <ChatViewerHost />
