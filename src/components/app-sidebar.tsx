@@ -27,6 +27,7 @@ import {
   GripVertical,
   ShieldAlert,
   Gauge,
+  Activity,
 } from "lucide-react";
 import {
   DndContext,
