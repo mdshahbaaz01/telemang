@@ -428,6 +428,142 @@ export type Database = {
           },
         ]
       }
+      join_attempts: {
+        Row: {
+          account_id: string | null
+          created_at: string
+          error: string | null
+          flood_wait_seconds: number | null
+          id: string
+          metadata: Json | null
+          result: string
+          source: string
+          target: string
+          user_id: string
+          wait_ms: number | null
+        }
+        Insert: {
+          account_id?: string | null
+          created_at?: string
+          error?: string | null
+          flood_wait_seconds?: number | null
+          id?: string
+          metadata?: Json | null
+          result: string
+          source: string
+          target: string
+          user_id: string
+          wait_ms?: number | null
+        }
+        Update: {
+          account_id?: string | null
+          created_at?: string
+          error?: string | null
+          flood_wait_seconds?: number | null
+          id?: string
+          metadata?: Json | null
+          result?: string
+          source?: string
+          target?: string
+          user_id?: string
+          wait_ms?: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "join_attempts_account_id_fkey"
+            columns: ["account_id"]
+            isOneToOne: false
+            referencedRelation: "telegram_accounts"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      join_cache: {
+        Row: {
+          account_id: string
+          attempts: number
+          created_at: string
+          expires_at: string | null
+          id: string
+          last_error: string | null
+          locked_at: string | null
+          source: string | null
+          status: string
+          target_key: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          account_id: string
+          attempts?: number
+          created_at?: string
+          expires_at?: string | null
+          id?: string
+          last_error?: string | null
+          locked_at?: string | null
+          source?: string | null
+          status: string
+          target_key: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          account_id?: string
+          attempts?: number
+          created_at?: string
+          expires_at?: string | null
+          id?: string
+          last_error?: string | null
+          locked_at?: string | null
+          source?: string | null
+          status?: string
+          target_key?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "join_cache_account_id_fkey"
+            columns: ["account_id"]
+            isOneToOne: false
+            referencedRelation: "telegram_accounts"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      join_pacing_config: {
+        Row: {
+          batch_size: number
+          cache_ttl_hours: number
+          created_at: string
+          lock_ttl_seconds: number
+          max_delay_ms: number
+          min_delay_ms: number
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          batch_size?: number
+          cache_ttl_hours?: number
+          created_at?: string
+          lock_ttl_seconds?: number
+          max_delay_ms?: number
+          min_delay_ms?: number
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          batch_size?: number
+          cache_ttl_hours?: number
+          created_at?: string
+          lock_ttl_seconds?: number
+          max_delay_ms?: number
+          min_delay_ms?: number
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       join_task_items: {
         Row: {
           error: string | null
