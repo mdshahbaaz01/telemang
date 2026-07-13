@@ -57,6 +57,7 @@ function firstChatFrom(value: any): any | null {
 
 async function verifyMembership(client: any, Api: any, channel: any): Promise<boolean> {
   if (!channel) return false;
+  if (channel.left === false || channel.creator || channel.adminRights) return true;
   try {
     const me = await client.getMe(true);
     const inputChannel = await client.getInputEntity(channel);
