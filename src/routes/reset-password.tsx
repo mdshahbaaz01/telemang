@@ -6,6 +6,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { toast } from "sonner";
 import { Eye, EyeOff, Check, X, Mail } from "lucide-react";
+import { requestPasswordReset } from "@/lib/password-reset.functions";
 
 export const Route = createFileRoute("/reset-password")({
   ssr: false,
@@ -93,12 +94,24 @@ function ResetPasswordPage() {
     }
     setResending(true);
     try {
-      const { error } = await supabase.auth.resetPasswordForEmail(email, {
-        redirectTo: `${window.location.origin}/reset-password`,
+      const res = await requestPasswordReset({
+        data: {
+          email,
+          redirectTo: `${window.location.origin}/reset-password`,
+        },
       });
-      if (error) throw error;
+      if (!res.ok) {
+        const secs = Math.max(1, res.retryAfter);
+        const label =
+          res.reason === "hourly_cap"
+            ? `Hourly limit reached. Try again in ${formatWait(secs)}.`
+            : `Please wait ${formatWait(secs)} before requesting another link.`;
+        toast.error(label);
+        setResendCooldown(secs);
+        return;
+      }
       toast.success("Reset email sent. Check your inbox.");
-      setResendCooldown(45);
+      setResendCooldown(res.retryAfter);
     } catch (err) {
       toast.error((err as Error).message);
     } finally {
