@@ -266,6 +266,29 @@ export const clearScheduledHistory = createServerFn({ method: "POST" })
     return { deleted: ids.length };
   });
 
+export const deleteScheduledBroadcast = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((d: unknown) => z.object({ id: z.string().uuid() }).parse(d))
+  .handler(async ({ data, context }) => {
+    // Refuse to delete a running schedule to avoid orphaning in-flight work.
+    const { data: row, error: selErr } = await context.supabase
+      .from("scheduled_broadcasts")
+      .select("status")
+      .eq("id", data.id)
+      .maybeSingle();
+    if (selErr) throw new Error(selErr.message);
+    if (!row) return { ok: true };
+    if (row.status === "running") {
+      throw new Error("Cannot delete a running schedule. Wait for it to finish.");
+    }
+    const { error } = await context.supabase
+      .from("scheduled_broadcasts")
+      .delete()
+      .eq("id", data.id);
+    if (error) throw new Error(error.message);
+    return { ok: true };
+  });
+
 export const getScheduleReport = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .inputValidator((d: unknown) => z.object({ id: z.string().uuid() }).parse(d))
