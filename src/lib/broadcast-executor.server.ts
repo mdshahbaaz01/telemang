@@ -3,6 +3,7 @@ import type { Database } from "@/integrations/supabase/types";
 import { resolveTargetEntity } from "./telegram-target-resolver.server";
 import { runWithLimit } from "./p-limit";
 import type { SpintaxVars } from "./spintax";
+import { withIdempotency, adaptivePacing, idemKey } from "./telegram/executor.server";
 
 export type Attachment = { path: string; filename: string; mimeType?: string; isVoice?: boolean };
 
@@ -20,6 +21,10 @@ export type BroadcastExecInput = {
   minDelay: number;
   maxDelay: number;
   concurrency?: number;
+  /** Optional stable run identifier — enables idempotent per-target sends. */
+  runId?: string;
+  /** Owner user id — required when runId is set. */
+  userId?: string;
 };
 
 export type BroadcastExecResult = {
