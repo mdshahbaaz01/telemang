@@ -31,6 +31,7 @@ import { Route as AuthenticatedBulkPlusRouteImport } from './routes/_authenticat
 import { Route as AuthenticatedBulkMixRouteImport } from './routes/_authenticated/bulk-mix'
 import { Route as AuthenticatedBotParserRouteImport } from './routes/_authenticated/bot-parser'
 import { Route as AuthenticatedBotFlowRouteImport } from './routes/_authenticated/bot-flow'
+import { Route as AuthenticatedAnalyticsRouteImport } from './routes/_authenticated/analytics'
 import { Route as AuthenticatedAlertsRouteImport } from './routes/_authenticated/alerts'
 import { Route as AuthenticatedActionsRouteImport } from './routes/_authenticated/actions'
 import { Route as ApiPublicCleanupStreamRouteImport } from './routes/api/public/cleanup-stream'
@@ -157,6 +158,11 @@ const AuthenticatedBotFlowRoute = AuthenticatedBotFlowRouteImport.update({
   path: '/bot-flow',
   getParentRoute: () => AuthenticatedRouteRoute,
 } as any)
+const AuthenticatedAnalyticsRoute = AuthenticatedAnalyticsRouteImport.update({
+  id: '/analytics',
+  path: '/analytics',
+  getParentRoute: () => AuthenticatedRouteRoute,
+} as any)
 const AuthenticatedAlertsRoute = AuthenticatedAlertsRouteImport.update({
   id: '/alerts',
   path: '/alerts',
@@ -242,6 +248,7 @@ export interface FileRoutesByFullPath {
   '/auth': typeof AuthRoute
   '/actions': typeof AuthenticatedActionsRoute
   '/alerts': typeof AuthenticatedAlertsRoute
+  '/analytics': typeof AuthenticatedAnalyticsRoute
   '/bot-flow': typeof AuthenticatedBotFlowRoute
   '/bot-parser': typeof AuthenticatedBotParserRoute
   '/bulk-mix': typeof AuthenticatedBulkMixRoute
@@ -280,6 +287,7 @@ export interface FileRoutesByTo {
   '/auth': typeof AuthRoute
   '/actions': typeof AuthenticatedActionsRoute
   '/alerts': typeof AuthenticatedAlertsRoute
+  '/analytics': typeof AuthenticatedAnalyticsRoute
   '/bot-flow': typeof AuthenticatedBotFlowRoute
   '/bot-parser': typeof AuthenticatedBotParserRoute
   '/bulk-mix': typeof AuthenticatedBulkMixRoute
@@ -320,6 +328,7 @@ export interface FileRoutesById {
   '/auth': typeof AuthRoute
   '/_authenticated/actions': typeof AuthenticatedActionsRoute
   '/_authenticated/alerts': typeof AuthenticatedAlertsRoute
+  '/_authenticated/analytics': typeof AuthenticatedAnalyticsRoute
   '/_authenticated/bot-flow': typeof AuthenticatedBotFlowRoute
   '/_authenticated/bot-parser': typeof AuthenticatedBotParserRoute
   '/_authenticated/bulk-mix': typeof AuthenticatedBulkMixRoute
@@ -360,6 +369,7 @@ export interface FileRouteTypes {
     | '/auth'
     | '/actions'
     | '/alerts'
+    | '/analytics'
     | '/bot-flow'
     | '/bot-parser'
     | '/bulk-mix'
@@ -398,6 +408,7 @@ export interface FileRouteTypes {
     | '/auth'
     | '/actions'
     | '/alerts'
+    | '/analytics'
     | '/bot-flow'
     | '/bot-parser'
     | '/bulk-mix'
@@ -437,6 +448,7 @@ export interface FileRouteTypes {
     | '/auth'
     | '/_authenticated/actions'
     | '/_authenticated/alerts'
+    | '/_authenticated/analytics'
     | '/_authenticated/bot-flow'
     | '/_authenticated/bot-parser'
     | '/_authenticated/bulk-mix'
@@ -642,6 +654,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedBotFlowRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
+    '/_authenticated/analytics': {
+      id: '/_authenticated/analytics'
+      path: '/analytics'
+      fullPath: '/analytics'
+      preLoaderRoute: typeof AuthenticatedAnalyticsRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
     '/_authenticated/alerts': {
       id: '/_authenticated/alerts'
       path: '/alerts'
@@ -753,6 +772,7 @@ declare module '@tanstack/react-router' {
 interface AuthenticatedRouteRouteChildren {
   AuthenticatedActionsRoute: typeof AuthenticatedActionsRoute
   AuthenticatedAlertsRoute: typeof AuthenticatedAlertsRoute
+  AuthenticatedAnalyticsRoute: typeof AuthenticatedAnalyticsRoute
   AuthenticatedBotFlowRoute: typeof AuthenticatedBotFlowRoute
   AuthenticatedBotParserRoute: typeof AuthenticatedBotParserRoute
   AuthenticatedBulkMixRoute: typeof AuthenticatedBulkMixRoute
@@ -781,6 +801,7 @@ interface AuthenticatedRouteRouteChildren {
 const AuthenticatedRouteRouteChildren: AuthenticatedRouteRouteChildren = {
   AuthenticatedActionsRoute: AuthenticatedActionsRoute,
   AuthenticatedAlertsRoute: AuthenticatedAlertsRoute,
+  AuthenticatedAnalyticsRoute: AuthenticatedAnalyticsRoute,
   AuthenticatedBotFlowRoute: AuthenticatedBotFlowRoute,
   AuthenticatedBotParserRoute: AuthenticatedBotParserRoute,
   AuthenticatedBulkMixRoute: AuthenticatedBulkMixRoute,
