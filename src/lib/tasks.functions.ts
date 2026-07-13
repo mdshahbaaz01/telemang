@@ -972,7 +972,23 @@ export const processBatchJoin = createServerFn({ method: "POST" })
         let result: { status: "joined" | "requested"; message: string; note: string | null };
 
         if (inviteHash) {
+          // Peek first — public channels behind +hash invites join more
+          // reliably via @username than via ImportChatInvite.
+          let joinedViaPeek = false;
           try {
+            const info: any = await client.invoke(new Api.messages.CheckChatInvite({ hash: inviteHash }));
+            const chat: any = info?.chat ?? info?.chats?.[0];
+            if (info?.className === "ChatInviteAlready" && chat) {
+              result = { status: "joined", message: `Already member of ${chat.username ? "@" + chat.username : chat.title || item.target}`, note: null };
+              joinedViaPeek = true;
+            } else if (chat?.username) {
+              const ent: any = await client.getEntity(chat.username);
+              await client.invoke(new Api.channels.JoinChannel({ channel: ent }));
+              result = { status: "joined", message: `Joined @${chat.username} (public fallback from +${inviteHash.slice(0,8)}…)`, note: null };
+              joinedViaPeek = true;
+            }
+          } catch { /* fall through */ }
+          if (!joinedViaPeek) try {
             await client.invoke(new Api.messages.ImportChatInvite({ hash: inviteHash }));
             result = { status: "joined", message: `Joined ${item.target}`, note: null };
           } catch (impErr) {
@@ -987,27 +1003,11 @@ export const processBatchJoin = createServerFn({ method: "POST" })
                 message: `Join request sent for ${item.target}`,
                 note: "waiting for channel approval",
               };
-            } else if (/INVITE_HASH_INVALID|INVITE_HASH_EXPIRED|CHANNEL_PRIVATE/i.test(impMsg)) {
-              try {
-                const info: any = await client.invoke(new Api.messages.CheckChatInvite({ hash: inviteHash }));
-                const chat = info?.chat ?? info?.chats?.[0];
-                if (chat?.username) {
-                  const ent: any = await client.getEntity(chat.username);
-                  await client.invoke(new Api.channels.JoinChannel({ channel: ent }));
-                  result = { status: "joined", message: `Joined @${chat.username} (public fallback)`, note: null };
-                } else if (chat) {
-                  await client.invoke(new Api.channels.JoinChannel({ channel: chat }));
-                  result = { status: "joined", message: `Joined ${chat.title || item.target}`, note: null };
-                } else {
-                  throw impErr;
-                }
-              } catch {
-                throw impErr;
-              }
             } else {
               throw impErr;
             }
           }
+          if (!result!) throw new Error("join failed");
         } else {
           await client.invoke(new Api.channels.JoinChannel({ channel: target }));
           result = { status: "joined", message: `Joined @${target}`, note: null };
