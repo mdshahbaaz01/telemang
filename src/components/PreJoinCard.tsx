@@ -75,6 +75,8 @@ export function PreJoinCard({ accounts }: { accounts: Account[] }) {
   const [publicInviteFallback, setPublicInviteFallback] = useState(true);
   const [logs, setLogs] = useState<PreJoinLog[]>([]);
   const [totals, setTotals] = useState<{ ok: number; fail: number } | null>(null);
+  const [statuses, setStatuses] = useState<ChMap>({});
+  const [statusOpen, setStatusOpen] = useState(true);
   const [history, setHistory] = useState<PreJoinHistoryEntry[]>(() => loadHistory());
   const abortRef = useRef<AbortController | null>(null);
   const currentEntryRef = useRef<PreJoinHistoryEntry | null>(null);
@@ -95,6 +97,16 @@ export function PreJoinCard({ accounts }: { accounts: Account[] }) {
     const entry: PreJoinLog = { ...l, ts: Date.now() };
     setLogs((prev) => [entry, ...prev].slice(0, 500));
     if (currentEntryRef.current) currentEntryRef.current.logs.unshift(entry);
+  };
+
+  const updateStatus = (channel: string, accountId: string, status: ChStatus, message?: string) => {
+    const key = normalizeTarget(channel);
+    if (!key) return;
+    setStatuses((prev) => {
+      const row = { ...(prev[key] || {}) };
+      row[accountId] = { status, ts: Date.now(), message };
+      return { ...prev, [key]: row };
+    });
   };
 
   const commitCurrent = (patch: Partial<PreJoinHistoryEntry>) => {
@@ -118,6 +130,17 @@ export function PreJoinCard({ accounts }: { accounts: Account[] }) {
 
     setLogs([]);
     setTotals(null);
+    // seed pending matrix
+    {
+      const seed: ChMap = {};
+      const ts = Date.now();
+      for (const ch of channels) {
+        const key = normalizeTarget(ch);
+        seed[key] = {};
+        for (const id of ids) seed[key][id] = { status: "pending", ts };
+      }
+      setStatuses(seed);
+    }
     setRunning(true);
     const entry: PreJoinHistoryEntry = {
       id: `${Date.now()}`,
@@ -177,7 +200,12 @@ export function PreJoinCard({ accounts }: { accounts: Account[] }) {
           let data: any = {};
           try { data = JSON.parse(dataLine.slice(6)); } catch {}
           if (event === "start") addLog({ level: "info", message: "Pre-join started" });
-          else if (event === "log") addLog({ accountId: data.accountId, level: data.level ?? "info", target: data.target, message: data.message ?? "" });
+          else if (event === "log") {
+            addLog({ accountId: data.accountId, level: data.level ?? "info", target: data.target, message: data.message ?? "" });
+            if (data.target && data.accountId) {
+              updateStatus(data.target, data.accountId, classify(data.level ?? "info", data.message ?? ""), data.message);
+            }
+          }
           else if (event === "done") {
             ok += Number(data.ok ?? 0);
             fail += Number(data.fail ?? 0);
