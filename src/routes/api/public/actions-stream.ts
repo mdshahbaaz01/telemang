@@ -1019,7 +1019,7 @@ export const Route = createFileRoute("/api/public/actions-stream")({
                    // Only mark as permanently handled if we actually joined
                    // or the target is unreachable/already-participant. Leave
                    // transient failures retryable in later rounds.
-                   if (out === "ok" || out === "skip") alreadyJoined.add(key);
+                   if (out === "ok" || out === "requested" || out === "skip") alreadyJoined.add(key);
                    // Human-like pacing between joins from configured pacing.
                    await new Promise((r) => setTimeout(r, jitteredDelayMs(pacing)));
                   return out;
@@ -1165,7 +1165,7 @@ export const Route = createFileRoute("/api/public/actions-stream")({
                       if (stopRequested) { emitJoinStop("user_stopped", { round: round + 1 }); break; }
                       const r = await smartJoin(t);
                       if (r === "ok") { joinedThisRound++; progressed = true; }
-                      if (r === "skip") { progressed = true; skippedThisRound++; }
+                      if (r === "requested" || r === "skip") { progressed = true; skippedThisRound++; }
                       if (r === "flood") floodedThisRound++;
                       if (r === "stop") { emitJoinStop("user_stopped", { round: round + 1 }); break; }
                       emitJoinProgress({ round: round + 1, target: t, lastResult: r });
