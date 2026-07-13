@@ -78,7 +78,8 @@ export const peekPasswordResetCooldown = createServerFn({ method: "POST" })
       .select("created_at")
       .eq("email_hash", emailHash)
       .gte("created_at", new Date(Date.now() - 60 * 60 * 1000).toISOString())
-      .order("created_at", { ascending: false });
+      .order("created_at", { ascending: false })
+      .limit(10);
 
     if (error) {
       console.error("[password-reset] peek failed", error.message);
