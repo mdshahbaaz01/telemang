@@ -1005,10 +1005,9 @@ function BotFlowPage() {
               />
             </div>
           )}
-        </section>
+        </CollapsibleSection>
 
-        <section className="rounded-lg border border-border bg-card p-4">
-          <div className="mb-2 text-sm font-medium">Live logs</div>
+        <CollapsibleSection storageKey="botflow.logs" title="Live logs">
           <div className="max-h-[50vh] space-y-1 overflow-auto font-mono text-xs">
             {logs.length === 0 && <p className="text-muted-foreground">No activity yet.</p>}
             {logs.map((l, i) => {
@@ -1032,7 +1031,7 @@ function BotFlowPage() {
               );
             })}
           </div>
-        </section>
+        </CollapsibleSection>
       </div>
     </main>
   );
