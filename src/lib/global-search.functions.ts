@@ -3,6 +3,45 @@ import { z } from "zod";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
 import { runWithLimit } from "./p-limit";
 
+type AccountRow = {
+  id: string;
+  first_name: string | null;
+  username: string | null;
+  phone: string | null;
+};
+
+type TgPeer = {
+  id?: number | string | bigint;
+  className?: string;
+  title?: string;
+  firstName?: string;
+  lastName?: string;
+  username?: string;
+  megagroup?: boolean;
+  broadcast?: boolean;
+};
+
+type TgMessage = {
+  id?: number;
+  message?: string;
+  peerId?: {
+    channelId?: number | string | bigint;
+    chatId?: number | string | bigint;
+    userId?: number | string | bigint;
+  };
+};
+
+type SearchGlobalResult = {
+  chats?: TgPeer[];
+  users?: TgPeer[];
+  messages?: TgMessage[];
+};
+
+type ContactsSearchResult = {
+  chats?: TgPeer[];
+  users?: TgPeer[];
+};
+
 export type SearchHit = {
   accountId: string;
   accountName: string;
@@ -36,7 +75,10 @@ export const globalSearch = createServerFn({ method: "POST" })
       .select("id, first_name, username, phone")
       .in("id", data.accountIds);
     const nameFor = new Map<string, string>(
-      (accs ?? []).map((a: any) => [a.id, a.first_name || a.username || a.phone || a.id.slice(0, 6)]),
+      ((accs ?? []) as AccountRow[]).map((a) => [
+        a.id,
+        a.first_name || a.username || a.phone || a.id.slice(0, 6),
+      ]),
     );
 
     const hits: SearchHit[] = [];
@@ -53,7 +95,7 @@ export const globalSearch = createServerFn({ method: "POST" })
       try {
         const accountName = nameFor.get(accountId) ?? accountId.slice(0, 6);
         if (data.scope === "messages") {
-          const res: any = await client.invoke(
+          const res = (await client.invoke(
             new Api.messages.SearchGlobal({
               q: data.query,
               filter: new Api.InputMessagesFilterEmpty(),
@@ -64,11 +106,11 @@ export const globalSearch = createServerFn({ method: "POST" })
               offsetId: 0,
               limit: 30,
             }),
-          );
+          )) as unknown as SearchGlobalResult;
           const chats = [...(res?.chats ?? []), ...(res?.users ?? [])];
           for (const m of res?.messages ?? []) {
             const peerId = m?.peerId?.channelId ?? m?.peerId?.chatId ?? m?.peerId?.userId;
-            const chat = chats.find((c: any) => String(c?.id) === String(peerId));
+            const chat = chats.find((c) => String(c?.id) === String(peerId));
             const title = chat?.title || chat?.firstName || chat?.username || "Unknown";
             const chatKey = chat?.username
               ? chat.username
@@ -86,9 +128,9 @@ export const globalSearch = createServerFn({ method: "POST" })
             });
           }
         } else {
-          const res: any = await client.invoke(
+          const res = (await client.invoke(
             new Api.contacts.Search({ q: data.query, limit: 30 }),
-          );
+          )) as unknown as ContactsSearchResult;
           const usersRes = [...(res?.users ?? [])];
           const chatsRes = [...(res?.chats ?? [])];
           if (data.scope === "users") {
