@@ -48,6 +48,7 @@ export function PreJoinCard({ accounts }: { accounts: Account[] }) {
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [selectorOpen, setSelectorOpen] = useState(false);
   const [running, setRunning] = useState(false);
+  const [publicInviteFallback, setPublicInviteFallback] = useState(true);
   const [logs, setLogs] = useState<PreJoinLog[]>([]);
   const [totals, setTotals] = useState<{ ok: number; fail: number } | null>(null);
   const [history, setHistory] = useState<PreJoinHistoryEntry[]>(() => loadHistory());
@@ -124,6 +125,7 @@ export function PreJoinCard({ accounts }: { accounts: Account[] }) {
             preJoinOnly: true,
             autoJoinRequired: false,
             preJoinChannels: channels,
+            publicInviteFallback,
           },
         }),
         signal: ac.signal,
@@ -264,6 +266,14 @@ export function PreJoinCard({ accounts }: { accounts: Account[] }) {
             <Button variant="destructive" onClick={stop} disabled={!running}>
               <Square className="mr-1 h-4 w-4" /> Stop
             </Button>
+            <label className="flex items-center gap-2 self-center text-xs text-muted-foreground" title="If a t.me/+hash invite fails but the channel is actually public, peek it and join via @username.">
+              <input
+                type="checkbox"
+                checked={publicInviteFallback}
+                onChange={(e) => setPublicInviteFallback(e.target.checked)}
+              />
+              Public invite fallback
+            </label>
             {totals && (
               <div className="ml-auto self-center text-sm text-muted-foreground">
                 ok {totals.ok} · fail {totals.fail}
