@@ -853,7 +853,7 @@ export const Route = createFileRoute("/api/public/actions-stream")({
               return { username: s, startParam };
             };
 
-            const runBotFlowForAccount = async (accountId: string, op: { bot: string; startParam?: string; steps: string[]; autoJoinRequired?: boolean; maxJoinRounds?: number; preJoinChannels?: string[]; preJoinOnly?: boolean }) => {
+            const runBotFlowForAccount = async (accountId: string, op: { bot: string; startParam?: string; steps: string[]; autoJoinRequired?: boolean; maxJoinRounds?: number; preJoinChannels?: string[]; preJoinOnly?: boolean; publicInviteFallback?: boolean }) => {
               send("log", { accountId, level: "info", message: "Connecting…" });
               let client;
               try {
