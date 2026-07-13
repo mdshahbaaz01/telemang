@@ -1,8 +1,13 @@
 import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
+import type { SupabaseClient } from "@supabase/supabase-js";
+import type { Database } from "@/integrations/supabase/types";
 
-async function assertAdmin(ctx: { supabase: any; userId: string }) {
+async function assertAdmin(ctx: {
+  supabase: SupabaseClient<Database>;
+  userId: string;
+}) {
   const { data, error } = await ctx.supabase.rpc("is_admin");
   if (error) throw new Error(error.message);
   if (!data) throw new Error("Forbidden: admin only");
