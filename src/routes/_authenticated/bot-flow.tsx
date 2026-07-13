@@ -17,6 +17,7 @@ import { AccountIdPaste } from "@/components/AccountIdPaste";
 import { copyWithToast } from "@/lib/clipboard";
 import { useBotFlowCaptchaConfig, CAPTCHA_KIND_OPTIONS, CAPTCHA_PROVIDER_OPTIONS } from "@/lib/bot-flow-captcha-config";
 import { CaptchaErrorBoundary } from "@/components/CaptchaErrorBoundary";
+import { PreJoinCard } from "@/components/PreJoinCard";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
 
@@ -92,7 +93,6 @@ function BotFlowPage() {
   const [referLink, setReferLink] = useState("");
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [autoJoinRequired, setAutoJoinRequired] = useState(true);
-  const [preJoinText, setPreJoinText] = useState("");
   const [logs, setLogs] = useState<LogEntry[]>([]);
   const [running, setRunning] = useState(false);
   const [totals, setTotals] = useState<{ ok: number; fail: number } | null>(null);
@@ -226,11 +226,6 @@ function BotFlowPage() {
             steps: ["wait:2"],
             autoJoinRequired,
             maxJoinRounds: 10,
-            preJoinChannels: preJoinText
-              .split(/[\s,]+/)
-              .map((s) => s.trim())
-              .filter(Boolean)
-              .slice(0, 100),
           },
         }),
         signal: ac.signal,
