@@ -637,6 +637,25 @@ export const processNextJoin = createServerFn({ method: "POST" })
                 message: `Join request sent for ${item.target}`,
                 note: "waiting for channel approval",
               };
+            } else if (/INVITE_HASH_INVALID|INVITE_HASH_EXPIRED|CHANNEL_PRIVATE/i.test(impMsg)) {
+              // Fallback: bot-shared invite link but channel is actually public.
+              // Peek invite → resolve via @username → JoinChannel.
+              try {
+                const info: any = await client.invoke(new Api.messages.CheckChatInvite({ hash: inviteHash }));
+                const chat = info?.chat ?? info?.chats?.[0];
+                if (chat?.username) {
+                  const ent: any = await client.getEntity(chat.username);
+                  await client.invoke(new Api.channels.JoinChannel({ channel: ent }));
+                  result = { status: "joined", message: `Joined @${chat.username} (public fallback)`, note: null };
+                } else if (chat) {
+                  await client.invoke(new Api.channels.JoinChannel({ channel: chat }));
+                  result = { status: "joined", message: `Joined ${chat.title || item.target}`, note: null };
+                } else {
+                  throw impErr;
+                }
+              } catch {
+                throw impErr;
+              }
             } else {
               throw impErr;
             }
