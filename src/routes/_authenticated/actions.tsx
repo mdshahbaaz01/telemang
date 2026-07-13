@@ -2290,6 +2290,25 @@ function ActionsPageInner() {
                             Cancel
                           </button>
                         )}
+                        {s.status !== "running" && (
+                          <button
+                            type="button"
+                            className="text-xs text-destructive underline"
+                            title="Delete this schedule from history"
+                            onClick={async () => {
+                              if (!confirm(`Delete this ${s.status} schedule permanently?`)) return;
+                              try {
+                                await deleteSchedFn({ data: { id: s.id } });
+                                toast.success("Deleted");
+                                await qc.invalidateQueries({ queryKey: ["scheduled-broadcasts"] });
+                              } catch (e) {
+                                toast.error((e as Error).message);
+                              }
+                            }}
+                          >
+                            Delete
+                          </button>
+                        )}
                       </div>
                     );
                   })}
