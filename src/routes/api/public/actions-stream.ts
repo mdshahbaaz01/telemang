@@ -308,6 +308,7 @@ export const Route = createFileRoute("/api/public/actions-stream")({
 
             const { openClientForAccount } = await import("@/lib/cleanup.server");
             const { resolveTargetEntity } = await import("@/lib/telegram-target-resolver.server");
+            const { joinTelegramTargetVerified, extractTelegramErrorCode } = await import("@/lib/telegram-join-helper.server");
             const { Api } = await import("telegram");
             const { CustomFile } = await import("telegram/client/uploads");
 
@@ -949,71 +950,24 @@ export const Route = createFileRoute("/api/public/actions-stream")({
                    const t0 = Date.now();
                     // Track which code-path the join actually used so operators
                     // can see it in structured logs / DB metadata.
-                    let joinPath: "import_invite" | "peek_already" | "peek_username" | "peek_chat" | "direct_username" | "none" = "none";
+                     let joinPath: "import_invite" | "import_username" | "peek_already" | "peek_username" | "peek_chat" | "peek_search_username" | "direct_username" | "none" = "none";
                     let joinErrorCode: string | null = null;
                     const extractErrCode = (s: string): string | null => {
-                      const m = s.match(/\b([A-Z][A-Z0-9_]{2,})\b/);
-                      return m ? m[1] : null;
+                       return extractTelegramErrorCode(s);
                     };
                    const attempt = async (): Promise<"ok" | "flood" | "skip"> => {
                     try {
-                      if (target.startsWith("+") || target.toLowerCase().startsWith("joinchat/")) {
-                        const hash = target.startsWith("+") ? target.slice(1) : target.split("/")[1];
-                        // Peek FIRST — many bot-shared +hash invites actually point to PUBLIC
-                        // channels that already have a @username. Joining via the username is
-                        // more reliable than ImportChatInvite (which often fails with
-                        // INVITE_HASH_EXPIRED / INVITE_HASH_INVALID for public targets).
-                        const publicFallback = op.publicInviteFallback !== false;
-                        if (publicFallback) {
-                          try {
-                            const info: any = await client.invoke(new Api.messages.CheckChatInvite({ hash }));
-                            const chat: any = info?.chat ?? info?.chats?.[0];
-                            const cn: string = info?.className || "";
-                            if (cn === "ChatInviteAlready" && chat) {
-                              joinPath = "peek_already";
-                              send("log", { accountId, level: "info", target: botLabel, message: `Already member of ${chat.username ? "@" + chat.username : chat.title || "channel"} (peek)` });
-                              return "skip";
-                            }
-                            if (chat?.username) {
-                              const ent: any = await client.getEntity(chat.username);
-                              await client.invoke(new Api.channels.JoinChannel({ channel: ent }));
-                              joinPath = "peek_username";
-                              send("log", { accountId, level: "success", target: botLabel, message: `Joined @${chat.username} (public fallback from +${hash.slice(0,8)}…)` });
-                              return "ok";
-                            }
-                            if (chat && (cn === "ChatInvitePeek")) {
-                              try {
-                                await client.invoke(new Api.channels.JoinChannel({ channel: chat }));
-                                joinPath = "peek_chat";
-                                send("log", { accountId, level: "success", target: botLabel, message: `Joined ${chat.title || "channel"} via peek` });
-                                return "ok";
-                              } catch { /* fallthrough to ImportChatInvite */ }
-                            }
-                          } catch (peekErr) {
-                            const pm = errorText(peekErr);
-                            joinErrorCode = extractErrCode(pm);
-                            send("log", { accountId, level: "info", target: botLabel, message: `Peek failed (${joinErrorCode ?? "err"}), trying ImportChatInvite…` });
-                          }
-                        }
-                        try {
-                          await client.invoke(new Api.messages.ImportChatInvite({ hash }));
-                           joinPath = "import_invite";
-                          send("log", { accountId, level: "success", target: botLabel, message: `Joined invite +${hash.slice(0, 8)}…` });
-                        } catch (impErr) {
-                          const im = errorText(impErr);
-                           joinErrorCode = extractErrCode(im);
-                            if (!publicFallback) {
-                              send("log", { accountId, level: "info", target: botLabel, message: `ImportChatInvite failed (${joinErrorCode ?? "err"}) — public fallback disabled` });
-                            }
-                          throw impErr;
-                        }
-                      } else {
-                        const ent: any = await client.getEntity(target);
-                        await client.invoke(new Api.channels.JoinChannel({ channel: ent }));
-                         joinPath = "direct_username";
-                        send("log", { accountId, level: "success", target: botLabel, message: `Joined @${target}` });
-                      }
-                      return "ok";
+                       const result = await joinTelegramTargetVerified({
+                         client,
+                         Api,
+                         target,
+                         publicInviteFallback: op.publicInviteFallback !== false,
+                         log: (level, message) => send("log", { accountId, level, target: botLabel, message }),
+                       });
+                       joinPath = result.path;
+                       joinErrorCode = result.errorCode;
+                       send("log", { accountId, level: result.status === "requested" ? "info" : "success", target: botLabel, message: `${result.message}${result.verified ? " · membership verified" : ""}` });
+                       return result.status === "requested" || result.status === "already" ? "skip" : "ok";
                     } catch (e) {
                       const em = errorText(e);
                        joinErrorCode = joinErrorCode ?? extractErrCode(em);
