@@ -1,6 +1,14 @@
 import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
+import {
+  getPacingConfig,
+  tryAcquireJoinLock,
+  finalizeJoinLock,
+  logJoinAttempt,
+  jitteredDelayMs,
+  loadCacheForAccount,
+} from "./join-cache.server";
 
 const delaySchema = z.coerce.number().int().min(0).max(3600);
 
