@@ -309,6 +309,18 @@ function CleanupPanelInner({ mode, kind }: { mode: "chats" | "personal"; kind?: 
         : "leave";
   const [action, setAction] = useState<Action>(defaultAction);
   const [query, setQuery] = useState("");
+  const defaultDelays = useMemo<{ min: number; max: number }>(() => {
+    if (kind === "bots") return { min: 8, max: 20 };
+    if (kind === "users") return { min: 10, max: 25 };
+    if (mode === "personal") return { min: 6, max: 15 };
+    return { min: 2, max: 6 };
+  }, [kind, mode]);
+  const [minDelay, setMinDelay] = useState<number>(defaultDelays.min);
+  const [maxDelay, setMaxDelay] = useState<number>(defaultDelays.max);
+  useEffect(() => {
+    setMinDelay(defaultDelays.min);
+    setMaxDelay(defaultDelays.max);
+  }, [defaultDelays]);
   const [selectedByAcc, setSelectedByAcc] = useState<Record<string, Set<string>>>({});
   const [logs, setLogs] = useState<LogEntry[]>([]);
   const [running, setRunning] = useState(false);
@@ -369,6 +381,7 @@ function CleanupPanelInner({ mode, kind }: { mode: "chats" | "personal"; kind?: 
           authorization: `Bearer ${token}`,
         },
         body: JSON.stringify({ action, jobs }),
+        // sent below
         signal: ac.signal,
       });
       if (!res.ok || !res.body) {
