@@ -2,42 +2,22 @@ import { useEffect, useMemo, useState } from "react";
 import { Eye, Paperclip, FileIcon } from "lucide-react";
 import { formatMessage, type MessageFormat } from "@/lib/message-format";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import DOMPurify from "isomorphic-dompurify";
 
-const ALLOWED_TAGS = new Set([
-  "B","STRONG","I","EM","U","INS","S","STRIKE","DEL","CODE","PRE","BLOCKQUOTE","A","BR",
-]);
+// Telegram-supported HTML subset. Everything else is stripped.
+const ALLOWED_TAGS = [
+  "b","strong","i","em","u","ins","s","strike","del","code","pre","blockquote","a","br","span",
+];
+const ALLOWED_ATTR = ["href"];
 
 function sanitize(html: string): string {
-  if (typeof window === "undefined") return "";
-  const doc = new DOMParser().parseFromString(`<div>${html}</div>`, "text/html");
-  const root = doc.body.firstElementChild;
-  if (!root) return "";
-  const walk = (node: Element) => {
-    // Iterate children safely (live collection)
-    const children = Array.from(node.children);
-    for (const child of children) {
-      if (!ALLOWED_TAGS.has(child.tagName)) {
-        // Replace disallowed element with its text content
-        child.replaceWith(doc.createTextNode(child.textContent ?? ""));
-        continue;
-      }
-      // Strip attributes except href on <a>
-      const attrs = Array.from(child.attributes);
-      for (const a of attrs) {
-        if (child.tagName === "A" && a.name === "href") {
-          const v = a.value.trim().toLowerCase();
-          if (v.startsWith("javascript:") || v.startsWith("data:")) {
-            child.removeAttribute(a.name);
-          }
-          continue;
-        }
-        child.removeAttribute(a.name);
-      }
-      walk(child);
-    }
-  };
-  walk(root);
-  return root.innerHTML;
+  return DOMPurify.sanitize(html, {
+    ALLOWED_TAGS,
+    ALLOWED_ATTR,
+    ALLOW_DATA_ATTR: false,
+    FORBID_TAGS: ["style", "script", "iframe", "object", "embed"],
+    FORBID_ATTR: ["style", "onerror", "onclick", "onload"],
+  });
 }
 
 export function MessagePreview({
