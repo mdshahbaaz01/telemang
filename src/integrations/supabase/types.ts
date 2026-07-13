@@ -1382,6 +1382,14 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      drop_index_if_exists: {
+        Args: { _name: string; _schema: string }
+        Returns: undefined
+      }
+      ensure_function_grant: {
+        Args: { _role: string; _signature: string }
+        Returns: undefined
+      }
       has_role: {
         Args: {
           _role: Database["public"]["Enums"]["app_role"]
