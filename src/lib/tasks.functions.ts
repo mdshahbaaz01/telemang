@@ -9,6 +9,7 @@ import {
   jitteredDelayMs,
   loadCacheForAccount,
 } from "./join-cache.server";
+import { parseFloodWait } from "./telegram/errors";
 
 const delaySchema = z.coerce.number().int().min(0).max(3600);
 
@@ -659,9 +660,8 @@ export const processNextJoin = createServerFn({ method: "POST" })
             "success",
             `Join request sent for ${item.target}`,
           );
-        } else if (msg.includes("FLOOD_WAIT") || err.seconds) {
-          const match = msg.match(/FLOOD_WAIT_?(\d+)/i);
-          const seconds = err.seconds ?? (match ? Number(match[1]) : 60);
+        } else if (parseFloodWait(err)) {
+          const seconds = parseFloodWait(err)!.seconds;
           // Small floods: sleep locally and mark item pending — DON'T pause
           // the account. Telegram often returns tiny waits between joins.
           if (seconds <= 30) {
@@ -963,9 +963,8 @@ export const processBatchJoin = createServerFn({ method: "POST" })
             processed_at: new Date().toISOString(),
           };
           await log(task.id, "success", `Join request sent for ${item.target}`);
-        } else if (msg.includes("FLOOD_WAIT") || err.seconds) {
-          const match = msg.match(/FLOOD_WAIT_?(\d+)/i);
-          const seconds = err.seconds ?? (match ? Number(match[1]) : 60);
+        } else if (parseFloodWait(err)) {
+          const seconds = parseFloodWait(err)!.seconds;
           // Small floods: sleep + retry next pass, don't pause the account.
           if (seconds <= 30) {
             await new Promise((r) => setTimeout(r, (seconds + 1) * 1000));
