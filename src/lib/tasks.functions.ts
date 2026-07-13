@@ -191,18 +191,30 @@ export const listTaskGroups = createServerFn({ method: "GET" })
       running: boolean;
       status: "running" | "done" | "failed" | "idle" | "partial";
     }> = [];
-    for (const g of groups.values()) {
-      const { data: items } = await context.supabase
+    // Single query for ALL task items across every group; bucket in memory.
+    const allTaskIds = Array.from(groups.values()).flatMap((g) => g.taskIds);
+    const itemsByTask = new Map<string, string[]>();
+    if (allTaskIds.length) {
+      const { data: allItems, error: iErr } = await context.supabase
         .from("join_task_items")
-        .select("status")
-        .in("task_id", g.taskIds);
-      const list = items ?? [];
-      const total = list.length;
-      const done = list.filter(
-        (i) => i.status === "joined" || i.status === "requested",
+        .select("task_id, status")
+        .in("task_id", allTaskIds);
+      if (iErr) throw new Error(iErr.message);
+      for (const it of allItems ?? []) {
+        const arr = itemsByTask.get(it.task_id) ?? [];
+        arr.push(it.status);
+        itemsByTask.set(it.task_id, arr);
+      }
+    }
+
+    for (const g of groups.values()) {
+      const statuses = g.taskIds.flatMap((tid) => itemsByTask.get(tid) ?? []);
+      const total = statuses.length;
+      const done = statuses.filter(
+        (s) => s === "joined" || s === "requested",
       ).length;
-      const failed = list.filter((i) => i.status === "failed").length;
-      const pending = list.filter((i) => i.status === "pending").length;
+      const failed = statuses.filter((s) => s === "failed").length;
+      const pending = statuses.filter((s) => s === "pending").length;
       const running = g.statuses.includes("running");
       const status: "running" | "done" | "failed" | "idle" | "partial" = running
         ? "running"
