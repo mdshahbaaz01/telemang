@@ -7,6 +7,10 @@ const inputSchema = z.object({
   redirectTo: z.string().url().max(2048),
 });
 
+const peekSchema = z.object({
+  email: z.string().trim().email().max(255),
+});
+
 function hashEmail(email: string) {
   return createHash("sha256").update(email.toLowerCase()).digest("hex");
 }
@@ -56,4 +60,48 @@ export const requestPasswordReset = createServerFn({ method: "POST" })
     }
 
     return { ok: true as const, retryAfter: 60 };
+  });
+
+/**
+ * Peek remaining cooldown for an email without consuming a slot.
+ * Returns seconds until the next request is allowed (0 = ready).
+ * Never reveals account existence — only rate-limit state for the hashed email.
+ */
+export const peekPasswordResetCooldown = createServerFn({ method: "POST" })
+  .inputValidator((data) => peekSchema.parse(data))
+  .handler(async ({ data }) => {
+    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+    const emailHash = hashEmail(data.email);
+
+    const { data: rows, error } = await supabaseAdmin
+      .from("password_reset_requests")
+      .select("created_at")
+      .eq("email_hash", emailHash)
+      .gte("created_at", new Date(Date.now() - 60 * 60 * 1000).toISOString())
+      .order("created_at", { ascending: false });
+
+    if (error) {
+      console.error("[password-reset] peek failed", error.message);
+      return { retryAfter: 0, hourlyCount: 0, reason: null as null | "cooldown" | "hourly_cap" };
+    }
+
+    const list = rows ?? [];
+    const hourlyCount = list.length;
+    const last = list[0]?.created_at ? new Date(list[0].created_at).getTime() : 0;
+    const cooldownRemaining = last
+      ? Math.max(0, 60 - Math.floor((Date.now() - last) / 1000))
+      : 0;
+
+    if (hourlyCount >= 5) {
+      // Roughly: time until the oldest of the last 5 falls out of the 1h window.
+      const oldest = new Date(list[list.length - 1].created_at).getTime();
+      const secs = Math.max(60, Math.ceil((oldest + 60 * 60 * 1000 - Date.now()) / 1000));
+      return { retryAfter: secs, hourlyCount, reason: "hourly_cap" as const };
+    }
+
+    return {
+      retryAfter: cooldownRemaining,
+      hourlyCount,
+      reason: cooldownRemaining > 0 ? ("cooldown" as const) : null,
+    };
   });

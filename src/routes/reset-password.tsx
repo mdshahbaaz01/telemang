@@ -6,7 +6,26 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { toast } from "sonner";
 import { Eye, EyeOff, Check, X, Mail } from "lucide-react";
-import { requestPasswordReset } from "@/lib/password-reset.functions";
+import { peekPasswordResetCooldown, requestPasswordReset } from "@/lib/password-reset.functions";
+
+const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+function normalizeEmail(v: string) {
+  return v.trim().toLowerCase();
+}
+function mapAuthError(msg: string): string {
+  const m = msg.toLowerCase();
+  if (m.includes("same_password") || m.includes("should be different"))
+    return "New password must be different from your current password.";
+  if (m.includes("weak") || m.includes("password should"))
+    return "Password is too weak. Choose a longer, more complex password.";
+  if (m.includes("session") || m.includes("jwt") || m.includes("expired"))
+    return "Your reset link expired. Request a new one below.";
+  if (m.includes("rate") || m.includes("too many"))
+    return "Too many attempts. Please wait a moment and try again.";
+  if (m.includes("network") || m.includes("fetch"))
+    return "Network error. Check your connection and try again.";
+  return msg || "Something went wrong. Please try again.";
+}
 
 function formatWait(seconds: number) {
   if (seconds < 60) return `${seconds}s`;
@@ -29,6 +48,10 @@ function ResetPasswordPage() {
   const [email, setEmail] = useState("");
   const [resending, setResending] = useState(false);
   const [resendCooldown, setResendCooldown] = useState(0);
+  const [updateError, setUpdateError] = useState<string | null>(null);
+  const [resendError, setResendError] = useState<string | null>(null);
+  const [resendInfo, setResendInfo] = useState<string | null>(null);
+  const [emailError, setEmailError] = useState<string | null>(null);
 
   useEffect(() => {
     if (resendCooldown <= 0) return;
@@ -42,17 +65,36 @@ function ResetPasswordPage() {
     supabase.auth.getSession().then(({ data }) => {
       if (data.session) {
         setReady(true);
-        if (data.session.user?.email) setEmail(data.session.user.email);
+        const e = data.session.user?.email;
+        if (e) {
+          setEmail(e);
+          void refreshCooldown(e);
+        }
       }
     });
     const { data: sub } = supabase.auth.onAuthStateChange((event, session) => {
       if (event === "PASSWORD_RECOVERY" || event === "SIGNED_IN") {
         setReady(true);
-        if (session?.user?.email) setEmail(session.user.email);
+        const e = session?.user?.email;
+        if (e) {
+          setEmail(e);
+          void refreshCooldown(e);
+        }
       }
     });
     return () => sub.subscription.unsubscribe();
   }, []);
+
+  const refreshCooldown = async (rawEmail: string) => {
+    const normalized = normalizeEmail(rawEmail);
+    if (!EMAIL_RE.test(normalized)) return;
+    try {
+      const res = await peekPasswordResetCooldown({ data: { email: normalized } });
+      if (res.retryAfter > 0) setResendCooldown(res.retryAfter);
+    } catch {
+      // non-fatal — cooldown will re-sync on next send attempt
+    }
+  };
 
   const checks = useMemo(
     () => ({
@@ -72,12 +114,13 @@ function ResetPasswordPage() {
 
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
+    setUpdateError(null);
     if (!allPassed) {
-      toast.error("Password does not meet all requirements");
+      setUpdateError("Password does not meet all requirements.");
       return;
     }
     if (password !== confirm) {
-      toast.error("Passwords do not match");
+      setUpdateError("Passwords do not match.");
       return;
     }
     setLoading(true);
@@ -87,39 +130,50 @@ function ResetPasswordPage() {
       toast.success("Password updated. You are signed in.");
       nav({ to: "/dashboard" });
     } catch (err) {
-      toast.error((err as Error).message);
+      setUpdateError(mapAuthError((err as Error).message));
     } finally {
       setLoading(false);
     }
   };
 
   const resend = async () => {
-    if (!email) {
-      toast.error("Enter your account email to resend the reset link");
+    setResendError(null);
+    setResendInfo(null);
+    setEmailError(null);
+    const normalized = normalizeEmail(email);
+    if (!normalized) {
+      setEmailError("Enter your account email to resend the reset link.");
       return;
     }
+    if (!EMAIL_RE.test(normalized) || normalized.length > 255) {
+      setEmailError("Enter a valid email address.");
+      return;
+    }
+    if (normalized !== email) setEmail(normalized);
     setResending(true);
     try {
       const res = await requestPasswordReset({
         data: {
-          email,
+          email: normalized,
           redirectTo: `${window.location.origin}/reset-password`,
         },
       });
       if (!res.ok) {
         const secs = Math.max(1, res.retryAfter);
-        const label =
+        setResendError(
           res.reason === "hourly_cap"
             ? `Hourly limit reached. Try again in ${formatWait(secs)}.`
-            : `Please wait ${formatWait(secs)} before requesting another link.`;
-        toast.error(label);
+            : res.reason === "server_error"
+              ? "Couldn't send the reset email right now. Please try again shortly."
+              : `Please wait ${formatWait(secs)} before requesting another link.`,
+        );
         setResendCooldown(secs);
         return;
       }
-      toast.success("Reset email sent. Check your inbox.");
+      setResendInfo("Reset email sent. Check your inbox.");
       setResendCooldown(res.retryAfter);
     } catch (err) {
-      toast.error((err as Error).message);
+      setResendError(mapAuthError((err as Error).message));
     } finally {
       setResending(false);
     }
@@ -198,6 +252,9 @@ function ResetPasswordPage() {
             </ul>
           </div>
         )}
+        {updateError && (
+          <p role="alert" className="text-sm text-destructive">{updateError}</p>
+        )}
         <Button
           type="submit"
           className="w-full"
@@ -215,7 +272,16 @@ function ResetPasswordPage() {
               type="email"
               placeholder="you@example.com"
               value={email}
-              onChange={(e) => setEmail(e.target.value)}
+              onChange={(e) => {
+                setEmail(e.target.value);
+                if (emailError) setEmailError(null);
+              }}
+              onBlur={(e) => {
+                const v = normalizeEmail(e.target.value);
+                if (v && v !== e.target.value) setEmail(v);
+                if (v && EMAIL_RE.test(v)) void refreshCooldown(v);
+              }}
+              aria-invalid={!!emailError}
             />
             <Button
               type="button"
@@ -227,6 +293,15 @@ function ResetPasswordPage() {
               {resendCooldown > 0 ? `${resendCooldown}s` : resending ? "Sending…" : "Resend"}
             </Button>
           </div>
+          {emailError && (
+            <p role="alert" className="text-xs text-destructive">{emailError}</p>
+          )}
+          {resendError && (
+            <p role="alert" className="text-xs text-destructive">{resendError}</p>
+          )}
+          {resendInfo && !resendError && (
+            <p className="text-xs text-emerald-500">{resendInfo}</p>
+          )}
         </div>
       </form>
     </main>
