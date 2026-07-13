@@ -1,0 +1,2 @@
+REVOKE EXECUTE ON FUNCTION public.check_password_reset_rate_limit(text, int, int) FROM PUBLIC, anon, authenticated;
+GRANT EXECUTE ON FUNCTION public.check_password_reset_rate_limit(text, int, int) TO service_role;
