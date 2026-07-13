@@ -852,7 +852,7 @@ export const Route = createFileRoute("/api/public/actions-stream")({
               return { username: s, startParam };
             };
 
-            const runBotFlowForAccount = async (accountId: string, op: { bot: string; startParam?: string; steps: string[]; autoJoinRequired?: boolean; maxJoinRounds?: number; preJoinChannels?: string[] }) => {
+            const runBotFlowForAccount = async (accountId: string, op: { bot: string; startParam?: string; steps: string[]; autoJoinRequired?: boolean; maxJoinRounds?: number; preJoinChannels?: string[]; preJoinOnly?: boolean }) => {
               send("log", { accountId, level: "info", message: "Connecting…" });
               let client;
               try {
@@ -868,16 +868,18 @@ export const Route = createFileRoute("/api/public/actions-stream")({
               let fail = 0;
               let botPeer: any;
               try {
-                const parsed = parseBotHandle(op.bot);
+                const parsed = op.bot ? parseBotHandle(op.bot) : { username: "", startParam: undefined as string | undefined };
                 const startParam = op.startParam?.trim() || parsed.startParam;
-                const botLabel = `@${parsed.username}`;
-                try {
-                  botPeer = await client.getEntity(parsed.username);
-                } catch (e) {
-                  const msg = `Resolve bot failed: ${(e as Error).message}`;
-                  send("log", { accountId, level: "error", target: botLabel, message: msg });
-                  await logDb(accountId, botLabel, "error", msg);
-                  return { ok: 0, fail: 1 };
+                const botLabel = op.preJoinOnly ? "pre-join" : `@${parsed.username}`;
+                if (!op.preJoinOnly) {
+                  try {
+                    botPeer = await client.getEntity(parsed.username);
+                  } catch (e) {
+                    const msg = `Resolve bot failed: ${(e as Error).message}`;
+                    send("log", { accountId, level: "error", target: botLabel, message: msg });
+                    await logDb(accountId, botLabel, "error", msg);
+                    return { ok: 0, fail: 1 };
+                  }
                 }
 
                 // Kick off with /start (+ optional deep link param) so the bot is initialized.
