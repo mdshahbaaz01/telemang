@@ -59,7 +59,8 @@ async function verifyMembership(client: any, Api: any, channel: any): Promise<bo
   if (!channel) return false;
   try {
     const me = await client.getMe(true);
-    await client.invoke(new Api.channels.GetParticipant({ channel, participant: me }));
+    const inputChannel = await client.getInputEntity(channel);
+    await client.invoke(new Api.channels.GetParticipant({ channel: inputChannel, participant: me }));
     return true;
   } catch (error) {
     const msg = textOf(error);
