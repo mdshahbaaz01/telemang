@@ -764,6 +764,35 @@ export const processNextJoin = createServerFn({ method: "POST" })
         .from("join_task_items")
         .update(statusUpdate)
         .eq("id", item.id);
+      // Finalize join_cache lock + structured attempt log.
+      const finalStatus =
+        statusUpdate.status === "joined" || statusUpdate.status === "requested"
+          ? statusUpdate.status
+          : statusUpdate.status === "failed"
+            ? "failed"
+            : "skipped";
+      await finalizeJoinLock(supabase, {
+        accountId: acct.id,
+        target: item.target,
+        status: finalStatus as "joined" | "requested" | "failed" | "skipped",
+        cacheTtlHours: pacing.cache_ttl_hours,
+        error: statusUpdate.error,
+      });
+      const fwMatch = (statusUpdate.error || "").match(/FloodWait\s+(\d+)/i) || (statusUpdate.error || "").match(/Rate-limited\s+(\d+)/i);
+      await logJoinAttempt(supabase, {
+        userId: context.userId,
+        accountId: acct.id,
+        target: item.target,
+        source: "join_task",
+        result:
+          statusUpdate.status === "joined" ? "joined"
+          : statusUpdate.status === "requested" ? "requested"
+          : statusUpdate.status === "failed" ? "failed"
+          : (statusUpdate.error || "").includes("Rate-limited") || (statusUpdate.error || "").includes("FloodWait") ? "flood"
+          : "skipped",
+        floodWaitSeconds: fwMatch ? Number(fwMatch[1]) : null,
+        error: statusUpdate.error,
+      });
     }
 
     return { done: false, paused: false, target: item.target };
