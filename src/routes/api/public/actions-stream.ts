@@ -923,7 +923,7 @@ export const Route = createFileRoute("/api/public/actions-stream")({
                      if (status === "joined" || status === "requested") alreadyJoined.add(k);
                    }
                  } catch { /* dedupe is best-effort */ }
-                const smartJoin = async (rawTarget: string): Promise<"ok" | "stop" | "flood" | "skip"> => {
+                const smartJoin = async (rawTarget: string): Promise<"ok" | "requested" | "stop" | "flood" | "skip"> => {
                   if (stopRequested) return "stop";
                   const target = extractHandle(rawTarget);
                   if (!target) return "skip";
@@ -1000,7 +1000,6 @@ export const Route = createFileRoute("/api/public/actions-stream")({
                    const fw = errLike ? floodWaitSeconds(errLike) : null;
                    const finalStatus: "joined" | "requested" | "failed" | "skipped" =
                      out === "flood" ? "failed" : out === "requested" ? "requested" : out === "ok" ? "joined" : "skipped";
-                   const loggedFinalStatus = finalStatus as "joined" | "requested" | "failed" | "skipped";
                    await finalizeJoinLock(supabase, {
                      accountId, target: rawTarget, status: finalStatus,
                      cacheTtlHours: pacing.cache_ttl_hours,
