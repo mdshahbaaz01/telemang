@@ -959,6 +959,42 @@ export const Route = createFileRoute("/api/public/actions-stream")({
                     try {
                       if (target.startsWith("+") || target.toLowerCase().startsWith("joinchat/")) {
                         const hash = target.startsWith("+") ? target.slice(1) : target.split("/")[1];
+                        // Peek FIRST — many bot-shared +hash invites actually point to PUBLIC
+                        // channels that already have a @username. Joining via the username is
+                        // more reliable than ImportChatInvite (which often fails with
+                        // INVITE_HASH_EXPIRED / INVITE_HASH_INVALID for public targets).
+                        const publicFallback = op.publicInviteFallback !== false;
+                        if (publicFallback) {
+                          try {
+                            const info: any = await client.invoke(new Api.messages.CheckChatInvite({ hash }));
+                            const chat: any = info?.chat ?? info?.chats?.[0];
+                            const cn: string = info?.className || "";
+                            if (cn === "ChatInviteAlready" && chat) {
+                              joinPath = "peek_already";
+                              send("log", { accountId, level: "info", target: botLabel, message: `Already member of ${chat.username ? "@" + chat.username : chat.title || "channel"} (peek)` });
+                              return "skip";
+                            }
+                            if (chat?.username) {
+                              const ent: any = await client.getEntity(chat.username);
+                              await client.invoke(new Api.channels.JoinChannel({ channel: ent }));
+                              joinPath = "peek_username";
+                              send("log", { accountId, level: "success", target: botLabel, message: `Joined @${chat.username} (public fallback from +${hash.slice(0,8)}…)` });
+                              return "ok";
+                            }
+                            if (chat && (cn === "ChatInvitePeek")) {
+                              try {
+                                await client.invoke(new Api.channels.JoinChannel({ channel: chat }));
+                                joinPath = "peek_chat";
+                                send("log", { accountId, level: "success", target: botLabel, message: `Joined ${chat.title || "channel"} via peek` });
+                                return "ok";
+                              } catch { /* fallthrough to ImportChatInvite */ }
+                            }
+                          } catch (peekErr) {
+                            const pm = errorText(peekErr);
+                            joinErrorCode = extractErrCode(pm);
+                            send("log", { accountId, level: "info", target: botLabel, message: `Peek failed (${joinErrorCode ?? "err"}), trying ImportChatInvite…` });
+                          }
+                        }
                         try {
                           await client.invoke(new Api.messages.ImportChatInvite({ hash }));
                            joinPath = "import_invite";
@@ -966,42 +1002,8 @@ export const Route = createFileRoute("/api/public/actions-stream")({
                         } catch (impErr) {
                           const im = errorText(impErr);
                            joinErrorCode = extractErrCode(im);
-                          // Fallback: some bot-shared invite links point to PUBLIC channels.
-                          // Peek the invite, then join via @username / channel entity directly.
-                            const publicFallback = op.publicInviteFallback !== false;
-                            if (publicFallback && /INVITE_HASH_INVALID|INVITE_HASH_EXPIRED|INVITE_REQUEST_SENT|USER_ALREADY_PARTICIPANT|CHANNEL_PRIVATE/i.test(im)) {
-                              send("log", { accountId, level: "info", target: botLabel, message: `ImportChatInvite failed (${joinErrorCode ?? "err"}) — peeking public fallback…` });
-                            try {
-                              const info: any = await client.invoke(new Api.messages.CheckChatInvite({ hash }));
-                              const chat = info?.chat ?? info?.chats?.[0];
-                              if (chat) {
-                                if (info?.className === "ChatInviteAlready" || info?.className === "ChatInvitePeek") {
-                                  // Already a member or peekable — try JoinChannel via the chat entity.
-                                  try { await client.invoke(new Api.channels.JoinChannel({ channel: chat })); } catch { /* may already be joined */ }
-                                   joinPath = "peek_already";
-                                  send("log", { accountId, level: "success", target: botLabel, message: `Joined via invite peek (${chat.username ? "@" + chat.username : chat.title || "channel"})` });
-                                  return "ok";
-                                }
-                                if (chat.username) {
-                                  const ent: any = await client.getEntity(chat.username);
-                                  await client.invoke(new Api.channels.JoinChannel({ channel: ent }));
-                                   joinPath = "peek_username";
-                                  send("log", { accountId, level: "success", target: botLabel, message: `Joined @${chat.username} (public fallback from +${hash.slice(0,8)}…)` });
-                                  return "ok";
-                                }
-                                try {
-                                  await client.invoke(new Api.channels.JoinChannel({ channel: chat }));
-                                   joinPath = "peek_chat";
-                                  send("log", { accountId, level: "success", target: botLabel, message: `Joined ${chat.title || "channel"} via chat fallback` });
-                                  return "ok";
-                                } catch { /* fallthrough */ }
-                              }
-                              } catch (peekErr) {
-                                const pm = errorText(peekErr);
-                                send("log", { accountId, level: "warn", target: botLabel, message: `CheckChatInvite failed: ${extractErrCode(pm) ?? pm}` });
-                              }
-                            } else if (!publicFallback) {
-                              send("log", { accountId, level: "info", target: botLabel, message: `Public invite fallback disabled — not peeking` });
+                            if (!publicFallback) {
+                              send("log", { accountId, level: "info", target: botLabel, message: `ImportChatInvite failed (${joinErrorCode ?? "err"}) — public fallback disabled` });
                             }
                           throw impErr;
                         }
