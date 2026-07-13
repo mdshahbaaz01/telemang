@@ -84,12 +84,13 @@ const replySchema = z.object({
 
 const botFlowSchema = z.object({
   kind: z.literal("botflow"),
-  bot: z.string().min(1).max(200),
+  bot: z.string().max(200).default(""),
   startParam: z.string().max(200).optional(),
-  steps: z.array(z.string().min(1).max(4096)).min(1).max(50),
+  steps: z.array(z.string().min(1).max(4096)).min(0).max(50),
   autoJoinRequired: z.boolean().optional(),
   maxJoinRounds: z.number().int().min(1).max(15).optional(),
   preJoinChannels: z.array(z.string().min(1).max(300)).max(100).optional(),
+  preJoinOnly: z.boolean().optional(),
 });
 
 const editSchema = z.object({
