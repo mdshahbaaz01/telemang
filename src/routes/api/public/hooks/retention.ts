@@ -5,10 +5,9 @@ export const Route = createFileRoute("/api/public/hooks/retention")({
   server: {
     handlers: {
       POST: async ({ request }) => {
-        const apiKey = request.headers.get("apikey");
-        if (apiKey !== process.env.SUPABASE_PUBLISHABLE_KEY) {
-          return new Response("Unauthorized", { status: 401 });
-        }
+        const { verifyHookAuth } = await import("@/lib/hook-auth.server");
+        const denied = verifyHookAuth(request);
+        if (denied) return denied;
         const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
         const { data, error } = await supabaseAdmin.rpc("run_log_retention");
         if (error) {
