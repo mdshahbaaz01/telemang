@@ -41,6 +41,8 @@ const bodySchema = z.object({
     )
     .min(1)
     .max(50),
+  minDelayMs: z.number().int().min(0).max(120000).optional(),
+  maxDelayMs: z.number().int().min(0).max(120000).optional(),
 });
 
 function sseEncode(event: string, data: unknown): Uint8Array {
