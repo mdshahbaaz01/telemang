@@ -178,17 +178,19 @@ export function AppSidebar() {
     select: (r) => ({ pathname: r.location.pathname, search: r.location.searchStr }),
   });
 
-  const [order, setOrder] = useState<string[]>(() => items.map((i) => i.id));
+  const [order, setOrder] = useState<string[]>(() => loadOrder());
   const [editing, setEditing] = useState(false);
+  const [hydrated, setHydrated] = useState(false);
 
   useEffect(() => {
     setOrder(loadOrder());
+    setHydrated(true);
   }, []);
 
   useEffect(() => {
-    if (typeof window === "undefined") return;
+    if (typeof window === "undefined" || !hydrated) return;
     window.localStorage.setItem(ORDER_KEY, JSON.stringify(order));
-  }, [order]);
+  }, [order, hydrated]);
 
   const byId = useMemo(() => new Map(items.map((i) => [i.id, i])), []);
   const orderedItems = useMemo(
