@@ -881,40 +881,44 @@ export const processBatchJoin = createServerFn({ method: "POST" })
       return { done: true, paused: false, processed: 0 };
     }
 
-    // Strict cross-run dedupe: skip items this account already joined/requested.
-    const norm = (s: string) => s.trim().toLowerCase()
-      .replace(/^@/, "")
-      .replace(/[?#].*$/, "")
-      .replace(/^(?:https?:\/\/)?(?:www\.)?(?:t(?:elegram)?\.me)\//i, "")
-      .replace(/^joinchat\//i, "+");
-    const priorMap = new Map<string, string>();
-    try {
-      const { data: acctTasks } = await supabase
-        .from("join_tasks").select("id").eq("account_id", acct.id);
-      const taskIds = (acctTasks ?? []).map((t: { id: string }) => t.id);
-      if (taskIds.length) {
-        const { data: prior } = await supabase
-          .from("join_task_items")
-          .select("target, status")
-          .in("task_id", taskIds)
-          .in("status", ["joined", "requested"]);
-        for (const p of (prior ?? []) as Array<{ target: string; status: string }>) {
-          priorMap.set(norm(p.target), p.status);
-        }
-      }
-    } catch { /* best effort */ }
+    // Pull persistent per-account cache & pacing config, then acquire per-item lock.
+    const pacing = await getPacingConfig(supabase, context.userId);
+    const cache = await loadCacheForAccount(supabase, acct.id);
     const pending: Array<{ id: string; target: string }> = [];
     for (const it of items) {
-      const hitStatus = priorMap.get(norm(it.target));
-      if (hitStatus) {
+      const key = it.target.trim().toLowerCase();
+      const cached = cache.get(key) || cache.get(key.replace(/^@/, ""));
+      if (cached === "joined" || cached === "requested") {
         await supabase.from("join_task_items").update({
-          status: hitStatus,
-          error: "skipped — already joined by this account",
+          status: cached,
+          error: "skipped — cached",
           processed_at: new Date().toISOString(),
         }).eq("id", it.id);
-        await log(task.id, "info", `Skipped @${it.target} — already ${hitStatus} by this account (dedupe)`);
-      } else {
+        await log(task.id, "info", `Skipped @${it.target} — cached (${cached})`);
+        await logJoinAttempt(supabase, {
+          userId: context.userId, accountId: acct.id, target: it.target,
+          source: "batch_join", result: "skipped_cached",
+        });
+        continue;
+      }
+      const lock = await tryAcquireJoinLock(supabase, {
+        userId: context.userId, accountId: acct.id, target: it.target,
+        source: "batch_join", lockTtlSeconds: pacing.lock_ttl_seconds,
+      });
+      if (lock.outcome === "acquired") {
         pending.push(it);
+      } else {
+        await supabase.from("join_task_items").update({
+          status: "pending",
+          error: `skipped — ${lock.outcome}`,
+          processed_at: new Date().toISOString(),
+        }).eq("id", it.id);
+        await log(task.id, "info", `Skipped @${it.target} — ${lock.outcome}`);
+        await logJoinAttempt(supabase, {
+          userId: context.userId, accountId: acct.id, target: it.target,
+          source: "batch_join",
+          result: lock.outcome === "skipped_cached" ? "skipped_cached" : "skipped_locked",
+        });
       }
     }
     if (!pending.length) {
