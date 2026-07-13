@@ -5,6 +5,7 @@ import { Star, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
 import { listFavorites, removeFavorite } from "@/lib/favorites.functions";
+import { addFavorite } from "@/lib/favorites.functions";
 
 export function FavoritesBar() {
   const list = useServerFn(listFavorites);
@@ -57,7 +58,7 @@ export function PinButton({ kind, label, href, refId }: { kind: string; label: s
   const already = (data ?? []).some(
     (f: any) => f.kind === kind && (refId ? f.ref_id === refId : f.label === label),
   );
-  const add = useServerFn((await import("@/lib/favorites.functions")).addFavorite as any);
+  const add = useServerFn(addFavorite);
   const remove = useServerFn(removeFavorite);
   const mut = useMutation({
     mutationFn: async () => {
