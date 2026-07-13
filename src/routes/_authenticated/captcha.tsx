@@ -31,6 +31,8 @@ import { Switch } from "@/components/ui/switch";
 import { Loader2, Plus, RefreshCcw, ShieldAlert, Trash2, Zap } from "lucide-react";
 import { useCaptchaAutoDetect, setCaptchaAutoDetect } from "@/lib/miniapp-proxy-url";
 import { KIND_LABELS } from "@/lib/captcha/types";
+import { CaptchaErrorBoundary } from "@/components/CaptchaErrorBoundary";
+import { useBotFlowCaptchaConfig } from "@/lib/bot-flow-captcha-config";
 
 export const Route = createFileRoute("/_authenticated/captcha")({
   head: () => ({
@@ -70,6 +72,7 @@ type ProviderId = (typeof PROVIDERS)[number]["id"];
 
 function CaptchaPage() {
   return (
+    <CaptchaErrorBoundary scope="solver-page" autoDisable>
     <div className="p-4 md:p-6 space-y-6 max-w-6xl mx-auto">
       <header className="flex items-center gap-3">
         <ShieldAlert className="h-6 w-6 text-primary" />
@@ -83,6 +86,8 @@ function CaptchaPage() {
         </div>
         <AutoDetectToggle />
       </header>
+
+      <MasterKillSwitch />
 
       <Card className="border-primary/60 bg-primary/5">
         <CardContent className="pt-4 text-sm flex items-start gap-3">
@@ -121,6 +126,29 @@ function CaptchaPage() {
         </TabsContent>
       </Tabs>
     </div>
+    </CaptchaErrorBoundary>
+  );
+}
+
+function MasterKillSwitch() {
+  const [cfg, set] = useBotFlowCaptchaConfig();
+  return (
+    <Card className={cfg.enabled ? "border-emerald-500/40 bg-emerald-500/5" : "border-destructive/40 bg-destructive/5"}>
+      <CardContent className="pt-4 flex items-center gap-3">
+        <ShieldAlert className={"h-5 w-5 shrink-0 " + (cfg.enabled ? "text-emerald-500" : "text-destructive")} />
+        <div className="flex-1">
+          <div className="text-sm font-semibold">
+            Master captcha switch — {cfg.enabled ? "ON" : "OFF"}
+          </div>
+          <p className="text-xs text-muted-foreground">
+            Global kill-switch. When OFF, bot-flow and mini-app proxies skip every captcha code path,
+            so a broken solver can never crash the runner. Flip this if you see a captcha-related
+            error — the app keeps working while you investigate.
+          </p>
+        </div>
+        <Switch checked={cfg.enabled} onCheckedChange={(v) => set({ enabled: v })} />
+      </CardContent>
+    </Card>
   );
 }
 
