@@ -1061,9 +1061,10 @@ export const Route = createFileRoute("/api/public/actions-stream")({
                     const r = await smartJoin(raw);
                     if (r === "stop") break;
                   }
-                }
-                try {
-                  await doStartBot();
+                 }
+                 if (!op.preJoinOnly) {
+                 try {
+                   await doStartBot();
                   send("log", { accountId, level: "success", target: botLabel, message: startParam ? `Started with param "${startParam}"` : "Started" });
                   await logDb(accountId, botLabel, "success", startParam ? `Started with param "${startParam}"` : "Started");
                 } catch (e) {
@@ -1071,12 +1072,13 @@ export const Route = createFileRoute("/api/public/actions-stream")({
                   send("log", { accountId, level: "warn", target: botLabel, message: `StartBot: ${em}` });
                   await logDb(accountId, botLabel, "warn", `StartBot: ${em}`);
                 }
+                 }
 
                 // ── Auto-join required channels ─────────────────────────
                 // Many referral bots reply with "Please join these channels"
                 // and a list of URL buttons / t.me links. Detect them, join
                 // from this account, then re-fire /start so the bot re-checks.
-                if (op.autoJoinRequired !== false) {
+                if (!op.preJoinOnly && op.autoJoinRequired !== false) {
                   const rounds = Math.max(1, Math.min(15, op.maxJoinRounds ?? 10));
                   const linkRe = /(?:https?:\/\/)?(?:t(?:elegram)?\.me)\/(\+[A-Za-z0-9_-]+|joinchat\/[A-Za-z0-9_-]+|[A-Za-z0-9_]{4,})/gi;
                   // Track everything the bot has ever asked for on this account
