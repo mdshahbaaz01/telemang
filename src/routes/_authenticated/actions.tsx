@@ -19,6 +19,7 @@ import {
   cancelScheduledBroadcast,
   getScheduleReport,
   clearScheduledHistory,
+  deleteScheduledBroadcast,
   rescheduleBroadcast,
 } from "@/lib/schedule.functions";
 import { Button } from "@/components/ui/button";
