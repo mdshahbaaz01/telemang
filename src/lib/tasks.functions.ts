@@ -326,81 +326,120 @@ export const updateGroup = createServerFn({ method: "POST" })
     };
 
     const newTargets = new Set(data.targets);
-    const remainingTaskIds: string[] = [];
+    const keptEntries = Array.from(existingByAccount).filter(([accId]) =>
+      keep.has(accId),
+    );
+    const remainingTaskIds = keptEntries.map(([, tid]) => tid);
 
-    // Update kept tasks
-    for (const [accId, tid] of existingByAccount) {
-      if (!keep.has(accId)) continue;
-      remainingTaskIds.push(tid);
-      await context.supabase
-        .from("join_tasks")
-        .update({
-          name: buildName(accId),
-          min_delay: data.minDelay,
-          max_delay: data.maxDelay,
-          updated_at: new Date().toISOString(),
-        })
-        .eq("id", tid);
+    // 1) Batch-update metadata on every kept task in parallel
+    const nowIso = new Date().toISOString();
+    await Promise.all(
+      keptEntries.map(([accId, tid]) =>
+        context.supabase
+          .from("join_tasks")
+          .update({
+            name: buildName(accId),
+            min_delay: data.minDelay,
+            max_delay: data.maxDelay,
+            updated_at: nowIso,
+          })
+          .eq("id", tid),
+      ),
+    );
 
+    // 2) One query for ALL existing items across kept tasks; diff in memory.
+    const itemsByTask = new Map<
+      string,
+      Array<{ id: string; target: string; position: number }>
+    >();
+    if (remainingTaskIds.length) {
       const { data: existingItems } = await context.supabase
         .from("join_task_items")
-        .select("id, target, position")
-        .eq("task_id", tid);
-      const existingSet = new Set(
-        (existingItems ?? []).map((i: { target: string }) => i.target),
-      );
-      const toDel = (existingItems ?? [])
-        .filter((i: { target: string }) => !newTargets.has(i.target))
-        .map((i: { id: string }) => i.id);
-      if (toDel.length) {
-        await context.supabase.from("join_task_items").delete().in("id", toDel);
-      }
-      const positions = (existingItems ?? []).map(
-        (i: { position: number }) => i.position,
-      );
-      const posStart = (positions.length ? Math.max(...positions) : -1) + 1;
-      const toAdd = data.targets
-        .filter((t) => !existingSet.has(t))
-        .map((t, i) => ({
-          task_id: tid,
-          user_id: context.userId,
-          target: t,
-          position: posStart + i,
-        }));
-      if (toAdd.length) {
-        await context.supabase.from("join_task_items").insert(toAdd);
+        .select("id, target, position, task_id")
+        .in("task_id", remainingTaskIds);
+      for (const it of existingItems ?? []) {
+        const arr = itemsByTask.get(it.task_id) ?? [];
+        arr.push({ id: it.id, target: it.target, position: it.position });
+        itemsByTask.set(it.task_id, arr);
       }
     }
 
-    // Add new accounts
-    const toAddAcc = data.accountIds.filter(
-      (id) => !existingByAccount.has(id),
-    );
-    for (const accId of toAddAcc) {
-      const { data: newTask, error: cErr } = await context.supabase
-        .from("join_tasks")
-        .insert({
-          user_id: context.userId,
-          account_id: accId,
-          name: buildName(accId),
-          status: "idle",
-          min_delay: data.minDelay,
-          max_delay: data.maxDelay,
-          group_id: data.groupId,
-        })
-        .select("id")
-        .single();
-      if (cErr || !newTask) continue;
-      if (data.targets.length) {
-        const targets = dedupeTargets(data.targets);
-        const order = shuffledOrder(targets.length, newTask.id);
-        const rows = targets.map((t, i) => ({
-          task_id: newTask.id,
+    const allToDelete: string[] = [];
+    const allToInsert: Array<{
+      task_id: string;
+      user_id: string;
+      target: string;
+      position: number;
+    }> = [];
+
+    for (const tid of remainingTaskIds) {
+      const existing = itemsByTask.get(tid) ?? [];
+      const existingSet = new Set(existing.map((i) => i.target));
+      for (const i of existing) {
+        if (!newTargets.has(i.target)) allToDelete.push(i.id);
+      }
+      const posStart =
+        (existing.length ? Math.max(...existing.map((i) => i.position)) : -1) + 1;
+      let offset = 0;
+      for (const t of data.targets) {
+        if (existingSet.has(t)) continue;
+        allToInsert.push({
+          task_id: tid,
           user_id: context.userId,
           target: t,
-          position: order[i],
-        }));
-        await context.supabase.from("join_task_items").insert(rows);
+          position: posStart + offset,
+        });
+        offset += 1;
+      }
+    }
+
+    // 3) One bulk delete + one bulk insert for the entire kept set.
+    if (allToDelete.length) {
+      await context.supabase.from("join_task_items").delete().in("id", allToDelete);
+    }
+    if (allToInsert.length) {
+      await context.supabase.from("join_task_items").insert(allToInsert);
+    }
+
+    // 4) Add tasks for newly selected accounts (batch insert, then batch items).
+    const toAddAcc = data.accountIds.filter((id) => !existingByAccount.has(id));
+    if (toAddAcc.length) {
+      const newTaskRows = toAddAcc.map((accId) => ({
+        user_id: context.userId,
+        account_id: accId,
+        name: buildName(accId),
+        status: "idle",
+        min_delay: data.minDelay,
+        max_delay: data.maxDelay,
+        group_id: data.groupId,
+      }));
+      const { data: created, error: cErr } = await context.supabase
+        .from("join_tasks")
+        .insert(newTaskRows)
+        .select("id, account_id");
+      if (cErr) throw new Error(cErr.message);
+      if (created?.length && data.targets.length) {
+        const targets = dedupeTargets(data.targets);
+        const rows: Array<{
+          task_id: string;
+          user_id: string;
+          target: string;
+          position: number;
+        }> = [];
+        for (const nt of created) {
+          const order = shuffledOrder(targets.length, nt.id);
+          for (let i = 0; i < targets.length; i += 1) {
+            rows.push({
+              task_id: nt.id,
+              user_id: context.userId,
+              target: targets[i],
+              position: order[i],
+            });
+          }
+        }
+        if (rows.length) {
+          await context.supabase.from("join_task_items").insert(rows);
+        }
       }
     }
 
