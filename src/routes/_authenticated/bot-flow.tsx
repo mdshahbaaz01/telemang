@@ -16,6 +16,7 @@ import { Play, Square, ArrowLeft, Loader2, RefreshCw, X, MessageSquare, Copy, Ex
 import { AccountIdPaste } from "@/components/AccountIdPaste";
 import { copyWithToast } from "@/lib/clipboard";
 import { useBotFlowCaptchaConfig, CAPTCHA_KIND_OPTIONS, CAPTCHA_PROVIDER_OPTIONS } from "@/lib/bot-flow-captcha-config";
+import { CaptchaErrorBoundary } from "@/components/CaptchaErrorBoundary";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
 
@@ -459,7 +460,9 @@ function BotFlowPage() {
         </Link>
         <h1 className="text-2xl font-semibold tracking-tight">Bot Flow</h1>
 
-        <BotFlowCaptchaCard />
+        <CaptchaErrorBoundary scope="bot-flow-card" autoDisable>
+          <BotFlowCaptchaCard />
+        </CaptchaErrorBoundary>
 
         <section className="rounded-lg border border-border bg-card p-4 space-y-4">
           <h2 className="text-lg font-medium">Run a bot with your referral link</h2>
