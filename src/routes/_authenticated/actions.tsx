@@ -597,7 +597,7 @@ function ActionsPageInner() {
         .map((s) => s.trim())
         .filter(Boolean);
       if (!list.length) return toast.error("Enter at least one destination");
-      op = { kind: "forward", source: src, targets: list };
+      op = { kind: "forward", source: src, targets: list, dropAuthor: dropForwardAuthor };
     } else if (tab === "vote") {
       const opts = pollSelected.length
         ? [...pollSelected].sort((a, b) => a - b)
