@@ -49,6 +49,7 @@ const opSchema = z.discriminatedUnion("kind", [
     source: msgRefSchema,
     accountIds: z.array(z.string().uuid()).min(1).max(200),
     targets: z.array(z.string().min(1).max(200)).min(1).max(500),
+    dropAuthor: z.boolean().optional(),
   }),
   z.object({
     kind: z.literal("edit"),
