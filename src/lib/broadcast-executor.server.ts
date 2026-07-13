@@ -224,6 +224,14 @@ export async function executeBroadcast(
       }
       try {
         const am = meta.get(accountId) ?? { signature: null, name: "" };
+        // Phase 5b: adaptive pacing — widen delays if this account has been
+        // floodwaited or errored recently. Falls back to configured min/max.
+        const pacing = await adaptivePacing(supabase, accountId).catch(() => null);
+        const effMin = pacing ? Math.max(input.minDelay, Math.round(pacing.min_delay_ms / 1000)) : input.minDelay;
+        const effMax = pacing ? Math.max(input.maxDelay, Math.round(pacing.max_delay_ms / 1000)) : input.maxDelay;
+        if (pacing && pacing.multiplier > 1.1) {
+          push({ accountId, target: null, level: "info", message: `Adaptive pacing ${pacing.multiplier.toFixed(2)}x (recent floods=${pacing.floods}, failures=${pacing.failures})` });
+        }
         for (const row of rows) {
           const rowAtts = (row.attachments && row.attachments.length > 0
             ? row.attachments
@@ -243,8 +251,13 @@ export async function executeBroadcast(
           }
           let tIdx = 0;
           for (const t of row.targets) {
+            // Idempotency: skip if this (run, account, target) already succeeded.
+            const idem = input.runId && input.userId
+              ? { key: idemKey(["bcast", input.userId, input.runId, accountId, t]), scope: "broadcast", userId: input.userId }
+              : null;
             try {
-              const dest = await resolveTarget(client, t);
+              const runSend = async () => {
+                const dest = await resolveTarget(client, t);
               const vars = varsFromEntity(dest, tIdx, am.name);
               if (attDatas.length > 1) {
                 const formatted = formatMessage(row.message, row.format, { vars, signature: am.signature });
@@ -265,6 +278,18 @@ export async function executeBroadcast(
               } else {
                 await client.sendMessage(dest, formatMessage(row.message, row.format, { vars, signature: am.signature }));
               }
+                return { sent: true, at: new Date().toISOString() };
+              };
+              if (idem) {
+                const outcome = await withIdempotency(supabase, idem, runSend);
+                if (outcome.cached) {
+                  push({ accountId, target: t, level: "info", message: `Skip ${t} — already sent in this run` });
+                  tIdx++;
+                  continue;
+                }
+              } else {
+                await runSend();
+              }
               ok++;
               push({ accountId, target: t, level: "success", message: `Sent to ${t}` });
             } catch (e) {
@@ -272,7 +297,7 @@ export async function executeBroadcast(
               const em = errorText(e);
               push({ accountId, target: t, level: "error", message: em });
             }
-            await new Promise((r) => setTimeout(r, jitter(input.minDelay, input.maxDelay)));
+            await new Promise((r) => setTimeout(r, jitter(effMin, effMax)));
             tIdx++;
           }
         }
