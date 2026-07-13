@@ -8,6 +8,12 @@ import { toast } from "sonner";
 import { Eye, EyeOff, Check, X, Mail } from "lucide-react";
 import { requestPasswordReset } from "@/lib/password-reset.functions";
 
+function formatWait(seconds: number) {
+  if (seconds < 60) return `${seconds}s`;
+  const m = Math.ceil(seconds / 60);
+  return `${m} min`;
+}
+
 export const Route = createFileRoute("/reset-password")({
   ssr: false,
   component: ResetPasswordPage,
