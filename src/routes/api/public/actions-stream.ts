@@ -952,11 +952,10 @@ export const Route = createFileRoute("/api/public/actions-stream")({
                     // can see it in structured logs / DB metadata.
                      let joinPath: "import_invite" | "import_username" | "peek_already" | "peek_username" | "peek_chat" | "peek_search_username" | "direct_username" | "none" = "none";
                     let joinErrorCode: string | null = null;
-                     let joinFinalStatus: "joined" | "requested" | "failed" | "skipped" = "skipped";
                     const extractErrCode = (s: string): string | null => {
                        return extractTelegramErrorCode(s);
                     };
-                   const attempt = async (): Promise<"ok" | "flood" | "skip"> => {
+                   const attempt = async (): Promise<"ok" | "requested" | "flood" | "skip"> => {
                     try {
                        const result = await joinTelegramTargetVerified({
                          client,
@@ -967,9 +966,8 @@ export const Route = createFileRoute("/api/public/actions-stream")({
                        });
                        joinPath = result.path;
                        joinErrorCode = result.errorCode;
-                       joinFinalStatus = result.status === "requested" ? "requested" : "joined";
                        send("log", { accountId, level: result.status === "requested" ? "info" : "success", target: botLabel, message: `${result.message}${result.verified ? " · membership verified" : ""}` });
-                       return result.status === "requested" || result.status === "already" ? "skip" : "ok";
+                       return result.status === "requested" ? "requested" : "ok";
                     } catch (e) {
                       const em = errorText(e);
                        joinErrorCode = joinErrorCode ?? extractErrCode(em);
@@ -1001,7 +999,7 @@ export const Route = createFileRoute("/api/public/actions-stream")({
                    const errLike = out === "flood" ? "FLOOD_WAIT" : null;
                    const fw = errLike ? floodWaitSeconds(errLike) : null;
                    const finalStatus: "joined" | "requested" | "failed" | "skipped" =
-                     out === "flood" ? "failed" : out === "ok" ? "joined" : joinFinalStatus;
+                     out === "flood" ? "failed" : out === "requested" ? "requested" : out === "ok" ? "joined" : "skipped";
                    const loggedFinalStatus = finalStatus as "joined" | "requested" | "failed" | "skipped";
                    await finalizeJoinLock(supabase, {
                      accountId, target: rawTarget, status: finalStatus,
@@ -1010,7 +1008,7 @@ export const Route = createFileRoute("/api/public/actions-stream")({
                    });
                    await logJoinAttempt(supabase, {
                      userId, accountId, target: rawTarget, source: "bot_flow",
-                     result: out === "flood" ? "flood" : joinFinalStatus === "requested" ? "requested" : loggedFinalStatus === "joined" ? "joined" : "skipped",
+                     result: out === "flood" ? "flood" : out === "requested" ? "requested" : out === "ok" ? "joined" : "skipped",
                      waitMs, floodWaitSeconds: fw,
                       metadata: {
                         normalized: normalizeTargetKey(rawTarget),
