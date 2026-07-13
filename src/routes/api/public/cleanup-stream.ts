@@ -251,8 +251,18 @@ export const Route = createFileRoute("/api/public/cleanup-stream")({
                       }
                     } else if (body.action === "block") {
                       if (t.peer.kind !== "user") throw new Error("Block only applies to users/bots");
-                      // Block + delete chat from both sides
-                      await client.invoke(new Api.contacts.Block({ id: peer }));
+                      // Try to block, but skip if Telegram rate-limits it — deleting the chat
+                      // is enough to remove a bot/user from the chat list.
+                      try {
+                        await client.invoke(new Api.contacts.Block({ id: peer }));
+                      } catch (blockErr) {
+                        const msg = (blockErr as Error).message || String(blockErr);
+                        if (/FLOOD|wait of \d+ seconds/i.test(msg)) {
+                          send("log", { accountId, kind: "info", target: label, message: "block skipped (rate-limited) — deleting chat only" });
+                        } else {
+                          throw blockErr;
+                        }
+                      }
                       await client.invoke(
                         new Api.messages.DeleteHistory({
                           peer,
