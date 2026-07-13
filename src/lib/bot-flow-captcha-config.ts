@@ -51,15 +51,34 @@ export interface BotFlowCaptchaConfig {
 const KEY = "botflow-captcha-config-v1";
 const DEFAULT: BotFlowCaptchaConfig = { enabled: false, kind: "auto", provider: "auto" };
 
+// Cache the parsed snapshot so useSyncExternalStore always sees the SAME
+// object reference between renders unless the underlying JSON changed.
+// Returning `{ ...DEFAULT, ...parsed }` on every call created a new object
+// each time, which put React into an infinite re-render loop and made the
+// whole bot-flow route crash into the error boundary as soon as a config
+// was persisted to localStorage.
+let cachedRaw: string | null | undefined = undefined;
+let cachedSnap: BotFlowCaptchaConfig = DEFAULT;
 function read(): BotFlowCaptchaConfig {
   if (typeof window === "undefined") return DEFAULT;
+  let raw: string | null = null;
   try {
-    const raw = window.localStorage.getItem(KEY);
-    if (!raw) return DEFAULT;
-    return { ...DEFAULT, ...(JSON.parse(raw) as Partial<BotFlowCaptchaConfig>) };
+    raw = window.localStorage.getItem(KEY);
   } catch {
     return DEFAULT;
   }
+  if (raw === cachedRaw) return cachedSnap;
+  cachedRaw = raw;
+  if (!raw) {
+    cachedSnap = DEFAULT;
+    return cachedSnap;
+  }
+  try {
+    cachedSnap = { ...DEFAULT, ...(JSON.parse(raw) as Partial<BotFlowCaptchaConfig>) };
+  } catch {
+    cachedSnap = DEFAULT;
+  }
+  return cachedSnap;
 }
 
 const listeners = new Set<() => void>();
@@ -75,7 +94,14 @@ function subscribe(cb: () => void) {
 
 export function setBotFlowCaptchaConfig(patch: Partial<BotFlowCaptchaConfig>) {
   const next = { ...read(), ...patch };
-  if (typeof window !== "undefined") window.localStorage.setItem(KEY, JSON.stringify(next));
+  if (typeof window !== "undefined") {
+    const serialized = JSON.stringify(next);
+    window.localStorage.setItem(KEY, serialized);
+    // Update cache in-place so the next `read()` returns the fresh snapshot
+    // without needing another parse.
+    cachedRaw = serialized;
+    cachedSnap = next;
+  }
   listeners.forEach((cb) => cb());
 }
 
