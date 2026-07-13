@@ -9,6 +9,7 @@ export type JoinResult =
   | "acquired"
   | "skipped_cached"
   | "skipped_locked"
+  | "skipped"
   | "joined"
   | "requested"
   | "already_participant"
