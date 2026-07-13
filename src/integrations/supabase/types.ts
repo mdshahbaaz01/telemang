@@ -1357,6 +1357,7 @@ export type Database = {
         Returns: boolean
       }
       is_admin: { Args: never; Returns: boolean }
+      run_log_retention: { Args: never; Returns: Json }
     }
     Enums: {
       app_role: "admin" | "user"
