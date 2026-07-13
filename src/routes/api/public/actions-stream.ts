@@ -84,12 +84,13 @@ const replySchema = z.object({
 
 const botFlowSchema = z.object({
   kind: z.literal("botflow"),
-  bot: z.string().min(1).max(200),
+  bot: z.string().max(200).default(""),
   startParam: z.string().max(200).optional(),
-  steps: z.array(z.string().min(1).max(4096)).min(1).max(50),
+  steps: z.array(z.string().min(1).max(4096)).min(0).max(50),
   autoJoinRequired: z.boolean().optional(),
   maxJoinRounds: z.number().int().min(1).max(15).optional(),
   preJoinChannels: z.array(z.string().min(1).max(300)).max(100).optional(),
+  preJoinOnly: z.boolean().optional(),
 });
 
 const editSchema = z.object({
@@ -851,7 +852,7 @@ export const Route = createFileRoute("/api/public/actions-stream")({
               return { username: s, startParam };
             };
 
-            const runBotFlowForAccount = async (accountId: string, op: { bot: string; startParam?: string; steps: string[]; autoJoinRequired?: boolean; maxJoinRounds?: number; preJoinChannels?: string[] }) => {
+            const runBotFlowForAccount = async (accountId: string, op: { bot: string; startParam?: string; steps: string[]; autoJoinRequired?: boolean; maxJoinRounds?: number; preJoinChannels?: string[]; preJoinOnly?: boolean }) => {
               send("log", { accountId, level: "info", message: "Connecting…" });
               let client;
               try {
@@ -867,16 +868,18 @@ export const Route = createFileRoute("/api/public/actions-stream")({
               let fail = 0;
               let botPeer: any;
               try {
-                const parsed = parseBotHandle(op.bot);
+                const parsed = op.bot ? parseBotHandle(op.bot) : { username: "", startParam: undefined as string | undefined };
                 const startParam = op.startParam?.trim() || parsed.startParam;
-                const botLabel = `@${parsed.username}`;
-                try {
-                  botPeer = await client.getEntity(parsed.username);
-                } catch (e) {
-                  const msg = `Resolve bot failed: ${(e as Error).message}`;
-                  send("log", { accountId, level: "error", target: botLabel, message: msg });
-                  await logDb(accountId, botLabel, "error", msg);
-                  return { ok: 0, fail: 1 };
+                const botLabel = op.preJoinOnly ? "pre-join" : `@${parsed.username}`;
+                if (!op.preJoinOnly) {
+                  try {
+                    botPeer = await client.getEntity(parsed.username);
+                  } catch (e) {
+                    const msg = `Resolve bot failed: ${(e as Error).message}`;
+                    send("log", { accountId, level: "error", target: botLabel, message: msg });
+                    await logDb(accountId, botLabel, "error", msg);
+                    return { ok: 0, fail: 1 };
+                  }
                 }
 
                 // Kick off with /start (+ optional deep link param) so the bot is initialized.
@@ -1058,9 +1061,10 @@ export const Route = createFileRoute("/api/public/actions-stream")({
                     const r = await smartJoin(raw);
                     if (r === "stop") break;
                   }
-                }
-                try {
-                  await doStartBot();
+                 }
+                 if (!op.preJoinOnly) {
+                 try {
+                   await doStartBot();
                   send("log", { accountId, level: "success", target: botLabel, message: startParam ? `Started with param "${startParam}"` : "Started" });
                   await logDb(accountId, botLabel, "success", startParam ? `Started with param "${startParam}"` : "Started");
                 } catch (e) {
@@ -1068,12 +1072,13 @@ export const Route = createFileRoute("/api/public/actions-stream")({
                   send("log", { accountId, level: "warn", target: botLabel, message: `StartBot: ${em}` });
                   await logDb(accountId, botLabel, "warn", `StartBot: ${em}`);
                 }
+                 }
 
                 // ── Auto-join required channels ─────────────────────────
                 // Many referral bots reply with "Please join these channels"
                 // and a list of URL buttons / t.me links. Detect them, join
                 // from this account, then re-fire /start so the bot re-checks.
-                if (op.autoJoinRequired !== false) {
+                if (!op.preJoinOnly && op.autoJoinRequired !== false) {
                   const rounds = Math.max(1, Math.min(15, op.maxJoinRounds ?? 10));
                   const linkRe = /(?:https?:\/\/)?(?:t(?:elegram)?\.me)\/(\+[A-Za-z0-9_-]+|joinchat\/[A-Za-z0-9_-]+|[A-Za-z0-9_]{4,})/gi;
                   // Track everything the bot has ever asked for on this account
@@ -1210,6 +1215,7 @@ export const Route = createFileRoute("/api/public/actions-stream")({
                   }
                 }
 
+                if (!op.preJoinOnly)
                 for (const rawStep of op.steps) {
                   if (stopRequested) break;
                   const step = rawStep.trim();
