@@ -952,6 +952,7 @@ export const Route = createFileRoute("/api/public/actions-stream")({
                     // can see it in structured logs / DB metadata.
                      let joinPath: "import_invite" | "import_username" | "peek_already" | "peek_username" | "peek_chat" | "peek_search_username" | "direct_username" | "none" = "none";
                     let joinErrorCode: string | null = null;
+                     let joinFinalStatus: "joined" | "requested" | "failed" | "skipped" = "skipped";
                     const extractErrCode = (s: string): string | null => {
                        return extractTelegramErrorCode(s);
                     };
@@ -966,6 +967,7 @@ export const Route = createFileRoute("/api/public/actions-stream")({
                        });
                        joinPath = result.path;
                        joinErrorCode = result.errorCode;
+                       joinFinalStatus = result.status === "requested" ? "requested" : "joined";
                        send("log", { accountId, level: result.status === "requested" ? "info" : "success", target: botLabel, message: `${result.message}${result.verified ? " · membership verified" : ""}` });
                        return result.status === "requested" || result.status === "already" ? "skip" : "ok";
                     } catch (e) {
@@ -999,7 +1001,7 @@ export const Route = createFileRoute("/api/public/actions-stream")({
                    const errLike = out === "flood" ? "FLOOD_WAIT" : null;
                    const fw = errLike ? floodWaitSeconds(errLike) : null;
                    const finalStatus: "joined" | "requested" | "failed" | "skipped" =
-                     out === "ok" ? "joined" : out === "flood" ? "failed" : "skipped";
+                     out === "flood" ? "failed" : out === "ok" ? "joined" : joinFinalStatus;
                    await finalizeJoinLock(supabase, {
                      accountId, target: rawTarget, status: finalStatus,
                      cacheTtlHours: pacing.cache_ttl_hours,
@@ -1007,7 +1009,7 @@ export const Route = createFileRoute("/api/public/actions-stream")({
                    });
                    await logJoinAttempt(supabase, {
                      userId, accountId, target: rawTarget, source: "bot_flow",
-                     result: out === "ok" ? "joined" : out === "flood" ? "flood" : "skipped",
+                     result: out === "flood" ? "flood" : finalStatus === "requested" ? "requested" : finalStatus === "joined" ? "joined" : "skipped",
                      waitMs, floodWaitSeconds: fw,
                       metadata: {
                         normalized: normalizeTargetKey(rawTarget),
