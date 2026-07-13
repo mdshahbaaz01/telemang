@@ -12,6 +12,7 @@ import { useEffect, type ReactNode } from "react";
 import appCss from "../styles.css?url";
 import { reportLovableError } from "../lib/lovable-error-reporting";
 import { ThemeProvider } from "@/components/theme-provider";
+import { installCaptchaErrorListeners } from "@/lib/captcha-error-listeners";
 
 function NotFoundComponent() {
   return (
@@ -127,6 +128,7 @@ function RootShell({ children }: { children: ReactNode }) {
 
 function RootComponent() {
   const { queryClient } = Route.useRouteContext();
+  useEffect(() => { installCaptchaErrorListeners(); }, []);
 
   return (
     <QueryClientProvider client={queryClient}>
