@@ -57,10 +57,20 @@ function AuthPage() {
     }
     setResetting(true);
     try {
-      const { error } = await supabase.auth.resetPasswordForEmail(email, {
-        redirectTo: `${window.location.origin}/reset-password`,
+      const { requestPasswordReset } = await import("@/lib/password-reset.functions");
+      const res = await requestPasswordReset({
+        data: { email, redirectTo: `${window.location.origin}/reset-password` },
       });
-      if (error) throw error;
+      if (!res.ok) {
+        const secs = Math.max(1, res.retryAfter);
+        const label = secs < 60 ? `${secs}s` : `${Math.ceil(secs / 60)} min`;
+        toast.error(
+          res.reason === "hourly_cap"
+            ? `Hourly limit reached. Try again in ${label}.`
+            : `Please wait ${label} before requesting another link.`,
+        );
+        return;
+      }
       toast.success("Password reset link sent. Check your inbox.");
     } catch (err) {
       toast.error((err as Error).message);

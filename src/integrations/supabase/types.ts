@@ -961,6 +961,24 @@ export type Database = {
         }
         Relationships: []
       }
+      password_reset_requests: {
+        Row: {
+          created_at: string
+          email_hash: string
+          id: string
+        }
+        Insert: {
+          created_at?: string
+          email_hash: string
+          id?: string
+        }
+        Update: {
+          created_at?: string
+          email_hash?: string
+          id?: string
+        }
+        Relationships: []
+      }
       referral_joins: {
         Row: {
           account_id: string
@@ -1382,6 +1400,14 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      check_password_reset_rate_limit: {
+        Args: {
+          _email_hash: string
+          _hourly_cap?: number
+          _min_interval_seconds?: number
+        }
+        Returns: Json
+      }
       drop_index_if_exists: {
         Args: { _name: string; _schema: string }
         Returns: undefined
