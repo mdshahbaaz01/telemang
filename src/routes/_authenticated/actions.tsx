@@ -1332,6 +1332,20 @@ function ActionsPageInner() {
                     />
                   </div>
                 </div>
+                <label className="flex items-start gap-2 rounded-md border border-border/60 bg-muted/30 p-3 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    className="mt-1 h-4 w-4 accent-primary"
+                    checked={dropForwardAuthor}
+                    onChange={(e) => setDropForwardAuthor(e.target.checked)}
+                  />
+                  <div className="text-sm">
+                    <div className="font-medium">Remove &quot;Forwarded from&quot; tag <span className="text-xs text-muted-foreground">(optional)</span></div>
+                    <div className="text-xs text-muted-foreground">
+                      Send the message as if it originated from your account — no forward header shown. Note: the source channel must allow this (protected content channels ignore the flag and will fail).
+                    </div>
+                  </div>
+                </label>
               </>
             )}
 
