@@ -219,7 +219,7 @@ export const Route = createFileRoute("/api/public/cleanup-stream")({
                       fail++;
                       send("log", { accountId, kind: "error", target: label, message: (err as Error).message || String(err) });
                     }
-                    await new Promise((r) => setTimeout(r, 350));
+                    await jitterDelay();
                   }
                   return;
                 }
@@ -346,7 +346,7 @@ export const Route = createFileRoute("/api/public/cleanup-stream")({
                       message: (err as Error).message || String(err),
                     });
                   }
-                  await new Promise((r) => setTimeout(r, 350));
+                  await jitterDelay();
                 }
               } finally {
                 await client.disconnect().catch(() => {});
