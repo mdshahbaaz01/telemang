@@ -155,9 +155,6 @@ function ResetPasswordPage() {
             disabled={!ready}
           />
         </div>
-        <Button type="submit" className="w-full" disabled={loading || !ready}>
-          {loading ? "Updating…" : "Update password"}
-        </Button>
         {password.length > 0 && (
           <div className="space-y-2">
             <div className="flex items-center justify-between text-xs">
