@@ -9,6 +9,30 @@ type Account = { id: string; first_name?: string | null; username?: string | nul
 
 type PreJoinLog = { level: "info" | "success" | "warn" | "error"; message: string; ts: number; target?: string; accountId?: string };
 
+type ChStatus = "pending" | "running" | "joined" | "skipped" | "failed";
+type ChCell = { status: ChStatus; ts: number; message?: string };
+type ChMap = Record<string, Record<string, ChCell>>; // channel -> accountId -> cell
+
+function normalizeTarget(t: string): string {
+  return t.trim().replace(/^https?:\/\/(t\.me|telegram\.me)\//i, "").replace(/^@/, "").toLowerCase();
+}
+
+function classify(level: string, message: string): ChStatus {
+  const m = (message || "").toLowerCase();
+  if (/already|member/.test(m) && !/error|fail/.test(m)) return "skipped";
+  if (level === "success" || /\bjoined\b|join ok|success/.test(m)) return "joined";
+  if (level === "error" || /\bfail|error|flood|invalid|forbidden|banned\b/.test(m)) return "failed";
+  return "running";
+}
+
+const STATUS_STYLES: Record<ChStatus, string> = {
+  pending: "bg-muted text-muted-foreground",
+  running: "bg-blue-500/15 text-blue-600 dark:text-blue-400",
+  joined: "bg-green-500/15 text-green-600 dark:text-green-400",
+  skipped: "bg-yellow-500/15 text-yellow-700 dark:text-yellow-400",
+  failed: "bg-destructive/15 text-destructive",
+};
+
 type PreJoinHistoryEntry = {
   id: string;
   startedAt: number;
