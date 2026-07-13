@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { toast } from "sonner";
+import { Eye, EyeOff } from "lucide-react";
 
 export const Route = createFileRoute("/auth")({
   ssr: false,
@@ -17,6 +18,8 @@ function AuthPage() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
+  const [showPw, setShowPw] = useState(false);
+  const [resetting, setResetting] = useState(false);
 
   useEffect(() => {
     supabase.auth.getUser().then(({ data }) => {
@@ -47,6 +50,25 @@ function AuthPage() {
     }
   };
 
+  const forgot = async () => {
+    if (!email) {
+      toast.error("Enter your email above first");
+      return;
+    }
+    setResetting(true);
+    try {
+      const { error } = await supabase.auth.resetPasswordForEmail(email, {
+        redirectTo: `${window.location.origin}/reset-password`,
+      });
+      if (error) throw error;
+      toast.success("Password reset link sent. Check your inbox.");
+    } catch (err) {
+      toast.error((err as Error).message);
+    } finally {
+      setResetting(false);
+    }
+  };
+
   return (
     <main className="flex min-h-screen items-center justify-center bg-background p-4">
       <form
@@ -70,15 +92,38 @@ function AuthPage() {
           />
         </div>
         <div className="space-y-2">
-          <Label htmlFor="pw">Password</Label>
-          <Input
-            id="pw"
-            type="password"
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-            required
-            minLength={6}
-          />
+          <div className="flex items-center justify-between">
+            <Label htmlFor="pw">Password</Label>
+            {mode === "in" && (
+              <button
+                type="button"
+                onClick={forgot}
+                disabled={resetting}
+                className="text-xs text-muted-foreground underline hover:text-foreground"
+              >
+                {resetting ? "Sending…" : "Forgot password?"}
+              </button>
+            )}
+          </div>
+          <div className="relative">
+            <Input
+              id="pw"
+              type={showPw ? "text" : "password"}
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              required
+              minLength={6}
+              className="pr-10"
+            />
+            <button
+              type="button"
+              onClick={() => setShowPw((s) => !s)}
+              aria-label={showPw ? "Hide password" : "Show password"}
+              className="absolute inset-y-0 right-0 flex items-center px-3 text-muted-foreground hover:text-foreground"
+            >
+              {showPw ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+            </button>
+          </div>
         </div>
         <Button type="submit" className="w-full" disabled={loading}>
           {loading ? "Please wait…" : mode === "in" ? "Sign in" : "Sign up"}
