@@ -16,11 +16,14 @@ import {
 } from "@/lib/tg-viewer.functions";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { ArrowLeft, Loader2, Send, Search, Reply, Trash2, Smile, RefreshCw, X, ExternalLink, Copy } from "lucide-react";
-import { copyWithToast } from "@/lib/clipboard";
+import { ArrowLeft, Loader2, Send, Search, Reply, RefreshCw, X } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { getStealthSettings } from "./stealth";
 import { MiniAppDrawer, type MiniAppRequest } from "@/components/MiniAppDrawer";
+import { Avatar, fmtDay, fmtDialogTime, fmtTime, initials } from "@/components/account-viewer/helpers";
+import type { Dialog, InlineButton, Message } from "@/components/account-viewer/types";
+import { MessageRow } from "@/components/account-viewer/MessageRow";
+import { ConfirmUrlDialog } from "@/components/account-viewer/ConfirmUrlDialog";
 
 const searchSchema = z.object({
   peer: z.string().optional(),
@@ -54,111 +57,6 @@ export const Route = createFileRoute("/_authenticated/accounts/$id")({
     </div>
   ),
 });
-
-type Dialog = {
-  peerKey: string;
-  title: string;
-  username: string | null;
-  kind: "user" | "channel" | "group";
-  unread: number;
-  pinned: boolean;
-  lastMessagePreview: string;
-  lastMessageDate: number | null;
-  isSelf: boolean;
-  verified: boolean;
-  isChannel: boolean;
-  photoDataUrl: string | null;
-};
-
-type Message = {
-  id: number;
-  date: number;
-  text: string;
-  out: boolean;
-  fromKey: string | null;
-  replyTo: number | null;
-  editDate: number | null;
-  mediaKind: string | null;
-  photoDataUrl: string | null;
-  reactions: { emoji: string; count: number; chosen: boolean }[];
-  views: number | null;
-  replyMarkup?: ReplyMarkup | null;
-};
-
-type ReplyMarkup =
-  | { kind: "inline"; rows: InlineButton[][] }
-  | { kind: "keyboard"; rows: InlineButton[][]; oneTime?: boolean; resize?: boolean; placeholder?: string }
-  | { kind: "hide" }
-  | { kind: "forceReply"; placeholder?: string };
-
-type InlineButton =
-  | { kind: "callback"; text: string; data: string; requiresPassword?: boolean }
-  | { kind: "url"; text: string; url: string }
-  | { kind: "urlAuth"; text: string; url: string; buttonId?: number }
-  | { kind: "switchInline"; text: string; query: string; samePeer: boolean }
-  | { kind: "webview"; text: string; url?: string }
-  | { kind: "game"; text: string }
-  | { kind: "buy"; text: string }
-  | { kind: "reply"; text: string }
-  | { kind: "other"; text: string; className: string };
-
-const QUICK_REACTIONS = ["👍", "❤️", "🔥", "🎉", "😂", "😢", "🙏", "👎"];
-
-function initials(s: string) {
-  return s.split(/\s+/).filter(Boolean).slice(0, 2).map((w) => w[0]?.toUpperCase()).join("") || "?";
-}
-
-function Avatar({
-  photoDataUrl, fallback, kind, size,
-}: {
-  photoDataUrl: string | null;
-  fallback: string;
-  kind: "user" | "channel" | "group";
-  size: number;
-}) {
-  const dim = `${size * 0.25}rem`;
-  const bg = kind === "channel" ? "bg-blue-600" : kind === "group" ? "bg-green-600" : "bg-purple-600";
-  if (photoDataUrl) {
-    return (
-      <img
-        src={photoDataUrl}
-        alt=""
-        className="shrink-0 rounded-full object-cover"
-        style={{ width: dim, height: dim }}
-      />
-    );
-  }
-  return (
-    <div
-      className={cn("flex shrink-0 items-center justify-center rounded-full text-xs font-semibold text-white", bg)}
-      style={{ width: dim, height: dim }}
-    >
-      {fallback}
-    </div>
-  );
-}
-
-function fmtTime(ms: number) {
-  const d = new Date(ms);
-  return d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
-}
-function fmtDay(ms: number) {
-  const d = new Date(ms);
-  const today = new Date();
-  const yesterday = new Date(Date.now() - 86400000);
-  if (d.toDateString() === today.toDateString()) return "Today";
-  if (d.toDateString() === yesterday.toDateString()) return "Yesterday";
-  return d.toLocaleDateString([], { month: "short", day: "numeric", year: d.getFullYear() === today.getFullYear() ? undefined : "numeric" });
-}
-function fmtDialogTime(ms: number | null) {
-  if (!ms) return "";
-  const d = new Date(ms);
-  const today = new Date();
-  if (d.toDateString() === today.toDateString()) return fmtTime(ms);
-  const diff = (today.getTime() - ms) / 86400000;
-  if (diff < 7) return d.toLocaleDateString([], { weekday: "short" });
-  return d.toLocaleDateString([], { month: "numeric", day: "numeric" });
-}
 
 function AccountViewerPage() {
   const { id: accountId } = Route.useParams();
