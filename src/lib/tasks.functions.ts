@@ -613,9 +613,6 @@ export const processNextJoin = createServerFn({ method: "POST" })
           Api,
           target: item.target,
           publicInviteFallback: true,
-          log: async (level, message) => {
-            await log(task.id, level, message);
-          },
         });
         joinPath = result.path;
         joinErrorCode = result.errorCode;
@@ -812,6 +809,7 @@ export const processBatchJoin = createServerFn({ method: "POST" })
   .handler(async ({ data, context }) => {
     const { decryptString, encryptString } = await import("./crypto.server");
     const { createTgClient } = await import("./telegram-client.server");
+    const { joinTelegramTargetVerified, extractTelegramErrorCode } = await import("./telegram-join-helper.server");
     const { Api } = await import("telegram");
     const { StringSession } = await import("telegram/sessions");
     const supabase = context.supabase;
@@ -921,72 +919,32 @@ export const processBatchJoin = createServerFn({ method: "POST" })
         error: string | null;
         processed_at: string;
       } = { status: "joined", error: null, processed_at: new Date().toISOString() };
+      let joinPath = "none";
+      let joinErrorCode: string | null = null;
+      let joinVerified = false;
+      let canonicalTarget: string | null = null;
       try {
         await log(task.id, "info", `Joining @${item.target}…`);
-        const target = item.target
-          .trim()
-          .replace(/^@/, "")
-          .replace(/[?#].*$/, "")
-          .replace(/^(?:https?:\/\/)?(?:www\.)?(?:t\.me|telegram\.me)\//i, "")
-          .replace(/^@/, "");
-        const inviteHash = target.startsWith("+")
-          ? target.slice(1)
-          : target.toLowerCase().startsWith("joinchat/")
-            ? target.slice("joinchat/".length)
-            : null;
-
-        let result: { status: "joined" | "requested"; message: string; note: string | null };
-
-        if (inviteHash) {
-          // Peek first — public channels behind +hash invites join more
-          // reliably via @username than via ImportChatInvite.
-          let joinedViaPeek = false;
-          try {
-            const info: any = await client.invoke(new Api.messages.CheckChatInvite({ hash: inviteHash }));
-            const chat: any = info?.chat ?? info?.chats?.[0];
-            if (info?.className === "ChatInviteAlready" && chat) {
-              result = { status: "joined", message: `Already member of ${chat.username ? "@" + chat.username : chat.title || item.target}`, note: null };
-              joinedViaPeek = true;
-            } else if (chat?.username) {
-              const ent: any = await client.getEntity(chat.username);
-              await client.invoke(new Api.channels.JoinChannel({ channel: ent }));
-              result = { status: "joined", message: `Joined @${chat.username} (public fallback from +${inviteHash.slice(0,8)}…)`, note: null };
-              joinedViaPeek = true;
-            }
-          } catch { /* fall through */ }
-          if (!joinedViaPeek) try {
-            await client.invoke(new Api.messages.ImportChatInvite({ hash: inviteHash }));
-            result = { status: "joined", message: `Joined ${item.target}`, note: null };
-          } catch (impErr) {
-            const impMsg = (impErr as { message?: string }).message || String(impErr);
-            if (
-              impMsg.includes("INVITE_REQUEST_SENT") ||
-              impMsg.includes("INVITE_REQUEST_ALREADY_SENT") ||
-              impMsg.includes("REQUEST_SENT")
-            ) {
-              result = {
-                status: "requested",
-                message: `Join request sent for ${item.target}`,
-                note: "waiting for channel approval",
-              };
-            } else {
-              throw impErr;
-            }
-          }
-          if (!result!) throw new Error("join failed");
-        } else {
-          await client.invoke(new Api.channels.JoinChannel({ channel: target }));
-          result = { status: "joined", message: `Joined @${target}`, note: null };
-        }
+        const result = await joinTelegramTargetVerified({
+          client,
+          Api,
+          target: item.target,
+          publicInviteFallback: true,
+        });
+        joinPath = result.path;
+        joinErrorCode = result.errorCode;
+        joinVerified = result.verified;
+        canonicalTarget = result.canonicalTarget;
         statusUpdate = {
-          status: result.status,
+          status: result.status === "already" ? "joined" : result.status,
           error: result.note,
           processed_at: new Date().toISOString(),
         };
-        await log(task.id, "success", result.message);
+        await log(task.id, "success", `${result.message}${result.verified ? " · membership verified" : ""}`);
       } catch (e) {
         const err = e as { message?: string; seconds?: number };
         const msg = err.message || String(e);
+        joinErrorCode = joinErrorCode ?? extractTelegramErrorCode(msg);
         if (msg.includes("USER_ALREADY_PARTICIPANT")) {
           statusUpdate = {
             status: "joined",
@@ -1066,6 +1024,13 @@ export const processBatchJoin = createServerFn({ method: "POST" })
           fwm ? "flood" : "skipped",
         floodWaitSeconds: fwm ? Number(fwm[1]) : null,
         error: statusUpdate.error,
+        metadata: {
+          path: joinPath,
+          errorCode: joinErrorCode,
+          verified: joinVerified,
+          canonicalTarget,
+          publicInviteFallback: true,
+        },
       });
     };
 
