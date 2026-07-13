@@ -16,11 +16,14 @@ import {
 } from "@/lib/tg-viewer.functions";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { ArrowLeft, Loader2, Send, Search, Reply, Trash2, Smile, RefreshCw, X, ExternalLink, Copy } from "lucide-react";
-import { copyWithToast } from "@/lib/clipboard";
+import { ArrowLeft, Loader2, Send, Search, Reply, RefreshCw, X } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { getStealthSettings } from "./stealth";
 import { MiniAppDrawer, type MiniAppRequest } from "@/components/MiniAppDrawer";
+import { Avatar, fmtDay, fmtDialogTime, fmtTime, initials } from "@/components/account-viewer/helpers";
+import type { Dialog, InlineButton, Message } from "@/components/account-viewer/types";
+import { MessageRow } from "@/components/account-viewer/MessageRow";
+import { ConfirmUrlDialog } from "@/components/account-viewer/ConfirmUrlDialog";
 
 const searchSchema = z.object({
   peer: z.string().optional(),
@@ -54,111 +57,6 @@ export const Route = createFileRoute("/_authenticated/accounts/$id")({
     </div>
   ),
 });
-
-type Dialog = {
-  peerKey: string;
-  title: string;
-  username: string | null;
-  kind: "user" | "channel" | "group";
-  unread: number;
-  pinned: boolean;
-  lastMessagePreview: string;
-  lastMessageDate: number | null;
-  isSelf: boolean;
-  verified: boolean;
-  isChannel: boolean;
-  photoDataUrl: string | null;
-};
-
-type Message = {
-  id: number;
-  date: number;
-  text: string;
-  out: boolean;
-  fromKey: string | null;
-  replyTo: number | null;
-  editDate: number | null;
-  mediaKind: string | null;
-  photoDataUrl: string | null;
-  reactions: { emoji: string; count: number; chosen: boolean }[];
-  views: number | null;
-  replyMarkup?: ReplyMarkup | null;
-};
-
-type ReplyMarkup =
-  | { kind: "inline"; rows: InlineButton[][] }
-  | { kind: "keyboard"; rows: InlineButton[][]; oneTime?: boolean; resize?: boolean; placeholder?: string }
-  | { kind: "hide" }
-  | { kind: "forceReply"; placeholder?: string };
-
-type InlineButton =
-  | { kind: "callback"; text: string; data: string; requiresPassword?: boolean }
-  | { kind: "url"; text: string; url: string }
-  | { kind: "urlAuth"; text: string; url: string; buttonId?: number }
-  | { kind: "switchInline"; text: string; query: string; samePeer: boolean }
-  | { kind: "webview"; text: string; url?: string }
-  | { kind: "game"; text: string }
-  | { kind: "buy"; text: string }
-  | { kind: "reply"; text: string }
-  | { kind: "other"; text: string; className: string };
-
-const QUICK_REACTIONS = ["👍", "❤️", "🔥", "🎉", "😂", "😢", "🙏", "👎"];
-
-function initials(s: string) {
-  return s.split(/\s+/).filter(Boolean).slice(0, 2).map((w) => w[0]?.toUpperCase()).join("") || "?";
-}
-
-function Avatar({
-  photoDataUrl, fallback, kind, size,
-}: {
-  photoDataUrl: string | null;
-  fallback: string;
-  kind: "user" | "channel" | "group";
-  size: number;
-}) {
-  const dim = `${size * 0.25}rem`;
-  const bg = kind === "channel" ? "bg-blue-600" : kind === "group" ? "bg-green-600" : "bg-purple-600";
-  if (photoDataUrl) {
-    return (
-      <img
-        src={photoDataUrl}
-        alt=""
-        className="shrink-0 rounded-full object-cover"
-        style={{ width: dim, height: dim }}
-      />
-    );
-  }
-  return (
-    <div
-      className={cn("flex shrink-0 items-center justify-center rounded-full text-xs font-semibold text-white", bg)}
-      style={{ width: dim, height: dim }}
-    >
-      {fallback}
-    </div>
-  );
-}
-
-function fmtTime(ms: number) {
-  const d = new Date(ms);
-  return d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
-}
-function fmtDay(ms: number) {
-  const d = new Date(ms);
-  const today = new Date();
-  const yesterday = new Date(Date.now() - 86400000);
-  if (d.toDateString() === today.toDateString()) return "Today";
-  if (d.toDateString() === yesterday.toDateString()) return "Yesterday";
-  return d.toLocaleDateString([], { month: "short", day: "numeric", year: d.getFullYear() === today.getFullYear() ? undefined : "numeric" });
-}
-function fmtDialogTime(ms: number | null) {
-  if (!ms) return "";
-  const d = new Date(ms);
-  const today = new Date();
-  if (d.toDateString() === today.toDateString()) return fmtTime(ms);
-  const diff = (today.getTime() - ms) / 86400000;
-  if (diff < 7) return d.toLocaleDateString([], { weekday: "short" });
-  return d.toLocaleDateString([], { month: "numeric", day: "numeric" });
-}
 
 function AccountViewerPage() {
   const { id: accountId } = Route.useParams();
@@ -677,51 +575,7 @@ function AccountViewerPage() {
         </section>
       </div>
 
-      {confirmUrl && (
-        <div
-          className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4"
-          onClick={() => setConfirmUrl(null)}
-        >
-          <div
-            className="w-full max-w-md rounded-lg border bg-card p-4 shadow-lg"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <div className="mb-2 flex items-center justify-between gap-2">
-              <div className="text-sm font-semibold">Open external link?</div>
-              <button
-                type="button"
-                className="rounded p-1 text-muted-foreground hover:bg-muted"
-                title="Copy link"
-                onClick={() => copyWithToast(confirmUrl, toast)}
-              >
-                <Copy className="h-3.5 w-3.5" />
-              </button>
-            </div>
-            <p className="mb-3 break-all rounded-md border bg-muted p-2 text-xs">{confirmUrl}</p>
-            <div className="flex justify-end gap-2">
-              <Button variant="outline" size="sm" onClick={() => setConfirmUrl(null)}>
-                Cancel
-              </Button>
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => copyWithToast(confirmUrl, toast)}
-              >
-                <Copy className="mr-1 h-4 w-4" /> Copy
-              </Button>
-              <Button
-                size="sm"
-                onClick={() => {
-                  window.open(confirmUrl, "_blank", "noopener,noreferrer");
-                  setConfirmUrl(null);
-                }}
-              >
-                <ExternalLink className="mr-1 h-4 w-4" /> Open
-              </Button>
-            </div>
-          </div>
-        </div>
-      )}
+      {confirmUrl && <ConfirmUrlDialog url={confirmUrl} onClose={() => setConfirmUrl(null)} />}
 
       <MiniAppDrawer
         open={!!miniApp}
@@ -729,163 +583,6 @@ function AccountViewerPage() {
         onClose={() => setMiniApp(null)}
         resolver={resolveMiniApp}
       />
-    </div>
-  );
-}
-
-function MessageRow({
-  msg, parentReply, onReply, onReact, onDelete, isOwn, canModify, onPressButton, pressingKey,
-}: {
-  msg: Message;
-  parentReply: Message | null;
-  onReply: () => void;
-  onReact: (msg: Message, emoji: string | null) => void;
-  onDelete: (msg: Message) => void;
-  isOwn: boolean;
-  canModify: boolean;
-  onPressButton: (msg: Message, btn: InlineButton, key: string) => void;
-  pressingKey: string | null;
-}) {
-  const [showReactions, setShowReactions] = useState(false);
-  return (
-    <div className={cn("group flex", isOwn ? "justify-end" : "justify-start")}>
-      <div className={cn(
-        "relative max-w-[70%] rounded-2xl px-3 py-1.5 text-sm",
-        isOwn ? "rounded-br-md bg-primary text-primary-foreground" : "rounded-bl-md bg-card border",
-      )}>
-        {parentReply && (
-          <div className={cn("mb-1 border-l-2 pl-2 text-xs opacity-80", isOwn ? "border-primary-foreground/60" : "border-primary")}>
-            <div className="font-semibold">Reply</div>
-            <div className="line-clamp-2">{parentReply.text || "[media]"}</div>
-          </div>
-        )}
-        {msg.mediaKind === "photo" && msg.photoDataUrl && (
-          <img src={msg.photoDataUrl} alt="" className="mb-1 max-h-64 rounded" />
-        )}
-        {msg.mediaKind && msg.mediaKind !== "photo" && !msg.text && (
-          <div className="italic opacity-70">📎 {msg.mediaKind}</div>
-        )}
-        {msg.text && <div className="whitespace-pre-wrap break-words">{msg.text}</div>}
-        <div className={cn("mt-0.5 flex items-center gap-1 text-[10px]", isOwn ? "text-primary-foreground/80" : "text-muted-foreground")}>
-          {msg.editDate && <span>edited</span>}
-          {msg.views != null && <span>{msg.views} views</span>}
-          <span>{fmtTime(msg.date)}</span>
-        </div>
-        {msg.reactions.length > 0 && (
-          <div className="mt-1 flex flex-wrap gap-1">
-            {msg.reactions.map((r, i) => (
-              <button
-                key={i}
-                onClick={() => onReact(msg, r.chosen ? null : r.emoji)}
-                className={cn(
-                  "rounded-full border px-1.5 py-0.5 text-[10px]",
-                  r.chosen ? "bg-primary/20 border-primary" : "bg-background",
-                )}
-              >
-                {r.emoji} {r.count}
-              </button>
-            ))}
-          </div>
-        )}
-
-        {msg.replyMarkup && (msg.replyMarkup.kind === "inline" || msg.replyMarkup.kind === "keyboard") && msg.replyMarkup.rows.length > 0 && (
-          <div className="mt-2 space-y-1">
-            {msg.replyMarkup.rows.map((row, ri) => (
-              <div key={ri} className="flex flex-wrap gap-1">
-                {row.map((btn, ci) => {
-                  const key = `${msg.id}:${ri}:${ci}`;
-                  const busy = pressingKey === key;
-                  const clickable =
-                    btn.kind === "callback" ||
-                    btn.kind === "url" ||
-                    btn.kind === "urlAuth" ||
-                    btn.kind === "webview" ||
-                    btn.kind === "reply";
-                  const title =
-                    btn.kind === "url" || btn.kind === "urlAuth"
-                      ? `Opens: ${(btn as any).url}`
-                      : btn.kind === "callback"
-                        ? "Callback button"
-                        : btn.kind === "webview"
-                          ? "Opens a Telegram WebApp (limited)"
-                          : btn.kind === "reply"
-                            ? `Sends: ${btn.text}`
-                          : `${btn.kind} button (not supported)`;
-                  return (
-                    <button
-                      key={ci}
-                      type="button"
-                      title={title}
-                      disabled={!clickable || busy}
-                      onClick={() => onPressButton(msg, btn, key)}
-                      className={cn(
-                        "inline-flex items-center gap-1 rounded-md border px-2 py-1 text-[11px]",
-                        clickable
-                          ? isOwn
-                            ? "border-primary-foreground/40 bg-primary-foreground/10 hover:bg-primary-foreground/20"
-                            : "border-primary/40 bg-primary/10 hover:bg-primary/20"
-                          : "cursor-not-allowed border-border bg-muted opacity-60",
-                      )}
-                    >
-                      {busy && <Loader2 className="h-3 w-3 animate-spin" />}
-                      {(btn.kind === "url" || btn.kind === "urlAuth") && (
-                        <ExternalLink className="h-3 w-3" />
-                      )}
-                      <span className="max-w-[16rem] truncate">{btn.text}</span>
-                      {(btn.kind === "url" || btn.kind === "urlAuth") && (btn as any).url && (
-                        <span
-                          role="button"
-                          tabIndex={0}
-                          title="Copy link"
-                          className="ml-1 rounded p-0.5 hover:bg-background/40"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            copyWithToast((btn as any).url, toast);
-                          }}
-                          onKeyDown={(e) => {
-                            if (e.key === "Enter" || e.key === " ") {
-                              e.stopPropagation();
-                              copyWithToast((btn as any).url, toast);
-                            }
-                          }}
-                        >
-                          <Copy className="h-3 w-3" />
-                        </span>
-                      )}
-                    </button>
-                  );
-                })}
-              </div>
-            ))}
-          </div>
-        )}
-
-        <div className={cn(
-          "absolute top-0 flex items-center gap-1 opacity-0 transition group-hover:opacity-100",
-          isOwn ? "-left-24" : "-right-24",
-        )}>
-          <button className="rounded bg-background p-1 shadow-sm hover:bg-muted" onClick={() => setShowReactions((v) => !v)} title="React">
-            <Smile className="h-3.5 w-3.5" />
-          </button>
-          <button className="rounded bg-background p-1 shadow-sm hover:bg-muted" onClick={onReply} title="Reply">
-            <Reply className="h-3.5 w-3.5" />
-          </button>
-          {canModify && (
-            <button className="rounded bg-background p-1 shadow-sm hover:bg-muted text-red-500" onClick={() => onDelete(msg)} title="Delete">
-              <Trash2 className="h-3.5 w-3.5" />
-            </button>
-          )}
-        </div>
-        {showReactions && (
-          <div className={cn("absolute z-10 flex gap-1 rounded-full border bg-background p-1 shadow-md", isOwn ? "-top-9 right-0" : "-top-9 left-0")}>
-            {QUICK_REACTIONS.map((e) => (
-              <button key={e} onClick={() => { onReact(msg, e); setShowReactions(false); }} className="rounded-full px-1.5 py-0.5 text-base hover:bg-muted">
-                {e}
-              </button>
-            ))}
-          </div>
-        )}
-      </div>
     </div>
   );
 }
