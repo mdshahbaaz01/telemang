@@ -54,10 +54,34 @@ function Page() {
         {q.error && <p className="text-sm text-destructive">{(q.error as Error).message}</p>}
         {q.data && (
           <>
-            <div className="grid grid-cols-3 gap-3">
-              <Stat label="Successful sends" value={q.data.totals.ok} tone="ok" />
-              <Stat label="Errors" value={q.data.totals.error} tone="err" />
-              <Stat label="Runs" value={q.data.totals.runs} />
+            <div className="grid gap-4 md:grid-cols-3">
+              <MetricCard
+                title="Successful sends"
+                value={q.data.totals.ok}
+                unit="sends"
+                dateRange={`Last ${days} days`}
+                series={q.data.perDay.map((d) => ({ label: d.date.slice(5), value: d.ok }))}
+                readings={q.data.perDay.slice(-2).reverse().map((d) => ({ time: d.date, value: d.ok }))}
+                tone="ok"
+              />
+              <MetricCard
+                title="Errors"
+                value={q.data.totals.error}
+                unit="errs"
+                dateRange={`Last ${days} days`}
+                series={q.data.perDay.map((d) => ({ label: d.date.slice(5), value: d.error }))}
+                readings={q.data.perDay.slice(-2).reverse().map((d) => ({ time: d.date, value: d.error }))}
+                tone="err"
+              />
+              <MetricCard
+                title="Runs"
+                value={q.data.totals.runs}
+                unit="runs"
+                dateRange={`Last ${days} days`}
+                series={q.data.perDay.map((d) => ({ label: d.date.slice(5), value: d.ok + d.error }))}
+                readings={q.data.perDay.slice(-2).reverse().map((d) => ({ time: d.date, value: d.ok + d.error }))}
+                tone="gold"
+              />
             </div>
 
             <div className="rounded-lg border border-border bg-card p-4">
@@ -129,12 +153,108 @@ function Page() {
   );
 }
 
-function Stat({ label, value, tone }: { label: string; value: number; tone?: "ok" | "err" }) {
-  const c = tone === "ok" ? "text-green-500" : tone === "err" ? "text-destructive" : "text-foreground";
+type Tone = "ok" | "err" | "gold";
+
+function MetricCard({
+  title,
+  value,
+  unit,
+  dateRange,
+  series,
+  readings,
+  tone = "gold",
+}: {
+  title: string;
+  value: number;
+  unit: string;
+  dateRange: string;
+  series: { label: string; value: number }[];
+  readings: { time: string; value: number }[];
+  tone?: Tone;
+}) {
+  const gradient =
+    tone === "ok"
+      ? "from-emerald-400 to-emerald-600"
+      : tone === "err"
+      ? "from-rose-400 to-rose-600"
+      : "from-amber-300 to-amber-500";
+  const dotBorder =
+    tone === "ok" ? "border-emerald-400" : tone === "err" ? "border-rose-400" : "border-amber-400";
+
+  const bars = series.slice(-7);
+  const max = Math.max(1, ...bars.map((b) => b.value));
+  const avg = bars.length ? Math.round(bars.reduce((s, b) => s + b.value, 0) / bars.length) : 0;
+  const avgPctFromTop = 100 - (avg / max) * 100;
+
   return (
-    <div className="rounded-lg border border-border bg-card p-4">
-      <div className="text-xs text-muted-foreground">{label}</div>
-      <div className={`text-2xl font-semibold ${c}`}>{value.toLocaleString()}</div>
+    <div className="rounded-2xl border border-border bg-card p-5 shadow-sm">
+      <div className="mb-2 flex items-center justify-between">
+        <span className="text-sm font-bold text-foreground">{title}</span>
+        <button className="rounded-md border border-border bg-background px-2.5 py-1 text-[10px] font-semibold text-foreground transition-colors hover:bg-muted">
+          Full stats →
+        </button>
+      </div>
+      <div className="mb-1">
+        <span className="text-3xl font-bold tracking-tight text-foreground">{value.toLocaleString()}</span>
+        <span className="ml-1 text-2xl font-light text-muted-foreground">{unit}</span>
+      </div>
+      <div className="mb-5 text-[11px] text-muted-foreground">{dateRange}</div>
+
+      <div className="relative mb-5 h-24">
+        <div
+          className="absolute inset-x-0 z-[1] h-px bg-border"
+          style={{ top: `${Math.min(90, Math.max(10, avgPctFromTop))}%` }}
+        />
+        <div
+          className="absolute right-0 z-[2] rounded-md bg-foreground px-2 py-0.5 text-[10px] font-semibold text-background"
+          style={{ top: `calc(${Math.min(90, Math.max(10, avgPctFromTop))}% - 20px)` }}
+        >
+          Avg. {avg}
+        </div>
+        <div className="relative flex h-full items-end justify-around gap-1 px-2">
+          {bars.map((b, i) => {
+            const h = Math.max(8, (b.value / max) * 72);
+            const isPeak = b.value === max && max > 0;
+            const isLow = b.value === Math.min(...bars.map((x) => x.value));
+            return (
+              <div key={i} className="z-[2] flex flex-1 flex-col items-center gap-1.5">
+                <div
+                  className={`relative w-5 rounded-full bg-gradient-to-b ${gradient} transition-transform hover:scale-105`}
+                  style={{ height: `${h}px` }}
+                  title={`${b.label}: ${b.value}`}
+                >
+                  {isPeak && (
+                    <div
+                      className={`absolute left-1/2 top-0 h-2 w-2 -translate-x-1/2 -translate-y-1/2 rounded-full border-[1.5px] ${dotBorder} bg-background`}
+                    />
+                  )}
+                  {isLow && bars.length > 1 && (
+                    <div
+                      className={`absolute bottom-0 left-1/2 h-2 w-2 -translate-x-1/2 translate-y-1/2 rounded-full border-[1.5px] ${dotBorder} bg-background`}
+                    />
+                  )}
+                </div>
+                <div className="text-[9px] font-medium text-muted-foreground">{b.label}</div>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+
+      <div className="border-t border-border pt-3">
+        {readings.map((r, i) => (
+          <div
+            key={i}
+            className={`flex items-center justify-between py-2 ${
+              i < readings.length - 1 ? "border-b border-border" : ""
+            }`}
+          >
+            <span className="text-[10px] text-muted-foreground">{r.time}</span>
+            <span className="text-xs font-bold text-foreground">{r.value.toLocaleString()}</span>
+          </div>
+        ))}
+        {!readings.length && <div className="py-2 text-[10px] text-muted-foreground">No recent data</div>}
+      </div>
     </div>
   );
 }
