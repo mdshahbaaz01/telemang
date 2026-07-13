@@ -16,7 +16,9 @@ import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { toast } from "sonner";
 import { AdminGate } from "@/components/AdminGate";
-import { Trash2 } from "lucide-react";
+import { Trash2, RotateCw } from "lucide-react";
+import { cloneJoinTask } from "@/lib/clone.functions";
+import { useNavigate } from "@tanstack/react-router";
 
 export const Route = createFileRoute("/_authenticated/tasks/$id")({
   component: () => (
@@ -35,6 +37,7 @@ type LogRow = {
 
 function TaskDetail() {
   const { id } = Route.useParams();
+  const nav = useNavigate();
   const qc = useQueryClient();
   const getT = useServerFn(getTask);
   const runNext = useServerFn(processNextJoin);
@@ -42,6 +45,21 @@ function TaskDetail() {
   const getLogs = useServerFn(recentLogs);
   const addItems = useServerFn(addTaskItems);
   const delItem = useServerFn(deleteTaskItem);
+  const cloneFn = useServerFn(cloneJoinTask);
+  const [cloning, setCloning] = useState(false);
+
+  const runAgain = async () => {
+    setCloning(true);
+    try {
+      const r = await cloneFn({ data: { sourceTaskId: id } });
+      toast.success("Cloned — opening new task");
+      nav({ to: "/tasks/$id", params: { id: r.taskId } });
+    } catch (err) {
+      toast.error((err as Error).message);
+    } finally {
+      setCloning(false);
+    }
+  };
 
   const [newLinks, setNewLinks] = useState("");
   const [busyEdit, setBusyEdit] = useState(false);
@@ -155,6 +173,9 @@ function TaskDetail() {
             </p>
           </div>
           <div className="flex gap-2">
+            <Button variant="outline" onClick={runAgain} disabled={cloning || !task}>
+              <RotateCw className="h-3.5 w-3.5" /> Run again
+            </Button>
             {running ? (
               <Button variant="destructive" onClick={stop}>
                 Stop
