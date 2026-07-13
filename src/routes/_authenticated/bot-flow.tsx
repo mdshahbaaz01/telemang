@@ -18,6 +18,7 @@ import { copyWithToast } from "@/lib/clipboard";
 import { useBotFlowCaptchaConfig, CAPTCHA_KIND_OPTIONS, CAPTCHA_PROVIDER_OPTIONS } from "@/lib/bot-flow-captcha-config";
 import { CaptchaErrorBoundary } from "@/components/CaptchaErrorBoundary";
 import { PreJoinCard } from "@/components/PreJoinCard";
+import { CollapsibleSection } from "@/components/CollapsibleSection";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
 
@@ -461,8 +462,7 @@ function BotFlowPage() {
           <BotFlowCaptchaCard />
         </CaptchaErrorBoundary>
 
-        <section className="rounded-lg border border-border bg-card p-4 space-y-4">
-          <h2 className="text-lg font-medium">Run a bot with your referral link</h2>
+        <CollapsibleSection storageKey="botflow.run" title="Run a bot with your referral link">
 
           <div>
             <Label>Bot referral link</Label>
@@ -656,10 +656,9 @@ function BotFlowPage() {
               )}
             </div>
           )}
-        </section>
+        </CollapsibleSection>
 
-        <section className="rounded-lg border border-border bg-card p-4 space-y-4">
-          <h2 className="text-lg font-medium">Extract verify links (per account)</h2>
+        <CollapsibleSection storageKey="botflow.extract" title="Extract verify links (per account)" defaultOpen={false}>
           <p className="text-xs text-muted-foreground">
             Paste a bot link/username. For each selected account, the system will
             <code className="mx-1">/start</code> the bot, find the inline
