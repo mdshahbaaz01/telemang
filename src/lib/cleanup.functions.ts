@@ -39,7 +39,7 @@ export const listDialogs = createServerFn({ method: "POST" })
       requireOwnerId: context.userId,
     });
     try {
-      const dialogs = await client.getDialogs({ limit: 300 });
+      const dialogs = await client.getDialogs({ limit: 3000 });
       const rows: DialogRow[] = [];
       const serializePeer = (inputPeer: any, entity: any): CleanupPeer | null => {
         if (inputPeer?.className === "InputPeerUser") {
