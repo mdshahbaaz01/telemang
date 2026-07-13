@@ -182,7 +182,7 @@ function AccountViewerPage() {
       // photo downloads (huge speedup) and reuse the previously cached ones.
       const prev = qc.getQueryData<any>(["tg-dialogs", accountId]);
       const withPhotos = !prev;
-      const res: any = await listDialogsFn({ data: { accountId, limit: 1000, withPhotos } });
+      const res: any = await listDialogsFn({ data: { accountId, limit: 3000, withPhotos } });
       if (!withPhotos && prev) {
         const prevMap = new Map<string, string | null>(
           (prev.dialogs ?? []).map((d: any) => [d.peerKey, d.photoDataUrl]),
