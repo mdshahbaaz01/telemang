@@ -1001,11 +1001,18 @@ export const Route = createFileRoute("/api/public/actions-stream")({
                       return "skip";
                     }
                   };
-                  let out = await attempt();
-                  if (out === "flood") {
-                    // one retry after the local sleep for short waits
-                    out = await attempt();
-                  }
+                   let out = await attempt();
+                   // Strict single-attempt policy: one (account, channel) →
+                   // exactly one request. On FLOOD/short-wait we do NOT retry
+                   // (the local sleep inside attempt() has already elapsed),
+                   // so we never hammer the same target twice from the same
+                   // account in the same run. The join_cache + lock guarantees
+                   // it also never re-runs across future runs.
+                   if (out === "flood" && op.preJoinOnly) {
+                     send("log", { accountId, level: "info", target: botLabel, message: `Skip retry (strict 1-req/channel policy)` });
+                   } else if (out === "flood") {
+                     out = await attempt();
+                   }
                    const waitMs = Date.now() - t0;
                    const errLike = out === "flood" ? "FLOOD_WAIT" : null;
                    const fw = errLike ? floodWaitSeconds(errLike) : null;
@@ -1362,13 +1369,19 @@ export const Route = createFileRoute("/api/public/actions-stream")({
                           return { ok, fail };
                         },
                       )
-                    : body.op.kind === "botflow"
-                      // Bot flow: force strictly sequential accounts. Running
-                      // multiple accounts in parallel makes them all hit the
-                      // same required invite at the same instant, which
-                      // triggers FloodWait after ~5 joins. One account finishes
-                      // ALL its channels before the next starts.
-                      ? await runWithConcurrency(body.accountIds, 1, (id) => runBotFlowForAccount(id, body.op as any))
+                     : body.op.kind === "botflow"
+                       // Bot flow (chat with bot): strictly sequential accounts
+                       // — parallel runs hit the same required invite at once
+                       // and trigger FloodWait after ~5 joins.
+                       //
+                       // Pre-join-only mode is different: each account joins
+                       // its OWN list independently and the per-(account,
+                       // channel) join lock already guarantees exactly one
+                       // request per pair. Safe to fan out in parallel to
+                       // save time.
+                       ? (body.op as any).preJoinOnly
+                         ? await runWithConcurrency(body.accountIds, Math.max(body.concurrency, 1), (id) => runBotFlowForAccount(id, body.op as any))
+                         : await runWithConcurrency(body.accountIds, 1, (id) => runBotFlowForAccount(id, body.op as any))
                       : await runWithConcurrency(body.accountIds, Math.max(body.concurrency, 1), (id) => runOne(id));
               for (const r of results) {
                 totalOk += r.ok;
