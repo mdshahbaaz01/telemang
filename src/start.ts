@@ -24,7 +24,9 @@ const errorMiddleware = createMiddleware().server(async ({ next }) => {
 const SECURITY_HEADERS: Record<string, string> = {
   "Strict-Transport-Security": "max-age=63072000; includeSubDomains; preload",
   "X-Content-Type-Options": "nosniff",
-  "X-Frame-Options": "DENY",
+  // Do not send X-Frame-Options: DENY here. The published app is opened
+  // inside Lovable's preview/editor iframe, and XFO cannot express an allowlist.
+  // CSP frame-ancestors below keeps framing limited to our app + Lovable hosts.
   "Referrer-Policy": "strict-origin-when-cross-origin",
   "Permissions-Policy": "geolocation=(), camera=(), microphone=(), payment=()",
   "Cross-Origin-Opener-Policy": "same-origin",
@@ -38,7 +40,7 @@ const SECURITY_HEADERS: Record<string, string> = {
     "connect-src 'self' https://*.supabase.co wss://*.supabase.co https://api.telegram.org https://*.lovable.app https://*.lovable.dev https://ai.gateway.lovable.dev",
     "frame-src 'self' https://telegram.org https://*.telegram.org https://t.me https://*.t.me",
     "worker-src 'self' blob:",
-    "frame-ancestors 'none'",
+    "frame-ancestors 'self' https://*.lovable.app https://*.lovable.dev https://*.lovableproject.com",
     "base-uri 'self'",
     "form-action 'self'",
     "object-src 'none'",
