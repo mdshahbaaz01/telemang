@@ -1127,6 +1127,40 @@ export const Route = createFileRoute("/api/public/actions-stream")({
                       if (/join|जॉइन|加入|подпис/i.test(text)) joinHintSeen = true;
                       let match: RegExpExecArray | null;
                       while ((match = linkRe.exec(text)) !== null) candidates.push(match[1]);
+                      // Message entities: MessageEntityTextUrl (has .url),
+                      // MessageEntityMention (@name in text — use offset/length),
+                      // MessageEntityMentionName (userId). Bots often list
+                      // required channels as clickable text mentions with no
+                      // visible t.me link in the body.
+                      const entities: any[] = m?.entities ?? [];
+                      for (const ent of entities) {
+                        const cls = String(ent?.className ?? "");
+                        if (cls === "MessageEntityTextUrl" && typeof ent?.url === "string") {
+                          if (/t(?:elegram)?\.me\//i.test(ent.url)) joinHintSeen = true;
+                          const mm = ent.url.match(linkRe);
+                          linkRe.lastIndex = 0;
+                          if (mm) for (const hit of mm) {
+                            const inner = hit.replace(/^(?:https?:\/\/)?(?:www\.)?(?:t(?:elegram)?\.me)\//i, "").replace(/^joinchat\//i, "+");
+                            if (inner) candidates.push(inner);
+                          }
+                        } else if (cls === "MessageEntityMention" && typeof ent?.offset === "number" && typeof ent?.length === "number") {
+                          const raw = text.substr(ent.offset, ent.length).replace(/^@/, "").trim();
+                          if (raw) { candidates.push(raw); joinHintSeen = true; }
+                        }
+                      }
+                      // Webpage previews attached to bot messages sometimes
+                      // point to the required channel (t.me/xxx cards).
+                      const wp = m?.media?.webpage;
+                      const wpUrl: string | undefined = wp?.url ?? wp?.displayUrl;
+                      if (wpUrl && /t(?:elegram)?\.me\//i.test(wpUrl)) {
+                        joinHintSeen = true;
+                        const mm = wpUrl.match(linkRe);
+                        linkRe.lastIndex = 0;
+                        if (mm) for (const hit of mm) {
+                          const inner = hit.replace(/^(?:https?:\/\/)?(?:www\.)?(?:t(?:elegram)?\.me)\//i, "").replace(/^joinchat\//i, "+");
+                          if (inner) candidates.push(inner);
+                        }
+                      }
                       const rows: any[] = m?.replyMarkup?.rows ?? [];
                       for (const row of rows) for (const btn of (row?.buttons ?? [])) {
                         const url: string | undefined = btn?.url;
