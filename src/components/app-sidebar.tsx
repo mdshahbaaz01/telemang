@@ -30,7 +30,7 @@ import {
   Gauge,
   Activity,
   MessageSquare,
-  ShieldCheck as ShieldCheckIcon2,
+  Lock,
 } from "lucide-react";
 import {
   DndContext,
@@ -109,7 +109,7 @@ const items: Item[] = [
   { id: "join-pacing", title: "Join Pacing", to: "/join-pacing", icon: Gauge },
   { id: "health", title: "Health", to: "/health", icon: Activity },
   { id: "feedback", title: "Feedback", to: "/feedback", icon: MessageSquare },
-  { id: "security", title: "Security", to: "/security", icon: ShieldCheckIcon2 },
+  { id: "security", title: "Security", to: "/security", icon: Lock },
 ];
 
 // Route IDs allowed for non-admin users by default. Everyone can broadcast + view dashboard.

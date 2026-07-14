@@ -35,6 +35,7 @@ export const FEATURE_KEYS = [
   "bulk-mix","profile-updater","search","workspace","bulk-plus","bot-parser",
   "referrals","analytics","recipes","media","watchlists","stealth","captcha",
   "join-pacing","health",
+  "feedback","security",
 ] as const;
 export type FeatureKey = typeof FEATURE_KEYS[number];
 
