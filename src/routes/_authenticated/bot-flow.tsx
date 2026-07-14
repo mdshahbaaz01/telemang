@@ -102,8 +102,24 @@ function BotFlowPage() {
   const [running, setRunning] = useState(false);
   const [totals, setTotals] = useState<{ ok: number; fail: number } | null>(null);
   const [joinState, setJoinState] = useState<Record<string, JoinState>>({});
-  const [botChannels, setBotChannels] = useState<Set<string>>(new Set());
+  const BOT_CHANNELS_KEY = "botflow.channels.v1";
+  const [botChannels, setBotChannels] = useState<Set<string>>(() => {
+    if (typeof window === "undefined") return new Set();
+    try {
+      const raw = window.localStorage.getItem(BOT_CHANNELS_KEY);
+      if (!raw) return new Set();
+      const arr = JSON.parse(raw) as string[];
+      return new Set(Array.isArray(arr) ? arr : []);
+    } catch {
+      return new Set();
+    }
+  });
   const [showBotChannels, setShowBotChannels] = useState(false);
+  useEffect(() => {
+    try {
+      window.localStorage.setItem(BOT_CHANNELS_KEY, JSON.stringify(Array.from(botChannels)));
+    } catch {}
+  }, [botChannels]);
   const abortRef = useRef<AbortController | null>(null);
 
   const accountList = accountsQ.data ?? [];
