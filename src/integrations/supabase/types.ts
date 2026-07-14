@@ -14,6 +14,42 @@ export type Database = {
   }
   public: {
     Tables: {
+      account_add_requests: {
+        Row: {
+          created_at: string
+          decided_at: string | null
+          decided_by: string | null
+          id: string
+          message: string | null
+          requested_limit: number | null
+          status: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          decided_at?: string | null
+          decided_by?: string | null
+          id?: string
+          message?: string | null
+          requested_limit?: number | null
+          status?: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          decided_at?: string | null
+          decided_by?: string | null
+          id?: string
+          message?: string | null
+          requested_limit?: number | null
+          status?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       account_group_members: {
         Row: {
           account_id: string
@@ -1299,6 +1335,36 @@ export type Database = {
         }
         Relationships: []
       }
+      user_admin_settings: {
+        Row: {
+          account_add_approved: boolean
+          account_limit: number
+          created_at: string
+          notes: string | null
+          updated_at: string
+          updated_by: string | null
+          user_id: string
+        }
+        Insert: {
+          account_add_approved?: boolean
+          account_limit?: number
+          created_at?: string
+          notes?: string | null
+          updated_at?: string
+          updated_by?: string | null
+          user_id: string
+        }
+        Update: {
+          account_add_approved?: boolean
+          account_limit?: number
+          created_at?: string
+          notes?: string | null
+          updated_at?: string
+          updated_by?: string | null
+          user_id?: string
+        }
+        Relationships: []
+      }
       user_favorites: {
         Row: {
           created_at: string
@@ -1331,6 +1397,33 @@ export type Database = {
           label?: string
           ref_id?: string | null
           sort_order?: number
+          user_id?: string
+        }
+        Relationships: []
+      }
+      user_feature_permissions: {
+        Row: {
+          allowed: boolean
+          created_at: string
+          feature_key: string
+          updated_at: string
+          updated_by: string | null
+          user_id: string
+        }
+        Insert: {
+          allowed?: boolean
+          created_at?: string
+          feature_key: string
+          updated_at?: string
+          updated_by?: string | null
+          user_id: string
+        }
+        Update: {
+          allowed?: boolean
+          created_at?: string
+          feature_key?: string
+          updated_at?: string
+          updated_by?: string | null
           user_id?: string
         }
         Relationships: []
@@ -1408,6 +1501,10 @@ export type Database = {
         }
         Returns: Json
       }
+      decide_account_request: {
+        Args: { _approve: boolean; _id: string; _limit: number }
+        Returns: undefined
+      }
       drop_index_if_exists: {
         Args: { _name: string; _schema: string }
         Returns: undefined
@@ -1415,6 +1512,10 @@ export type Database = {
       ensure_function_grant: {
         Args: { _role: string; _signature: string }
         Returns: undefined
+      }
+      has_feature: {
+        Args: { _feature: string; _user_id: string }
+        Returns: boolean
       }
       has_role: {
         Args: {
@@ -1425,6 +1526,24 @@ export type Database = {
       }
       health_metrics: { Args: { _window_minutes?: number }; Returns: Json }
       is_admin: { Args: never; Returns: boolean }
+      is_owner: { Args: never; Returns: boolean }
+      owner_set_feature: {
+        Args: { _allowed: boolean; _feature: string; _target: string }
+        Returns: undefined
+      }
+      owner_set_role: {
+        Args: { _make_admin: boolean; _target: string }
+        Returns: undefined
+      }
+      owner_set_user_settings: {
+        Args: {
+          _approved: boolean
+          _limit: number
+          _notes: string
+          _target: string
+        }
+        Returns: undefined
+      }
       recent_account_health: {
         Args: { _account_id: string }
         Returns: {
@@ -1433,6 +1552,10 @@ export type Database = {
           floods: number
           max_flood_seconds: number
         }[]
+      }
+      request_account_access: {
+        Args: { _message: string; _requested_limit: number }
+        Returns: string
       }
       run_log_retention: { Args: never; Returns: Json }
     }
