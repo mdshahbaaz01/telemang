@@ -15,16 +15,27 @@ export const Route = createFileRoute("/_authenticated")({
     if (error || !data.user) throw redirect({ to: "/auth" });
     // Fetch role client-side so children beforeLoad can gate synchronously.
     let isAdmin = false;
+    let isOwner = false;
+    const features: Record<string, boolean> = {};
     try {
       const { data: roles } = await supabase
         .from("user_roles")
         .select("role")
         .eq("user_id", data.user.id);
-      isAdmin = (roles ?? []).some((r) => r.role === "admin");
+      const rs = (roles ?? []).map((r) => r.role);
+      isOwner = rs.includes("owner");
+      isAdmin = isOwner || rs.includes("admin");
+      if (!isOwner) {
+        const { data: fp } = await supabase
+          .from("user_feature_permissions")
+          .select("feature_key, allowed")
+          .eq("user_id", data.user.id);
+        for (const r of fp ?? []) features[r.feature_key] = r.allowed;
+      }
     } catch {
-      // fail-closed: non-admin
+      // fail-closed
     }
-    return { user: data.user, isAdmin };
+    return { user: data.user, isAdmin, isOwner, features };
   },
   component: AuthenticatedLayout,
 });
