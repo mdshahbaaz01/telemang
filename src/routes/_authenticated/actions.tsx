@@ -497,7 +497,10 @@ function ActionsPageInner() {
 
   const uploadAttachment = async (file: File, isVoice = false) => {
     const ext = file.name.includes(".") ? file.name.slice(file.name.lastIndexOf(".")) : "";
-    const path = `${Date.now()}-${crypto.randomUUID()}${ext}`;
+    const { data: sess } = await supabase.auth.getSession();
+    const uid = sess.session?.user.id;
+    if (!uid) throw new Error("Not signed in");
+    const path = `${uid}/${Date.now()}-${crypto.randomUUID()}${ext}`;
     const { error } = await supabase.storage
       .from("action-attachments")
       .upload(path, file, { contentType: file.type || undefined, upsert: false });

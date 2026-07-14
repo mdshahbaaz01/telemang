@@ -114,7 +114,10 @@ function BulkPlusInner() {
 
   const uploadFile = async (file: File) => {
     const ext = file.name.includes(".") ? file.name.slice(file.name.lastIndexOf(".")) : "";
-    const path = `bulkplus/${Date.now()}-${crypto.randomUUID()}${ext}`;
+    const { data: sess } = await supabase.auth.getSession();
+    const uid = sess.session?.user.id;
+    if (!uid) throw new Error("Not signed in");
+    const path = `${uid}/bulkplus/${Date.now()}-${crypto.randomUUID()}${ext}`;
     const { error } = await supabase.storage.from("action-attachments").upload(path, file, { contentType: file.type || undefined });
     if (error) throw new Error(error.message);
     return { path, filename: file.name, mimeType: file.type || undefined };
