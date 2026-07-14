@@ -135,13 +135,18 @@ export const ownerSetRole = createServerFn({ method: "POST" })
     }).parse(d),
   )
   .handler(async ({ data, context }) => {
+    const t0 = performance.now();
     await assertOwner(context);
+    const t1 = performance.now();
     const { error } = await context.supabase.rpc("owner_set_role", {
       _target: data.userId,
       _role: data.role,
     });
+    const t2 = performance.now();
+    logTiming("ownerSetRole", { start: t0, assertOwner: t1, rpc: t2 },
+      { userId: data.userId, role: data.role, ok: !error });
     if (error) throw new Error(error.message);
-    return { ok: true };
+    return { ok: true, timing_ms: Math.round(t2 - t0) };
   });
 
 export const ownerSetFeature = createServerFn({ method: "POST" })
@@ -154,14 +159,19 @@ export const ownerSetFeature = createServerFn({ method: "POST" })
     }).parse(d),
   )
   .handler(async ({ data, context }) => {
+    const t0 = performance.now();
     await assertOwner(context);
+    const t1 = performance.now();
     const { error } = await context.supabase.rpc("owner_set_feature", {
       _target: data.userId,
       _key: data.key,
       _allowed: data.allowed,
     });
+    const t2 = performance.now();
+    logTiming("ownerSetFeature", { start: t0, assertOwner: t1, rpc: t2 },
+      { userId: data.userId, key: data.key, allowed: data.allowed, ok: !error });
     if (error) throw new Error(error.message);
-    return { ok: true };
+    return { ok: true, timing_ms: Math.round(t2 - t0) };
   });
 
 export const ownerSetUserSettings = createServerFn({ method: "POST" })
@@ -175,13 +185,18 @@ export const ownerSetUserSettings = createServerFn({ method: "POST" })
     }).parse(d),
   )
   .handler(async ({ data, context }) => {
+    const t0 = performance.now();
     await assertOwner(context);
+    const t1 = performance.now();
     const { error } = await context.supabase.rpc("owner_set_user_settings", {
       _target: data.userId,
       _approved: (data.approved ?? null) as unknown as boolean,
       _account_limit: (data.accountLimit ?? null) as unknown as number,
       _notes: (data.notes ?? null) as unknown as string,
     });
+    const t2 = performance.now();
+    logTiming("ownerSetUserSettings", { start: t0, assertOwner: t1, rpc: t2 },
+      { userId: data.userId, ok: !error });
     if (error) throw new Error(error.message);
-    return { ok: true };
+    return { ok: true, timing_ms: Math.round(t2 - t0) };
   });
