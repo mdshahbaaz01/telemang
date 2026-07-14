@@ -1,4 +1,5 @@
 import { createServerFn } from "@tanstack/react-start";
+import { z } from "zod";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
 
 export const listFavorites = createServerFn({ method: "GET" })
@@ -14,7 +15,17 @@ export const listFavorites = createServerFn({ method: "GET" })
 
 export const addFavorite = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
-  .inputValidator((d: { kind: string; ref_id?: string; label: string; href?: string; icon?: string }) => d)
+  .inputValidator((d: unknown) =>
+    z
+      .object({
+        kind: z.string().trim().min(1).max(64),
+        ref_id: z.string().max(200).optional(),
+        label: z.string().trim().min(1).max(200),
+        href: z.string().max(500).optional(),
+        icon: z.string().max(64).optional(),
+      })
+      .parse(d),
+  )
   .handler(async ({ data, context }) => {
     const { count } = await context.supabase
       .from("user_favorites")
@@ -39,7 +50,7 @@ export const addFavorite = createServerFn({ method: "POST" })
 
 export const removeFavorite = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
-  .inputValidator((d: { id: string }) => d)
+  .inputValidator((d: unknown) => z.object({ id: z.string().uuid() }).parse(d))
   .handler(async ({ data, context }) => {
     const { error } = await context.supabase.from("user_favorites").delete().eq("id", data.id);
     if (error) throw new Error(error.message);
@@ -48,7 +59,9 @@ export const removeFavorite = createServerFn({ method: "POST" })
 
 export const reorderFavorites = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
-  .inputValidator((d: { orderedIds: string[] }) => d)
+  .inputValidator((d: unknown) =>
+    z.object({ orderedIds: z.array(z.string().uuid()).max(100) }).parse(d),
+  )
   .handler(async ({ data, context }) => {
     await Promise.all(
       data.orderedIds.map((id, i) =>
