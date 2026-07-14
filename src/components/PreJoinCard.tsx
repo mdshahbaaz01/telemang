@@ -334,15 +334,15 @@ export function PreJoinCard({ accounts }: { accounts: Account[] }) {
           </div>
 
           {Object.keys(statuses).length > 0 && (
-            <div className="rounded-md border border-border bg-muted/10">
-              <div className="flex items-center gap-2 border-b border-border/60 px-2 py-1">
-                <div className="text-xs font-medium mr-auto">Per-account status</div>
+            <section className="rounded-lg border border-border bg-card p-4">
+              <div className="mb-2 flex items-center gap-2">
+                <h2 className="text-sm font-semibold mr-auto">Per-account status</h2>
                 <Button size="sm" variant="ghost" onClick={() => setStatusOpen((v) => !v)}>
                   {statusOpen ? "Hide" : "Show"}
                 </Button>
               </div>
               {statusOpen && (
-                <div className="max-h-80 overflow-auto p-2 grid grid-cols-1 sm:grid-cols-2 gap-2">
+                <div className="max-h-80 overflow-auto grid grid-cols-1 sm:grid-cols-2 gap-3">
                   {(() => {
                     // Invert: group by account id, each account gets a box with its channel chips.
                     const perAcct = new Map<string, Array<{ channel: string; status: ChStatus; ts: number; message?: string }>>();
@@ -357,12 +357,12 @@ export function PreJoinCard({ accounts }: { accounts: Account[] }) {
                       let latest = 0;
                       for (const c of list) { counts[c.status]++; if (c.ts > latest) latest = c.ts; }
                       return (
-                        <div key={aid} className="rounded-md border border-border/60 bg-background/60 p-2 text-[11px]">
-                          <div className="flex flex-wrap items-center gap-2 border-b border-border/40 pb-1.5 mb-1.5">
-                            <span className="font-medium text-xs">{nameOf(aid)}</span>
+                        <div key={aid} className="rounded-lg border border-border bg-card p-3 text-xs">
+                          <div className="mb-2 flex flex-wrap items-center gap-2 border-b border-border/50 pb-2">
+                            <span className="text-sm font-semibold">{nameOf(aid)}</span>
                             <span className="text-muted-foreground">· {list.length} ch</span>
                             {(["joined","skipped","running","failed","pending"] as ChStatus[]).map((s) => counts[s] ? (
-                              <span key={s} className={`rounded px-1.5 py-0.5 ${STATUS_STYLES[s]}`}>{s} {counts[s]}</span>
+                              <span key={s} className={`rounded px-1.5 py-0.5 text-[11px] ${STATUS_STYLES[s]}`}>{s} {counts[s]}</span>
                             ) : null)}
                             <span className="ml-auto text-muted-foreground">{latest ? new Date(latest).toLocaleTimeString() : ""}</span>
                           </div>
@@ -370,7 +370,7 @@ export function PreJoinCard({ accounts }: { accounts: Account[] }) {
                             {list.map((c) => (
                               <span
                                 key={c.channel}
-                                className={`rounded px-1.5 py-0.5 font-mono ${STATUS_STYLES[c.status]}`}
+                                className={`rounded px-1.5 py-0.5 font-mono text-[11px] ${STATUS_STYLES[c.status]}`}
                                 title={`${c.channel} · ${c.status} · ${new Date(c.ts).toLocaleTimeString()}${c.message ? ` — ${c.message}` : ""}`}
                               >
                                 {c.channel}
@@ -383,7 +383,7 @@ export function PreJoinCard({ accounts }: { accounts: Account[] }) {
                   })()}
                 </div>
               )}
-            </div>
+            </section>
           )}
 
           {logs.length > 0 && (
