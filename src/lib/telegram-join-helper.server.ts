@@ -117,6 +117,19 @@ async function joinEntityVerified(
     await client.invoke(new Api.channels.JoinChannel({ channel: entity }));
   } catch (error) {
     const msg = textOf(error);
+    if (/INVITE_REQUEST_SENT|INVITE_REQUEST_ALREADY_SENT|REQUEST_SENT/i.test(msg)) {
+      log?.("info", `Join request sent for ${label}; awaiting admin approval`);
+      return {
+        status: "requested",
+        path,
+        message: `Join request sent for ${label}`,
+        note: "Awaiting admin approval",
+        canonicalTarget: typeof label === "string" && label.startsWith("@") ? label.slice(1) : null,
+        errorCode: "INVITE_REQUEST_SENT",
+        verified: false,
+        canonicalChannelId: null,
+      };
+    }
     if (!/USER_ALREADY_PARTICIPANT/i.test(msg)) throw error;
   }
   const verified = await verifyMembership(client, Api, entity);
