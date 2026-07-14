@@ -319,6 +319,44 @@ function ChatViewerInner({ target, accountId }: { target: string; accountId: str
                 )}
                 {(chat as any)?.requestNeeded ? "Request to join" : "Join"}
               </Button>
+            ) : null}
+            {(chat as any)?.needsJoin && (chat as any)?.requestNeeded && (
+              <Button
+                size="sm"
+                variant="outline"
+                className="h-8"
+                disabled={!activeAccountId || cancelReqMut.isPending}
+                onClick={() => {
+                  if (confirm("Cancel your pending join request?")) cancelReqMut.mutate();
+                }}
+                title="Withdraw pending join request"
+              >
+                {cancelReqMut.isPending ? (
+                  <Loader2 className="mr-1 h-4 w-4 animate-spin" />
+                ) : (
+                  <XCircle className="mr-1 h-4 w-4" />
+                )}
+                Cancel request
+              </Button>
+            )}
+            {!(chat as any)?.needsJoin ? (
+              <Button
+                size="sm"
+                variant="outline"
+                className="h-8"
+                disabled={!activeAccountId || leaveMut.isPending}
+                onClick={() => {
+                  if (confirm("Leave this chat with the selected account?")) leaveMut.mutate();
+                }}
+                title="Leave this chat"
+              >
+                {leaveMut.isPending ? (
+                  <Loader2 className="mr-1 h-4 w-4 animate-spin" />
+                ) : (
+                  <LogOut className="mr-1 h-4 w-4" />
+                )}
+                Leave
+              </Button>
             ) : (
               <Button
                 size="sm"
@@ -337,7 +375,7 @@ function ChatViewerInner({ target, accountId }: { target: string; accountId: str
                 )}
                 Leave
               </Button>
-            )}
+            ) && null}
             {!activeAccountId && (
               <span className="text-[11px] text-muted-foreground">Pick an account first</span>
             )}
