@@ -396,8 +396,11 @@ function ActionsPageInner() {
   const [editingRun, setEditingRun] = useState<any | null>(null);
   // Broadcast-replies panel state
   const [repliesRunId, setRepliesRunId] = useState<string | null>(null);
+  // Admin flag from route context (set in _authenticated beforeLoad).
+  const routeCtx = Route.useRouteContext() as { isAdmin?: boolean } | undefined;
+  const isAdmin = !!routeCtx?.isAdmin;
 
-  const [tab, setTab] = useState<Tab>(search.tab ?? "react");
+  const [tab, setTab] = useState<Tab>(search.tab ?? (isAdmin ? "react" : "broadcast"));
   const [showAccounts, setShowAccounts] = useState<boolean>(() => {
     if (typeof window === "undefined") return false;
     return window.localStorage.getItem("actions-show-accounts") === "1";
