@@ -57,6 +57,12 @@ async function resolveTargetEntity(client: any, Api: any, t: string) {
   return await client.getEntity(cleaned);
 }
 
+function extractInviteHash(t: string): string | null {
+  const cleaned = t.trim().replace(/^https?:\/\/(t\.me|telegram\.me)\//i, "");
+  const m = cleaned.match(/^(?:joinchat\/|\+)([A-Za-z0-9_-]+)/);
+  return m ? m[1] : null;
+}
+
 function entityKind(entity: any): "channel" | "megagroup" | "group" | "user" | "bot" | "unknown" {
   if (!entity) return "unknown";
   if (entity.className === "Channel" || entity.broadcast) {
@@ -89,39 +95,102 @@ export const previewChat = createServerFn({ method: "POST" })
 
     const client = await openClientForAccount(context.supabase, accountId, { requireOwnerId: context.userId });
     try {
-      const entity = await resolveTargetEntity(client, Api, data.target);
-      const kind = entityKind(entity);
-      const title = displayName(entity);
-      const username = (entity as any).username ?? null;
-      const entityId = toNum((entity as any).id);
-
-      let memberCount: number | null = null;
-      let about: string | null = null;
-      let inviteLink: string | null = null;
-      let isCreator = false;
-      let isAdmin = false;
-      let isParticipant = true;
-
-      if (kind === "channel" || kind === "megagroup") {
+      // Invite-hash flow (private / public-with-request). Peek before joining
+      // so we can show a Join / Send-Request card in the UI, exactly like the
+      // real Telegram app.
+      const inviteHash = extractInviteHash(data.target);
+      if (inviteHash) {
+        let info: any = null;
         try {
-          const full: any = await client.invoke(new Api.channels.GetFullChannel({ channel: entity }));
-          memberCount = toNum(full?.fullChat?.participantsCount) ?? null;
-          about = full?.fullChat?.about ?? null;
-          inviteLink = full?.fullChat?.exportedInvite?.link ?? null;
-        } catch {}
-        isCreator = !!(entity as any).creator;
-        isAdmin = !!(entity as any).adminRights;
-        isParticipant = !(entity as any).left;
-      } else if (kind === "group") {
-        memberCount = toNum((entity as any).participantsCount) ?? null;
-      } else if (kind === "user" || kind === "bot") {
-        try {
-          const full: any = await client.invoke(new Api.users.GetFullUser({ id: entity }));
-          about = full?.fullUser?.about ?? null;
-        } catch {}
+          info = await client.invoke(new Api.messages.CheckChatInvite({ hash: inviteHash }));
+        } catch (e) {
+          throw new Error(`Invite link invalid or expired: ${(e as Error).message}`);
+        }
+        const cn = String(info?.className ?? "");
+        // Already a member → info.chat is the real chat; fall through to full render.
+        if (cn === "ChatInviteAlready" && info?.chat) {
+          const entity = info.chat;
+          return await buildFullPreview({ client, Api, entity, accountId, target: data.target });
+        }
+        // Not a member → return preview-only card.
+        const requestNeeded = !!info?.requestNeeded;
+        const title = String(info?.title ?? "Private channel");
+        const memberCount = toNum(info?.participantsCount) ?? null;
+        const isChannel = !!info?.channel;
+        const isMegagroup = !!info?.megagroup;
+        const isBroadcast = !!info?.broadcast;
+        return {
+          accountId,
+          peerKey: null,
+          chat: {
+            id: null,
+            kind: isChannel && isBroadcast ? "channel" : isMegagroup ? "megagroup" : "group",
+            title,
+            username: null,
+            memberCount,
+            about: info?.about ?? null,
+            inviteLink: data.target,
+            isCreator: false,
+            isAdmin: false,
+            isParticipant: false,
+            target: data.target,
+            needsJoin: true,
+            requestNeeded,
+            inviteHash,
+          },
+          messages: [],
+        };
       }
 
-      // Fetch last ~30 messages
+      const entity = await resolveTargetEntity(client, Api, data.target);
+      return await buildFullPreview({ client, Api, entity, accountId, target: data.target });
+    } finally {
+      await client.disconnect().catch(() => {});
+    }
+  });
+
+async function buildFullPreview(args: {
+  client: any;
+  Api: any;
+  entity: any;
+  accountId: string;
+  target: string;
+}) {
+  const { client, Api, entity, accountId, target } = args;
+  const kind = entityKind(entity);
+  const title = displayName(entity);
+  const username = (entity as any).username ?? null;
+  const entityId = toNum((entity as any).id);
+
+  let memberCount: number | null = null;
+  let about: string | null = null;
+  let inviteLink: string | null = null;
+  let isCreator = false;
+  let isAdmin = false;
+  let isParticipant = true;
+
+  if (kind === "channel" || kind === "megagroup") {
+    try {
+      const full: any = await client.invoke(new Api.channels.GetFullChannel({ channel: entity }));
+      memberCount = toNum(full?.fullChat?.participantsCount) ?? null;
+      about = full?.fullChat?.about ?? null;
+      inviteLink = full?.fullChat?.exportedInvite?.link ?? null;
+    } catch {}
+    isCreator = !!(entity as any).creator;
+    isAdmin = !!(entity as any).adminRights;
+    isParticipant = !(entity as any).left;
+  } else if (kind === "group") {
+    memberCount = toNum((entity as any).participantsCount) ?? null;
+  } else if (kind === "user" || kind === "bot") {
+    try {
+      const full: any = await client.invoke(new Api.users.GetFullUser({ id: entity }));
+      about = full?.fullUser?.about ?? null;
+    } catch {}
+  }
+
+  let messages: any[] = [];
+  if (isParticipant || kind === "user" || kind === "bot" || username) {
+    try {
       const history: any = await client.invoke(
         new Api.messages.GetHistory({ peer: entity, limit: 30, offsetId: 0, offsetDate: 0, addOffset: 0, maxId: 0, minId: 0, hash: 0 as any }),
       );
@@ -130,8 +199,7 @@ export const previewChat = createServerFn({ method: "POST" })
       for (const u of history?.users ?? []) users.set(String(u.id), u);
       const chats = new Map<string, any>();
       for (const c of history?.chats ?? []) chats.set(String(c.id), c);
-
-      const messages = msgs
+      messages = msgs
         .filter((m: any) => m.className === "Message" || m.className === "MessageService")
         .map((m: any) => {
           const fromId = m.fromId?.userId ?? m.fromId?.channelId ?? m.fromId?.chatId ?? null;
@@ -168,25 +236,86 @@ export const previewChat = createServerFn({ method: "POST" })
           };
         })
         .reverse();
+    } catch {
+      messages = [];
+    }
+  }
 
-      return {
-        accountId,
-        peerKey: computePeerKey(entity),
-        chat: {
-          id: entityId,
-          kind,
-          title,
-          username,
-          memberCount,
-          about,
-          inviteLink,
-          isCreator,
-          isAdmin,
-          isParticipant,
-          target: data.target,
-        },
-        messages,
-      };
+  const needsJoin = !isParticipant && (kind === "channel" || kind === "megagroup" || kind === "group");
+  return {
+    accountId,
+    peerKey: computePeerKey(entity),
+    chat: {
+      id: entityId,
+      kind,
+      title,
+      username,
+      memberCount,
+      about,
+      inviteLink,
+      isCreator,
+      isAdmin,
+      isParticipant,
+      target,
+      needsJoin,
+      requestNeeded: false,
+      inviteHash: null as string | null,
+    },
+    messages,
+  };
+}
+
+// Join a public username or invite-hash target from the chat viewer. Uses the
+// verified helper so we get the same idempotent / dedup behaviour as bot flow.
+export const joinChatTarget = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((d: unknown) =>
+    z.object({ target: z.string().min(1).max(200), accountId: z.string().uuid() }).parse(d),
+  )
+  .handler(async ({ data, context }) => {
+    const { openClientForAccount } = await import("./cleanup.server");
+    const { Api } = await import("telegram");
+    const { joinTelegramTargetVerified } = await import("./telegram-join-helper.server");
+    const client = await openClientForAccount(context.supabase, data.accountId, {
+      requireOwnerId: context.userId,
+    });
+    try {
+      const res = await joinTelegramTargetVerified({
+        client,
+        Api,
+        target: data.target,
+        publicInviteFallback: true,
+      });
+      return { status: res.status, message: res.message, path: res.path };
+    } finally {
+      await client.disconnect().catch(() => {});
+    }
+  });
+
+// Leave a chat/channel from the viewer (matches real-Telegram "Leave").
+export const leaveChatTarget = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((d: unknown) =>
+    z.object({ target: z.string().min(1).max(200), accountId: z.string().uuid() }).parse(d),
+  )
+  .handler(async ({ data, context }) => {
+    const { openClientForAccount } = await import("./cleanup.server");
+    const { Api } = await import("telegram");
+    const client = await openClientForAccount(context.supabase, data.accountId, {
+      requireOwnerId: context.userId,
+    });
+    try {
+      const entity = await resolveTargetEntity(client, Api, data.target);
+      const cn = String((entity as any).className ?? "");
+      if (cn.includes("Channel")) {
+        await client.invoke(new Api.channels.LeaveChannel({ channel: entity }));
+      } else if (cn === "Chat") {
+        const me = await client.getMe(true);
+        await client.invoke(new Api.messages.DeleteChatUser({ chatId: (entity as any).id, userId: me }));
+      } else {
+        throw new Error("This chat cannot be left");
+      }
+      return { ok: true };
     } finally {
       await client.disconnect().catch(() => {});
     }
