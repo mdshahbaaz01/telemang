@@ -111,7 +111,9 @@ function SecurityPage() {
 
   const revokeAll = useMutation({
     mutationFn: async () => {
-      await revokeOthersFn({ data: { currentSessionKey: "" } });
+      // Use a random key that will hash to nothing on record → revokes every session.
+      const bogus = crypto.randomUUID() + crypto.randomUUID();
+      await revokeOthersFn({ data: { currentSessionKey: bogus } });
     },
     onSuccess: async () => {
       toast.success("All sessions signed out");
