@@ -47,14 +47,52 @@ export function OwnerAccessControl() {
   });
   const changeFeature = useMutation({
     mutationFn: (v: { userId: string; key: string; allowed: boolean }) => setFeatureFn({ data: v }),
-    onSuccess: () => invalidate(),
-    onError: (e) => toast.error((e as Error).message),
+    onMutate: async (v) => {
+      await qc.cancelQueries({ queryKey: ["owner-access-overview"] });
+      const prev = qc.getQueryData<any[]>(["owner-access-overview"]);
+      if (prev) {
+        qc.setQueryData<any[]>(["owner-access-overview"], (old) =>
+          (old ?? []).map((u) =>
+            u.id === v.userId
+              ? { ...u, features: { ...u.features, [v.key]: v.allowed } }
+              : u,
+          ),
+        );
+      }
+      return { prev };
+    },
+    onError: (e, _v, ctx) => {
+      if (ctx?.prev) qc.setQueryData(["owner-access-overview"], ctx.prev);
+      toast.error((e as Error).message);
+    },
   });
   const changeSettings = useMutation({
     mutationFn: (v: { userId: string; approved?: boolean; accountLimit?: number; notes?: string }) =>
       setSettingsFn({ data: v }),
-    onSuccess: () => { toast.success("Saved"); invalidate(); },
-    onError: (e) => toast.error((e as Error).message),
+    onMutate: async (v) => {
+      await qc.cancelQueries({ queryKey: ["owner-access-overview"] });
+      const prev = qc.getQueryData<any[]>(["owner-access-overview"]);
+      if (prev) {
+        qc.setQueryData<any[]>(["owner-access-overview"], (old) =>
+          (old ?? []).map((u) =>
+            u.id === v.userId
+              ? {
+                  ...u,
+                  accountAddApproved: v.approved ?? u.accountAddApproved,
+                  accountLimit: v.accountLimit ?? u.accountLimit,
+                  notes: v.notes ?? u.notes,
+                }
+              : u,
+          ),
+        );
+      }
+      return { prev };
+    },
+    onSuccess: () => toast.success("Saved"),
+    onError: (e, _v, ctx) => {
+      if (ctx?.prev) qc.setQueryData(["owner-access-overview"], ctx.prev);
+      toast.error((e as Error).message);
+    },
   });
 
   const pending = useMemo(
