@@ -24,6 +24,7 @@ import { Route as AuthenticatedOwnerRouteImport } from './routes/_authenticated/
 import { Route as AuthenticatedMediaRouteImport } from './routes/_authenticated/media'
 import { Route as AuthenticatedJoinPacingRouteImport } from './routes/_authenticated/join-pacing'
 import { Route as AuthenticatedHealthRouteImport } from './routes/_authenticated/health'
+import { Route as AuthenticatedFeedbackRouteImport } from './routes/_authenticated/feedback'
 import { Route as AuthenticatedDashboardRouteImport } from './routes/_authenticated/dashboard'
 import { Route as AuthenticatedCleanupRouteImport } from './routes/_authenticated/cleanup'
 import { Route as AuthenticatedCaptchaRouteImport } from './routes/_authenticated/captcha'
@@ -122,6 +123,11 @@ const AuthenticatedJoinPacingRoute = AuthenticatedJoinPacingRouteImport.update({
 const AuthenticatedHealthRoute = AuthenticatedHealthRouteImport.update({
   id: '/health',
   path: '/health',
+  getParentRoute: () => AuthenticatedRouteRoute,
+} as any)
+const AuthenticatedFeedbackRoute = AuthenticatedFeedbackRouteImport.update({
+  id: '/feedback',
+  path: '/feedback',
   getParentRoute: () => AuthenticatedRouteRoute,
 } as any)
 const AuthenticatedDashboardRoute = AuthenticatedDashboardRouteImport.update({
@@ -264,6 +270,7 @@ export interface FileRoutesByFullPath {
   '/captcha': typeof AuthenticatedCaptchaRoute
   '/cleanup': typeof AuthenticatedCleanupRoute
   '/dashboard': typeof AuthenticatedDashboardRoute
+  '/feedback': typeof AuthenticatedFeedbackRoute
   '/health': typeof AuthenticatedHealthRoute
   '/join-pacing': typeof AuthenticatedJoinPacingRoute
   '/media': typeof AuthenticatedMediaRoute
@@ -304,6 +311,7 @@ export interface FileRoutesByTo {
   '/captcha': typeof AuthenticatedCaptchaRoute
   '/cleanup': typeof AuthenticatedCleanupRoute
   '/dashboard': typeof AuthenticatedDashboardRoute
+  '/feedback': typeof AuthenticatedFeedbackRoute
   '/health': typeof AuthenticatedHealthRoute
   '/join-pacing': typeof AuthenticatedJoinPacingRoute
   '/media': typeof AuthenticatedMediaRoute
@@ -346,6 +354,7 @@ export interface FileRoutesById {
   '/_authenticated/captcha': typeof AuthenticatedCaptchaRoute
   '/_authenticated/cleanup': typeof AuthenticatedCleanupRoute
   '/_authenticated/dashboard': typeof AuthenticatedDashboardRoute
+  '/_authenticated/feedback': typeof AuthenticatedFeedbackRoute
   '/_authenticated/health': typeof AuthenticatedHealthRoute
   '/_authenticated/join-pacing': typeof AuthenticatedJoinPacingRoute
   '/_authenticated/media': typeof AuthenticatedMediaRoute
@@ -388,6 +397,7 @@ export interface FileRouteTypes {
     | '/captcha'
     | '/cleanup'
     | '/dashboard'
+    | '/feedback'
     | '/health'
     | '/join-pacing'
     | '/media'
@@ -428,6 +438,7 @@ export interface FileRouteTypes {
     | '/captcha'
     | '/cleanup'
     | '/dashboard'
+    | '/feedback'
     | '/health'
     | '/join-pacing'
     | '/media'
@@ -469,6 +480,7 @@ export interface FileRouteTypes {
     | '/_authenticated/captcha'
     | '/_authenticated/cleanup'
     | '/_authenticated/dashboard'
+    | '/_authenticated/feedback'
     | '/_authenticated/health'
     | '/_authenticated/join-pacing'
     | '/_authenticated/media'
@@ -616,6 +628,13 @@ declare module '@tanstack/react-router' {
       path: '/health'
       fullPath: '/health'
       preLoaderRoute: typeof AuthenticatedHealthRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
+    '/_authenticated/feedback': {
+      id: '/_authenticated/feedback'
+      path: '/feedback'
+      fullPath: '/feedback'
+      preLoaderRoute: typeof AuthenticatedFeedbackRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
     '/_authenticated/dashboard': {
@@ -801,6 +820,7 @@ interface AuthenticatedRouteRouteChildren {
   AuthenticatedCaptchaRoute: typeof AuthenticatedCaptchaRoute
   AuthenticatedCleanupRoute: typeof AuthenticatedCleanupRoute
   AuthenticatedDashboardRoute: typeof AuthenticatedDashboardRoute
+  AuthenticatedFeedbackRoute: typeof AuthenticatedFeedbackRoute
   AuthenticatedHealthRoute: typeof AuthenticatedHealthRoute
   AuthenticatedJoinPacingRoute: typeof AuthenticatedJoinPacingRoute
   AuthenticatedMediaRoute: typeof AuthenticatedMediaRoute
@@ -830,6 +850,7 @@ const AuthenticatedRouteRouteChildren: AuthenticatedRouteRouteChildren = {
   AuthenticatedCaptchaRoute: AuthenticatedCaptchaRoute,
   AuthenticatedCleanupRoute: AuthenticatedCleanupRoute,
   AuthenticatedDashboardRoute: AuthenticatedDashboardRoute,
+  AuthenticatedFeedbackRoute: AuthenticatedFeedbackRoute,
   AuthenticatedHealthRoute: AuthenticatedHealthRoute,
   AuthenticatedJoinPacingRoute: AuthenticatedJoinPacingRoute,
   AuthenticatedMediaRoute: AuthenticatedMediaRoute,
