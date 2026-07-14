@@ -281,12 +281,55 @@ function ChatViewerInner({ target, accountId }: { target: string; accountId: str
             href={tgDeepLink(target)}
             target="_blank"
             rel="noreferrer"
-            className="text-muted-foreground hover:text-primary"
+            className="text-muted-foreground hover:text-primary shrink-0"
             title="Open in Telegram"
           >
             <ExternalLink className="h-4 w-4" />
           </a>
         </div>
+        {chat && (
+          <div className="mt-2 flex flex-wrap items-center gap-2">
+            {(chat as any)?.needsJoin ? (
+              <Button
+                size="sm"
+                className="h-8"
+                disabled={!activeAccountId || joinMut.isPending}
+                onClick={() => joinMut.mutate()}
+                title={(chat as any)?.requestNeeded ? "Send join request" : "Join this chat"}
+              >
+                {joinMut.isPending ? (
+                  <Loader2 className="mr-1 h-4 w-4 animate-spin" />
+                ) : (chat as any)?.requestNeeded ? (
+                  <UserPlus className="mr-1 h-4 w-4" />
+                ) : (
+                  <LogIn className="mr-1 h-4 w-4" />
+                )}
+                {(chat as any)?.requestNeeded ? "Request to join" : "Join"}
+              </Button>
+            ) : (
+              <Button
+                size="sm"
+                variant="outline"
+                className="h-8"
+                disabled={!activeAccountId || leaveMut.isPending}
+                onClick={() => {
+                  if (confirm("Leave this chat with the selected account?")) leaveMut.mutate();
+                }}
+                title="Leave this chat"
+              >
+                {leaveMut.isPending ? (
+                  <Loader2 className="mr-1 h-4 w-4 animate-spin" />
+                ) : (
+                  <LogOut className="mr-1 h-4 w-4" />
+                )}
+                Leave
+              </Button>
+            )}
+            {!activeAccountId && (
+              <span className="text-[11px] text-muted-foreground">Pick an account first</span>
+            )}
+          </div>
+        )}
         <div className="mt-3 flex items-center gap-2 text-xs">
           <label className="text-muted-foreground">Viewing as:</label>
           <select
