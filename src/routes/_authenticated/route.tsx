@@ -7,6 +7,8 @@ import { ThemeCustomizer } from "@/components/theme-customizer";
 import { Button } from "@/components/ui/button";
 import { ChatViewerHost } from "@/components/chat/ChatViewerDrawer";
 import { FavoritesBar } from "@/components/FavoritesBar";
+import { useEffect } from "react";
+import { startSessionHeartbeat } from "@/lib/session-heartbeat";
 
 export const Route = createFileRoute("/_authenticated")({
   ssr: false,
@@ -42,6 +44,9 @@ export const Route = createFileRoute("/_authenticated")({
 
 function AuthenticatedLayout() {
   const nav = useNavigate();
+  useEffect(() => {
+    startSessionHeartbeat();
+  }, []);
   const signOut = async () => {
     await supabase.auth.signOut();
     nav({ to: "/auth" });
