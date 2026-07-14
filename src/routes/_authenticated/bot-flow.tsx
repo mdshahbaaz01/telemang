@@ -602,7 +602,7 @@ function BotFlowPage() {
                     const list = Array.from(botChannels)
                       .map((c) => (c.startsWith("@") || c.startsWith("+") ? `https://t.me/${c.replace(/^@/, "")}` : `https://t.me/${c}`))
                       .join("\n");
-                    copyWithToast(list, `Copied ${botChannels.size} link(s)`);
+                    copyWithToast(list, toast, `Copied ${botChannels.size} link(s)`);
                   }}
                 >
                   <Copy className="mr-1 h-3.5 w-3.5" /> Copy links
@@ -628,7 +628,7 @@ function BotFlowPage() {
                           {c}
                         </a>
                         <button
-                          onClick={() => copyWithToast(url, "Copied")}
+                          onClick={() => copyWithToast(url, toast, "Copied")}
                           className="shrink-0 text-muted-foreground hover:text-foreground"
                           title="Copy link"
                         >
