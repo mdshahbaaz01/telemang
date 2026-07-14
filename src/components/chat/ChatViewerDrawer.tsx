@@ -7,11 +7,11 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { chatViewer, useChatViewer } from "./chat-viewer-store";
-import { previewChat, loadChatHistory, loadChatMembers, sendQuickReply } from "@/lib/chat-viewer.functions";
+import { previewChat, loadChatHistory, loadChatMembers, sendQuickReply, joinChatTarget, leaveChatTarget } from "@/lib/chat-viewer.functions";
 import { pressInlineButtonAs } from "@/lib/tg-viewer.functions";
 import { recordInlineButtonClick } from "@/lib/button-clicks.functions";
 import { listAccounts } from "@/lib/accounts.functions";
-import { ExternalLink, Send, Users, Info, MessageCircle, Loader2, Image as ImageIcon, Video, FileText, Music, Link as LinkIcon } from "lucide-react";
+import { ExternalLink, Send, Users, Info, MessageCircle, Loader2, Image as ImageIcon, Video, FileText, Music, Link as LinkIcon, LogIn, LogOut, UserPlus, ArrowLeft, Lock } from "lucide-react";
 import { toast } from "sonner";
 
 const IST_FMT = new Intl.DateTimeFormat("en-IN", {
@@ -68,6 +68,8 @@ function ChatViewerInner({ target, accountId }: { target: string; accountId: str
   const accountsFn = useServerFn(listAccounts);
   const pressFn = useServerFn(pressInlineButtonAs);
   const recordClickFn = useServerFn(recordInlineButtonClick);
+  const joinFn = useServerFn(joinChatTarget);
+  const leaveFn = useServerFn(leaveChatTarget);
 
   const [activeAccountId, setActiveAccountId] = useState<string | null>(accountId);
   useEffect(() => setActiveAccountId(accountId), [accountId, target]);
@@ -211,6 +213,32 @@ function ChatViewerInner({ target, accountId }: { target: string; accountId: str
   const chat = previewQ.data?.chat;
   const err = previewQ.error as Error | null;
 
+  const joinMut = useMutation({
+    mutationFn: async () => {
+      if (!activeAccountId) throw new Error("Pick an account first");
+      return joinFn({ data: { target, accountId: activeAccountId } });
+    },
+    onSuccess: (res) => {
+      if (res?.status === "requested") toast.success("Join request sent — waiting for approval");
+      else if (res?.status === "already") toast.info("Already a member");
+      else toast.success("Joined");
+      previewQ.refetch();
+    },
+    onError: (e) => toast.error((e as Error).message),
+  });
+
+  const leaveMut = useMutation({
+    mutationFn: async () => {
+      if (!activeAccountId) throw new Error("Pick an account first");
+      return leaveFn({ data: { target, accountId: activeAccountId } });
+    },
+    onSuccess: () => {
+      toast.success("Left chat");
+      previewQ.refetch();
+    },
+    onError: (e) => toast.error((e as Error).message),
+  });
+
   const groups = useMemo(() => {
     const g: Record<string, typeof allMessages> = {};
     for (const m of allMessages) {
@@ -229,6 +257,14 @@ function ChatViewerInner({ target, accountId }: { target: string; accountId: str
     <>
       <SheetHeader className="border-b border-border px-4 py-3">
         <div className="flex items-center gap-3">
+          <button
+            type="button"
+            title="Back"
+            className="rounded p-1 text-muted-foreground hover:bg-muted"
+            onClick={() => chatViewer.close()}
+          >
+            <ArrowLeft className="h-4 w-4" />
+          </button>
           <div className="h-10 w-10 rounded-full bg-primary/20 flex items-center justify-center text-primary font-semibold text-sm shrink-0">
             {(chat?.title ?? target).slice(0, 1).toUpperCase()}
           </div>
@@ -282,6 +318,46 @@ function ChatViewerInner({ target, accountId }: { target: string; accountId: str
             </div>
           ) : err ? (
             <div className="flex-1 p-6 text-sm text-destructive">Failed to load: {err.message}</div>
+          ) : (chat as any)?.needsJoin ? (
+            <div className="flex-1 flex flex-col items-center justify-center gap-3 p-6 text-center">
+              <div className="h-16 w-16 rounded-full bg-primary/10 flex items-center justify-center">
+                <Lock className="h-7 w-7 text-primary" />
+              </div>
+              <div className="text-lg font-semibold">{chat?.title}</div>
+              <div className="text-xs text-muted-foreground">
+                {chat?.memberCount != null ? `${chat.memberCount.toLocaleString()} members` : chat?.kind}
+              </div>
+              {chat?.about && (
+                <p className="max-w-sm whitespace-pre-wrap text-sm text-muted-foreground">{chat.about}</p>
+              )}
+              <p className="max-w-sm text-xs text-muted-foreground">
+                {(chat as any)?.requestNeeded
+                  ? "This chat requires admin approval. Send a join request to be added."
+                  : "You are not a member of this chat. Join to see messages."}
+              </p>
+              <div className="flex items-center gap-2">
+                <Button variant="outline" size="sm" onClick={() => chatViewer.close()}>
+                  <ArrowLeft className="mr-1 h-4 w-4" /> Back
+                </Button>
+                <Button
+                  size="sm"
+                  disabled={!activeAccountId || joinMut.isPending}
+                  onClick={() => joinMut.mutate()}
+                >
+                  {joinMut.isPending ? (
+                    <Loader2 className="mr-1 h-4 w-4 animate-spin" />
+                  ) : (chat as any)?.requestNeeded ? (
+                    <UserPlus className="mr-1 h-4 w-4" />
+                  ) : (
+                    <LogIn className="mr-1 h-4 w-4" />
+                  )}
+                  {(chat as any)?.requestNeeded ? "Send join request" : "Join"}
+                </Button>
+              </div>
+              {!activeAccountId && (
+                <p className="text-[11px] text-destructive">Pick an account above to join.</p>
+              )}
+            </div>
           ) : (
             <>
               <div className="flex-1 overflow-y-auto px-3 py-2 space-y-3 bg-muted/30">
@@ -365,6 +441,40 @@ function ChatViewerInner({ target, accountId }: { target: string; accountId: str
                   <div className="whitespace-pre-wrap text-sm">{chat.about}</div>
                 </div>
               )}
+              <div className="pt-2 flex flex-wrap gap-2">
+                {(chat as any).needsJoin ? (
+                  <Button
+                    size="sm"
+                    disabled={!activeAccountId || joinMut.isPending}
+                    onClick={() => joinMut.mutate()}
+                  >
+                    {joinMut.isPending ? (
+                      <Loader2 className="mr-1 h-4 w-4 animate-spin" />
+                    ) : (chat as any).requestNeeded ? (
+                      <UserPlus className="mr-1 h-4 w-4" />
+                    ) : (
+                      <LogIn className="mr-1 h-4 w-4" />
+                    )}
+                    {(chat as any).requestNeeded ? "Send join request" : "Join"}
+                  </Button>
+                ) : chat.isParticipant && (chat.kind === "channel" || chat.kind === "megagroup" || chat.kind === "group") ? (
+                  <Button
+                    variant="destructive"
+                    size="sm"
+                    disabled={!activeAccountId || leaveMut.isPending}
+                    onClick={() => {
+                      if (confirm(`Leave ${chat.title}?`)) leaveMut.mutate();
+                    }}
+                  >
+                    {leaveMut.isPending ? (
+                      <Loader2 className="mr-1 h-4 w-4 animate-spin" />
+                    ) : (
+                      <LogOut className="mr-1 h-4 w-4" />
+                    )}
+                    Leave
+                  </Button>
+                ) : null}
+              </div>
             </>
           )}
         </TabsContent>
