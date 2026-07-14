@@ -1129,7 +1129,10 @@ function ActionsPageInner() {
         {/* Main panel */}
         <section className="space-y-4">
           <div className="flex gap-2 border-b border-border">
-            {(["react", "forward", "vote", "broadcast", "comment", "reply", "edit", "deleteMessages"] as Tab[]).map((t) => (
+            {(isAdmin
+              ? (["react", "forward", "vote", "broadcast", "comment", "reply", "edit", "deleteMessages"] as Tab[])
+              : (["broadcast"] as Tab[])
+            ).map((t) => (
               <button
                 key={t}
                 onClick={() => setTab(t)}
