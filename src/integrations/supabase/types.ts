@@ -1502,7 +1502,7 @@ export type Database = {
         Returns: Json
       }
       decide_account_request: {
-        Args: { _approve: boolean; _id: string; _limit: number }
+        Args: { _account_limit: number; _approve: boolean; _id: string }
         Returns: undefined
       }
       drop_index_if_exists: {
@@ -1528,17 +1528,25 @@ export type Database = {
       is_admin: { Args: never; Returns: boolean }
       is_owner: { Args: never; Returns: boolean }
       owner_set_feature: {
-        Args: { _allowed: boolean; _feature: string; _target: string }
+        Args: { _allowed: boolean; _key: string; _target: string }
         Returns: undefined
       }
-      owner_set_role: {
-        Args: { _make_admin: boolean; _target: string }
-        Returns: undefined
-      }
+      owner_set_role:
+        | {
+            Args: { _make_admin: boolean; _target: string }
+            Returns: undefined
+          }
+        | {
+            Args: {
+              _role: Database["public"]["Enums"]["app_role"]
+              _target: string
+            }
+            Returns: undefined
+          }
       owner_set_user_settings: {
         Args: {
+          _account_limit: number
           _approved: boolean
-          _limit: number
           _notes: string
           _target: string
         }
