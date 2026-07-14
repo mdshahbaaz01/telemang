@@ -443,6 +443,74 @@ export type Database = {
         }
         Relationships: []
       }
+      feature_request_votes: {
+        Row: {
+          created_at: string
+          request_id: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          request_id: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          request_id?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "feature_request_votes_request_id_fkey"
+            columns: ["request_id"]
+            isOneToOne: false
+            referencedRelation: "feature_requests"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      feature_requests: {
+        Row: {
+          category: string
+          created_at: string
+          description: string | null
+          id: string
+          owner_note: string | null
+          priority: string
+          status: string
+          title: string
+          updated_at: string
+          user_id: string
+          votes_count: number
+        }
+        Insert: {
+          category?: string
+          created_at?: string
+          description?: string | null
+          id?: string
+          owner_note?: string | null
+          priority?: string
+          status?: string
+          title: string
+          updated_at?: string
+          user_id: string
+          votes_count?: number
+        }
+        Update: {
+          category?: string
+          created_at?: string
+          description?: string | null
+          id?: string
+          owner_note?: string | null
+          priority?: string
+          status?: string
+          title?: string
+          updated_at?: string
+          user_id?: string
+          votes_count?: number
+        }
+        Relationships: []
+      }
       idempotency_keys: {
         Row: {
           completed_at: string | null
@@ -1368,6 +1436,7 @@ export type Database = {
           account_limit: number
           created_at: string
           notes: string | null
+          onboarding_state: Json
           updated_at: string
           updated_by: string | null
           user_id: string
@@ -1377,6 +1446,7 @@ export type Database = {
           account_limit?: number
           created_at?: string
           notes?: string | null
+          onboarding_state?: Json
           updated_at?: string
           updated_by?: string | null
           user_id: string
@@ -1386,6 +1456,7 @@ export type Database = {
           account_limit?: number
           created_at?: string
           notes?: string | null
+          onboarding_state?: Json
           updated_at?: string
           updated_by?: string | null
           user_id?: string
@@ -1472,6 +1543,39 @@ export type Database = {
           created_at?: string
           id?: string
           role?: Database["public"]["Enums"]["app_role"]
+          user_id?: string
+        }
+        Relationships: []
+      }
+      user_sessions: {
+        Row: {
+          created_at: string
+          id: string
+          ip_hash: string | null
+          last_seen_at: string
+          revoked_at: string | null
+          session_key: string
+          user_agent: string | null
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          ip_hash?: string | null
+          last_seen_at?: string
+          revoked_at?: string | null
+          session_key: string
+          user_agent?: string | null
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          ip_hash?: string | null
+          last_seen_at?: string
+          revoked_at?: string | null
+          session_key?: string
+          user_agent?: string | null
           user_id?: string
         }
         Relationships: []
