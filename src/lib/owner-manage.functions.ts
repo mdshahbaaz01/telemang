@@ -13,6 +13,22 @@ async function assertOwner(ctx: { supabase: any; userId: string }) {
   if (!data) throw new Error("Forbidden: owner only");
 }
 
+function logTiming(op: string, marks: Record<string, number>, extra: Record<string, unknown> = {}) {
+  const entries = Object.entries(marks);
+  const total = entries.length ? entries[entries.length - 1][1] - entries[0][1] : 0;
+  const steps: Record<string, number> = {};
+  for (let i = 1; i < entries.length; i++) {
+    steps[entries[i][0]] = Math.round(entries[i][1] - entries[i - 1][1]);
+  }
+  console.log(JSON.stringify({
+    kind: "owner_toggle_timing",
+    op,
+    total_ms: Math.round(total),
+    steps_ms: steps,
+    ...extra,
+  }));
+}
+
 /** Sidebar/feature keys — must match app-sidebar item ids. */
 export const FEATURE_KEYS = [
   "dashboard","cleanup","actions","broadcast","bot-flow","alerts","buttons",
