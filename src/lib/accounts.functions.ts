@@ -12,6 +12,33 @@ export const startAccountLogin = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .inputValidator((d: unknown) => startSchema.parse(d))
   .handler(async ({ data, context }) => {
+    // Gate: only owner/admin, or approved users under their account limit, may add.
+    const [roleRes, setRes, cntRes] = await Promise.all([
+      context.supabase.from("user_roles").select("role").eq("user_id", context.userId),
+      context.supabase
+        .from("user_admin_settings")
+        .select("account_add_approved, account_limit")
+        .eq("user_id", context.userId)
+        .maybeSingle(),
+      context.supabase
+        .from("telegram_accounts")
+        .select("id", { count: "exact", head: true })
+        .eq("user_id", context.userId),
+    ]);
+    const roles = (roleRes.data ?? []).map((r) => r.role);
+    const isPrivileged = roles.includes("owner") || roles.includes("admin");
+    if (!isPrivileged) {
+      const s = setRes.data;
+      if (!s || !s.account_add_approved) {
+        throw new Error("Account adding is not approved yet. Ask the owner for permission.");
+      }
+      const limit = s.account_limit ?? 0;
+      const cnt = cntRes.count ?? 0;
+      if (limit > 0 && cnt >= limit) {
+        throw new Error(`Account limit reached (${cnt}/${limit}). Ask the owner to raise your limit.`);
+      }
+    }
+
     const { encryptString } = await import("./crypto.server");
     const { createTgClient } = await import("./telegram-client.server");
     const { StringSession } = await import("telegram/sessions");

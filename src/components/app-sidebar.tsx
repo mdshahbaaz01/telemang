@@ -108,8 +108,11 @@ const items: Item[] = [
   { id: "health", title: "Health", to: "/health", icon: Activity },
 ];
 
-// Route IDs allowed for non-admin users. Everyone can broadcast + view dashboard.
+// Route IDs allowed for non-admin users by default. Everyone can broadcast + view dashboard.
+// Owner may additionally grant admins any feature key here (matching item id).
 const USER_ALLOWED_IDS = new Set(["dashboard", "broadcast"]);
+// Owner-only items — always hidden from non-owner regardless of features.
+const OWNER_ONLY_IDS = new Set(["owner"]);
 
 const ORDER_KEY = "tm.sidebarOrder.v1";
 
@@ -188,6 +191,8 @@ export function AppSidebar() {
   const [editing, setEditing] = useState(false);
   const [hydrated, setHydrated] = useState(false);
   const [isAdmin, setIsAdmin] = useState<boolean | null>(null);
+  const [isOwner, setIsOwner] = useState<boolean>(false);
+  const [features, setFeatures] = useState<Record<string, boolean>>({});
 
   useEffect(() => {
     setOrder(loadOrder());
@@ -207,7 +212,19 @@ export function AppSidebar() {
         .select("role")
         .eq("user_id", userRes.user.id);
       if (cancelled) return;
-      setIsAdmin((data ?? []).some((r) => r.role === "admin"));
+      const roles = (data ?? []).map((r) => r.role);
+      const owner = roles.includes("owner");
+      setIsOwner(owner);
+      setIsAdmin(owner || roles.includes("admin"));
+      if (!owner) {
+        const { data: fp } = await supabase
+          .from("user_feature_permissions")
+          .select("feature_key, allowed")
+          .eq("user_id", userRes.user.id);
+        const map: Record<string, boolean> = {};
+        for (const r of fp ?? []) map[r.feature_key] = r.allowed;
+        setFeatures(map);
+      }
     })();
     return () => {
       cancelled = true;
@@ -223,10 +240,14 @@ export function AppSidebar() {
   const orderedItems = useMemo(
     () => {
       const all = order.map((id) => byId.get(id)).filter(Boolean) as Item[];
-      if (isAdmin === false) return all.filter((i) => USER_ALLOWED_IDS.has(i.id));
-      return all;
+      if (isOwner) return all;
+      // Owner-only items hidden for everyone else
+      const base = all.filter((i) => !OWNER_ONLY_IDS.has(i.id));
+      if (isAdmin === false) return base.filter((i) => USER_ALLOWED_IDS.has(i.id));
+      // Admin: hide items the owner explicitly disabled (features[id] === false)
+      return base.filter((i) => features[i.id] !== false);
     },
-    [order, byId, isAdmin],
+    [order, byId, isAdmin, isOwner, features],
   );
 
   const isActive = (item: Item) =>
