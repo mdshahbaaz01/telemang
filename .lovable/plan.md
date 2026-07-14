@@ -1,56 +1,71 @@
-# Multi-user mode with restricted access
+# Plan: Feature Requests, Onboarding, Session Manager
 
-Naye users sign-up karke sirf apna Telegram account connect kar sakenge aur **Broadcast + Scheduled Broadcast** hi use kar sakenge. Aap (admin) ka access unchanged rahega — sab kuch mil raha hai jaise pehle.
+## 19 — Feature Request Board
 
-## Access model
+**New table `feature_requests`**
+- Fields: title, description, category (feature/bug/improvement), status (open/planned/in_progress/done/declined), priority (low/med/high), votes_count, user_id, owner_note.
+- RLS: everyone signed-in can SELECT + INSERT own; UPDATE/DELETE own while `open`; owner can UPDATE any (status/priority/owner_note).
+- Companion `feature_request_votes` (request_id, user_id UNIQUE) so users can upvote once.
 
-- **Admin** (aap): sab pages, sab accounts (owner panel bhi)
-- **User** (naye sign-ups, default role): sirf 4 pages
-  - Dashboard (limited — apne accounts + apne broadcasts ke stats)
-  - Accounts (apne Telegram accounts add/connect/manage)
-  - Broadcast (immediate)
-  - Scheduled Broadcast (schedule + history + reuse)
+**Routes / UI**
+- `/feedback` (all users): submit form + list with filters (status, category), sort by votes/newest, upvote button, own-request edit.
+- `/owner` gets a new "Feedback" card: pending count badge, quick triage (change status, add owner_note, set priority).
 
-Baaki sab pages (Bot Flow, Cleanup, Actions non-broadcast, Bulk Mix, Owner, Captcha, etc.) users ke liye hidden aur route-level pe blocked.
+## 18 — Onboarding Checklist
 
-## What gets built
+**Storage**: single row in existing `user_admin_settings.notes`? Cleaner to add `onboarding_state jsonb` column with `{ dismissed, completed_steps[] }`.
 
-**1. Role gating (server-side, hard block)**
-- Ek naya helper `requireBroadcastAccess` — server functions ke andar check karega ki user `admin` ya `user` hai (dono allowed for broadcast). Non-broadcast server fns pe `requireAdmin` helper add karenge jo `admin` na hone pe 403 dega.
-- Ye critical hai — sirf UI hide karne se enough nahi, warna user URL type karke bhi access le lega.
+**Steps (auto-detected, not manual checkboxes)**
+1. Connect first Telegram account → check `telegram_accounts` count > 0.
+2. Request access approved → `user_admin_settings.account_add_approved`.
+3. Send first broadcast → `scheduled_broadcasts` count > 0.
+4. Create first task → `join_tasks` count > 0.
+5. Star a favorite / save a preset → `user_favorites` OR `action_presets` count > 0.
 
-**2. Sidebar filtering**
-- `getMyRole()` (already exists) se `isAdmin` fetch → non-admin users ko sidebar me sirf 4 items dikhenge (Dashboard, Accounts, Broadcast, Scheduled).
-- Drag-drop reorder unchanged for allowed items.
+**UI**
+- Floating card on `/dashboard` top: progress bar (x/5), collapsible, "Dismiss" persists.
+- Auto-hides when all 5 done or dismissed.
 
-**3. Route-level guards**
-- Har restricted route (`bot-flow`, `cleanup`, `owner`, etc.) ke `beforeLoad` me role check → non-admin ho to `/dashboard` pe redirect.
-- Allowed routes: `/dashboard`, `/accounts/*`, `/actions?tab=broadcast`, aur ek naya `/scheduled` route (currently scheduled broadcast `actions` ke andar hai — user ke liye clean dedicated page banayenge, admin ke liye dono jagah kaam karega).
+## 15 — Session Manager
 
-**4. Dashboard scoping**
-- Already `user_id` scoped hai queries me (RLS aap ke design me hai). Confirm karke user-view me sirf apna data dikhega.
+Supabase JS doesn't expose per-session listing to end users. Approach:
 
-**5. Broadcast page cleanup for users**
-- `/actions` page pe non-admin ko sirf "Broadcast" tab dikhega (Actions/Forward/React/Comment tabs hidden). Admin ke liye sab tabs jaise pehle.
+**New table `user_sessions`**
+- Fields: user_id, session_key (hash of access token JTI or random on sign-in), user_agent, ip_hash, last_seen_at, created_at, revoked_at.
+- Populated on sign-in via a lightweight server fn `registerSession` called from the auth flow.
+- Heartbeat updates `last_seen_at` every 5 min from `_authenticated/route.tsx`.
 
-**6. Signup flow unchanged**
-- Existing `bootstrap_role_on_signup` trigger already naye users ko `'user'` role deta hai (pehla user hi admin banta hai). Sign-up + email confirm + login flow already ready hai — koi change nahi.
-- Naya user login → seedha dashboard → Accounts page pe jaake apna phone connect karega (existing add-account flow) → Broadcast start.
+**UI on `/reset-password` sibling `/security` (or account settings section)**
+- List: device (parsed UA), IP prefix, first seen, last active, "current" badge.
+- Actions:
+  - **Revoke this** → mark `revoked_at`; if it's the current session → sign out.
+  - **Sign out everywhere else** → `supabase.auth.signOut({ scope: 'others' })` + mark all others revoked.
+- Revoked-session detection: middleware checks `session_key` against DB; if revoked → force sign-out client-side.
 
-## Not doing (out of scope, batao agar chahiye)
+## Technical Details
 
-- User ke Telegram accounts ka limit (e.g. max 5 per user) — abhi unlimited
-- Payment/subscription
-- Email verification enforcement (already Supabase default)
-- Separate branded landing page for users
+**Migrations (single migration)**
+```text
+- CREATE feature_requests + votes tables + GRANTs + RLS + policies
+- CREATE user_sessions + GRANTs + RLS (user sees own, owner sees all)
+- ALTER user_admin_settings ADD onboarding_state jsonb DEFAULT '{}'::jsonb
+- helper RPC: cast_feature_vote(request_id) SECURITY DEFINER
+```
 
-## Technical notes
+**New server fns (`src/lib/`)**
+- `feedback.functions.ts`: list, create, vote, ownerUpdate
+- `onboarding.functions.ts`: getState (aggregates counts + settings), dismiss
+- `sessions.functions.ts`: register, heartbeat, list, revoke, revokeOthers
 
-- New file: `src/lib/access.functions.ts` exporting `requireAdmin(context)` and `requireBroadcastAccess(context)` helpers used inside handlers.
-- Modify: `src/components/app-sidebar.tsx` — role fetch + filter items array.
-- Modify: `src/routes/_authenticated/route.tsx` — expose `role` in route context via loader so children ka `beforeLoad` sync check kar sake.
-- Add `beforeLoad` role check to: `bot-flow`, `cleanup`, `actions` (non-broadcast tabs), `bulk-mix`, `bulk-plus`, `bot-parser`, `captcha`, `owner`, `recipes`, `watchlists`, `stealth`, `join-pacing`, `health`, `alerts`, `buttons`, `profile-updater`, `search`, `workspace`, `media`, `referrals`, `analytics`, `tasks/*`, `groups/*`.
-- Add admin-only enforcement inside server fns of those pages (defense-in-depth).
-- Broadcast + scheduled server fns get `requireBroadcastAccess` (both roles pass).
+**New UI files**
+- `src/routes/_authenticated/feedback.tsx`
+- `src/routes/_authenticated/security.tsx` (session manager)
+- `src/components/OnboardingChecklist.tsx` (mounted in `dashboard.tsx`)
+- `src/components/OwnerFeedbackPanel.tsx` (mounted in `owner.tsx`)
 
-Approve karo to build shuru karta hoon. Ya koi tweak chahiye (jaise user ko 1-2 aur pages dena, ya account limit lagana), bata do.
+**Sidebar**: add "Feedback" (all users) and "Security" (all users) entries; both in `FEATURE_KEYS` so owner can gate.
+
+## Out of Scope
+- Email notifications for status changes (can add later).
+- Comment threads on feature requests.
+- Geo-IP resolution beyond storing hashed IP.
