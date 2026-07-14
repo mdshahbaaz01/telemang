@@ -15,8 +15,10 @@ import { Loader } from "@/components/ui/loader";
 import {
   Users, UserPlus, MessagesSquare, Pencil, Copy, Mic, ListChecks, CheckCheck, Square, Play, Rocket,
 } from "lucide-react";
+import { requireAdminBeforeLoad } from "@/lib/access-guard";
 
 export const Route = createFileRoute("/_authenticated/bulk-plus")({
+  beforeLoad: requireAdminBeforeLoad,
   head: () => ({ meta: [{ title: "Bulk+ · TeleManager Pro" }] }),
   component: BulkPlusPage,
 });

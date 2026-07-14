@@ -33,8 +33,10 @@ import { useCaptchaAutoDetect, setCaptchaAutoDetect } from "@/lib/miniapp-proxy-
 import { KIND_LABELS } from "@/lib/captcha/types";
 import { CaptchaErrorBoundary } from "@/components/CaptchaErrorBoundary";
 import { useBotFlowCaptchaConfig } from "@/lib/bot-flow-captcha-config";
+import { requireAdminBeforeLoad } from "@/lib/access-guard";
 
 export const Route = createFileRoute("/_authenticated/captcha")({
+  beforeLoad: requireAdminBeforeLoad,
   head: () => ({
     meta: [
       { title: "Captcha Solver — TeleManager Pro" },

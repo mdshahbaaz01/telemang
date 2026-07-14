@@ -9,8 +9,10 @@ import { ArrowLeft, Download } from "lucide-react";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, BarChart, Bar, CartesianGrid, Legend, PieChart, Pie, Cell } from "recharts";
+import { requireAdminBeforeLoad } from "@/lib/access-guard";
 
 export const Route = createFileRoute("/_authenticated/analytics")({
+  beforeLoad: requireAdminBeforeLoad,
   component: () => <AdminGate><Page /></AdminGate>,
 });
 

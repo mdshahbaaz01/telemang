@@ -197,7 +197,7 @@ export const listDialogs = createServerFn({ method: "GET" })
     withPhotos: z.boolean().default(true),
   }).parse(d))
   .handler(async ({ data, context }) => {
-    await assertAdmin(context.supabase);
+    // Owner-only: users may list dialogs of accounts they own (RLS scoped by user_id).
     const { openClientForAccount } = await import("./cleanup.server");
     const client = await openClientForAccount(context.supabase, data.accountId);
     try {

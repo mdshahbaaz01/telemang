@@ -8,8 +8,10 @@ import { Input } from "@/components/ui/input";
 import { AdminGate } from "@/components/AdminGate";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { ArrowLeft, X, Plus, LayoutGrid, Columns2, Columns3, Square, RefreshCw, ExternalLink } from "lucide-react";
+import { requireAdminBeforeLoad } from "@/lib/access-guard";
 
 export const Route = createFileRoute("/_authenticated/workspace")({
+  beforeLoad: requireAdminBeforeLoad,
   head: () => ({ meta: [{ title: "Multi-account workspace — TeleManager Pro" }] }),
   component: () => <AdminGate><Workspace /></AdminGate>,
 });

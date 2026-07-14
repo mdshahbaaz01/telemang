@@ -23,8 +23,10 @@ import { AdminGate } from "@/components/AdminGate";
 import { ArrowLeft, RefreshCw, Square, Play } from "lucide-react";
 import { AccountIdPaste } from "@/components/AccountIdPaste";
 import { Textarea } from "@/components/ui/textarea";
+import { requireAdminBeforeLoad } from "@/lib/access-guard";
 
 export const Route = createFileRoute("/_authenticated/cleanup")({
+  beforeLoad: requireAdminBeforeLoad,
   component: () => (
     <AdminGate>
       <Cleanup />

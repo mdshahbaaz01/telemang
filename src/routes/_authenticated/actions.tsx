@@ -27,7 +27,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { toast } from "sonner";
-import { AdminGate } from "@/components/AdminGate";
+import { redirect } from "@tanstack/react-router";
 import { AccountIdPaste } from "@/components/AccountIdPaste";
 import { Square, Play, Paperclip, X, AlertTriangle, Copy, Trash2, RotateCw, Pencil, Clock, CalendarClock, Eye, EyeOff, MessageSquareReply, ExternalLink, Loader2 } from "lucide-react";
 import { copyWithToast } from "@/lib/clipboard";
@@ -109,11 +109,15 @@ export const Route = createFileRoute("/_authenticated/actions")({
         tab: z.enum(["react", "forward", "vote", "broadcast", "comment", "reply", "edit", "deleteMessages"]).optional(),
       })
       .parse(s),
-  component: () => (
-    <AdminGate>
-      <ActionsPage />
-    </AdminGate>
-  ),
+  beforeLoad: ({ context, search }) => {
+    const ctx = context as { isAdmin?: boolean };
+    const s = search as { tab?: string };
+    // Non-admins may only use the Broadcast tab.
+    if (!ctx?.isAdmin && s?.tab !== "broadcast") {
+      throw redirect({ to: "/actions", search: { tab: "broadcast" } });
+    }
+  },
+  component: ActionsPage,
 });
 
 type Tab = "react" | "forward" | "vote" | "broadcast" | "comment" | "reply" | "edit" | "deleteMessages";
@@ -392,8 +396,11 @@ function ActionsPageInner() {
   const [editingRun, setEditingRun] = useState<any | null>(null);
   // Broadcast-replies panel state
   const [repliesRunId, setRepliesRunId] = useState<string | null>(null);
+  // Admin flag from route context (set in _authenticated beforeLoad).
+  const routeCtx = Route.useRouteContext() as { isAdmin?: boolean } | undefined;
+  const isAdmin = !!routeCtx?.isAdmin;
 
-  const [tab, setTab] = useState<Tab>(search.tab ?? "react");
+  const [tab, setTab] = useState<Tab>(search.tab ?? (isAdmin ? "react" : "broadcast"));
   const [showAccounts, setShowAccounts] = useState<boolean>(() => {
     if (typeof window === "undefined") return false;
     return window.localStorage.getItem("actions-show-accounts") === "1";
@@ -1122,7 +1129,10 @@ function ActionsPageInner() {
         {/* Main panel */}
         <section className="space-y-4">
           <div className="flex gap-2 border-b border-border">
-            {(["react", "forward", "vote", "broadcast", "comment", "reply", "edit", "deleteMessages"] as Tab[]).map((t) => (
+            {(isAdmin
+              ? (["react", "forward", "vote", "broadcast", "comment", "reply", "edit", "deleteMessages"] as Tab[])
+              : (["broadcast"] as Tab[])
+            ).map((t) => (
               <button
                 key={t}
                 onClick={() => setTab(t)}

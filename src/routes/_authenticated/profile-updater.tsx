@@ -13,8 +13,10 @@ import { Textarea } from "@/components/ui/textarea";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Loader2, UserCog } from "lucide-react";
+import { requireAdminBeforeLoad } from "@/lib/access-guard";
 
 export const Route = createFileRoute("/_authenticated/profile-updater")({
+  beforeLoad: requireAdminBeforeLoad,
   head: () => ({
     meta: [
       { title: "Profile Updater — TeleManager Pro" },

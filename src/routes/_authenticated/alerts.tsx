@@ -15,8 +15,10 @@ import {
   saveNotificationSettings,
   listNotificationLogs,
 } from "@/lib/actions.functions";
+import { requireAdminBeforeLoad } from "@/lib/access-guard";
 
 export const Route = createFileRoute("/_authenticated/alerts")({
+  beforeLoad: requireAdminBeforeLoad,
   component: () => (
     <AdminGate>
       <AlertsPage />

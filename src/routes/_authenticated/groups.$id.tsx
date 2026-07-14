@@ -14,6 +14,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { AdminGate } from "@/components/AdminGate";
 import { toast } from "sonner";
+import { requireAdminBeforeLoad } from "@/lib/access-guard";
 
 // Simple fleet-wide state shared across TaskColumn instances.
 type FleetCtx = {
@@ -22,6 +23,7 @@ type FleetCtx = {
 };
 
 export const Route = createFileRoute("/_authenticated/groups/$id")({
+  beforeLoad: requireAdminBeforeLoad,
   component: () => (
     <AdminGate>
       <GroupRunner />

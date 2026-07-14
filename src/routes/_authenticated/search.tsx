@@ -12,8 +12,10 @@ import { AdminGate } from "@/components/AdminGate";
 import { Loader } from "@/components/ui/loader";
 import { ArrowLeft, Search as SearchIcon } from "lucide-react";
 import { toast } from "sonner";
+import { requireAdminBeforeLoad } from "@/lib/access-guard";
 
 export const Route = createFileRoute("/_authenticated/search")({
+  beforeLoad: requireAdminBeforeLoad,
   component: () => (
     <AdminGate>
       <SearchPage />

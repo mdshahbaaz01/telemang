@@ -1,8 +1,10 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { Button } from "@/components/ui/button";
 import { Plus, Trash2, Download, Heart, Settings } from "lucide-react";
+import { requireAdminBeforeLoad } from "@/lib/access-guard";
 
 export const Route = createFileRoute("/_authenticated/buttons")({
+  beforeLoad: requireAdminBeforeLoad,
   component: ButtonsPlayground,
   head: () => ({
     meta: [

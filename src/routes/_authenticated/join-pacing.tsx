@@ -17,8 +17,10 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { toast } from "sonner";
+import { requireAdminBeforeLoad } from "@/lib/access-guard";
 
 export const Route = createFileRoute("/_authenticated/join-pacing")({
+  beforeLoad: requireAdminBeforeLoad,
   component: JoinPacingPage,
   head: () => ({
     meta: [{ title: "Join Pacing — Telemang" }],
