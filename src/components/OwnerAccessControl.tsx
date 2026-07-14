@@ -41,12 +41,24 @@ export function OwnerAccessControl() {
     onError: (e) => toast.error((e as Error).message),
   });
   const changeRole = useMutation({
-    mutationFn: (v: { userId: string; role: "user" | "admin" | "owner" }) => setRoleFn({ data: v }),
+    mutationFn: async (v: { userId: string; role: "user" | "admin" | "owner" }) => {
+      const t0 = performance.now();
+      const res = await setRoleFn({ data: v });
+      const rtt = Math.round(performance.now() - t0);
+      console.log("[owner-toggle] setRole", { ...v, rtt_ms: rtt, server_ms: (res as any)?.timing_ms });
+      return res;
+    },
     onSuccess: () => { toast.success("Role changed"); invalidate(); },
     onError: (e) => toast.error((e as Error).message),
   });
   const changeFeature = useMutation({
-    mutationFn: (v: { userId: string; key: string; allowed: boolean }) => setFeatureFn({ data: v }),
+    mutationFn: async (v: { userId: string; key: string; allowed: boolean }) => {
+      const t0 = performance.now();
+      const res = await setFeatureFn({ data: v });
+      const rtt = Math.round(performance.now() - t0);
+      console.log("[owner-toggle] setFeature", { ...v, rtt_ms: rtt, server_ms: (res as any)?.timing_ms });
+      return res;
+    },
     onMutate: async (v) => {
       await qc.cancelQueries({ queryKey: ["owner-access-overview"] });
       const prev = qc.getQueryData<any[]>(["owner-access-overview"]);
@@ -67,8 +79,13 @@ export function OwnerAccessControl() {
     },
   });
   const changeSettings = useMutation({
-    mutationFn: (v: { userId: string; approved?: boolean; accountLimit?: number; notes?: string }) =>
-      setSettingsFn({ data: v }),
+    mutationFn: async (v: { userId: string; approved?: boolean; accountLimit?: number; notes?: string }) => {
+      const t0 = performance.now();
+      const res = await setSettingsFn({ data: v });
+      const rtt = Math.round(performance.now() - t0);
+      console.log("[owner-toggle] setSettings", { ...v, rtt_ms: rtt, server_ms: (res as any)?.timing_ms });
+      return res;
+    },
     onMutate: async (v) => {
       await qc.cancelQueries({ queryKey: ["owner-access-overview"] });
       const prev = qc.getQueryData<any[]>(["owner-access-overview"]);
