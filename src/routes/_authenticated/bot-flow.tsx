@@ -585,6 +585,63 @@ function BotFlowPage() {
             )}
           </div>
 
+          {botChannels.size > 0 && (
+            <div className="rounded-md border border-border bg-muted/20 p-2 space-y-2">
+              <div className="flex flex-wrap items-center gap-2">
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() => setShowBotChannels((v) => !v)}
+                >
+                  {showBotChannels ? "Hide" : "Show"} bot channels ({botChannels.size})
+                </Button>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() => {
+                    const list = Array.from(botChannels)
+                      .map((c) => (c.startsWith("@") || c.startsWith("+") ? `https://t.me/${c.replace(/^@/, "")}` : `https://t.me/${c}`))
+                      .join("\n");
+                    copyWithToast(list, `Copied ${botChannels.size} link(s)`);
+                  }}
+                >
+                  <Copy className="mr-1 h-3.5 w-3.5" /> Copy links
+                </Button>
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  onClick={() => setBotChannels(new Set())}
+                  title="Clear collected list"
+                >
+                  Clear
+                </Button>
+              </div>
+              {showBotChannels && (
+                <div className="max-h-48 overflow-auto rounded border border-border bg-background/60 p-2 font-mono text-[11px]">
+                  {Array.from(botChannels).map((c) => {
+                    const url = c.startsWith("+")
+                      ? `https://t.me/${c}`
+                      : `https://t.me/${c.replace(/^@/, "")}`;
+                    return (
+                      <div key={c} className="flex items-center justify-between gap-2 py-0.5">
+                        <a href={url} target="_blank" rel="noreferrer" className="truncate hover:underline">
+                          {c}
+                        </a>
+                        <button
+                          onClick={() => copyWithToast(url, "Copied")}
+                          className="shrink-0 text-muted-foreground hover:text-foreground"
+                          title="Copy link"
+                        >
+                          <Copy className="h-3 w-3" />
+                        </button>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          )}
+
           {Object.keys(joinState).length > 0 && (
             <div className="rounded-md border border-border bg-muted/20 p-3 space-y-2">
               <div className="flex items-center justify-between">
