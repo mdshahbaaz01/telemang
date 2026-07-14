@@ -20,7 +20,7 @@ function toViewerTarget(u: string): string {
   return s;
 }
 
-export function ConfirmUrlDialog({ url, onClose }: { url: string; onClose: () => void }) {
+export function ConfirmUrlDialog({ url, onClose, accountId }: { url: string; onClose: () => void; accountId?: string | null }) {
   const isTg = isTelegramLink(url);
   return (
     <div
@@ -54,7 +54,7 @@ export function ConfirmUrlDialog({ url, onClose }: { url: string; onClose: () =>
             <Button
               size="sm"
               onClick={() => {
-                chatViewer.open(toViewerTarget(url));
+                chatViewer.open(toViewerTarget(url), accountId ?? null);
                 onClose();
               }}
             >
