@@ -145,6 +145,25 @@
     border-color: var(--color-border);
   }
 
+  html, body {
+    /* Prevent horizontal scroll on the whole page — individual scroll
+       containers (tables, code blocks, wide grids) opt-in with overflow-x-auto. */
+    overflow-x: hidden;
+    max-width: 100%;
+  }
+
+  /* Long unbroken tokens (URLs, hashes, IDs) shouldn't blow past the viewport. */
+  pre, code {
+    overflow-wrap: anywhere;
+    word-break: break-word;
+  }
+  pre {
+    white-space: pre-wrap;
+  }
+  img, video, iframe, canvas, svg {
+    max-width: 100%;
+  }
+
   body {
     background-color: var(--color-background);
     color: var(--color-foreground);
