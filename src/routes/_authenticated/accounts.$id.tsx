@@ -575,7 +575,7 @@ function AccountViewerPage() {
         </section>
       </div>
 
-      {confirmUrl && <ConfirmUrlDialog url={confirmUrl} onClose={() => setConfirmUrl(null)} />}
+      {confirmUrl && <ConfirmUrlDialog url={confirmUrl} accountId={accountId} onClose={() => setConfirmUrl(null)} />}
 
       <MiniAppDrawer
         open={!!miniApp}
