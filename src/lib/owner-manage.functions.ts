@@ -162,9 +162,9 @@ export const ownerSetUserSettings = createServerFn({ method: "POST" })
     await assertOwner(context);
     const { error } = await context.supabase.rpc("owner_set_user_settings", {
       _target: data.userId,
-      _approved: data.approved ?? null,
-      _account_limit: data.accountLimit ?? null,
-      _notes: data.notes ?? null,
+      _approved: (data.approved ?? null) as unknown as boolean,
+      _account_limit: (data.accountLimit ?? null) as unknown as number,
+      _notes: (data.notes ?? null) as unknown as string,
     });
     if (error) throw new Error(error.message);
     return { ok: true };
