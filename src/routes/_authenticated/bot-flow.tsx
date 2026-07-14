@@ -99,6 +99,8 @@ function BotFlowPage() {
   const [running, setRunning] = useState(false);
   const [totals, setTotals] = useState<{ ok: number; fail: number } | null>(null);
   const [joinState, setJoinState] = useState<Record<string, JoinState>>({});
+  const [botChannels, setBotChannels] = useState<Set<string>>(new Set());
+  const [showBotChannels, setShowBotChannels] = useState(false);
   const abortRef = useRef<AbortController | null>(null);
 
   const accountList = accountsQ.data ?? [];
@@ -160,6 +162,13 @@ function BotFlowPage() {
         else if (event === "log") addLog({ accountId: data.accountId, level: data.level ?? "info", target: data.target, message: data.message ?? "" });
         else if (event === "done") addLog({ accountId: data.accountId, level: data.fail ? "warn" : "info", message: `Account done — ok ${data.ok}, fail ${data.fail}` });
         else if (event === "joinProgress") {
+          if (Array.isArray(data.remainingList) && data.remainingList.length) {
+            setBotChannels((prev) => {
+              const next = new Set(prev);
+              for (const c of data.remainingList as string[]) if (c) next.add(c);
+              return next;
+            });
+          }
           setJoinState((prev) => ({
             ...prev,
             [data.accountId]: {
