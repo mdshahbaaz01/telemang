@@ -19,6 +19,7 @@ import { useBotFlowCaptchaConfig, CAPTCHA_KIND_OPTIONS, CAPTCHA_PROVIDER_OPTIONS
 import { CaptchaErrorBoundary } from "@/components/CaptchaErrorBoundary";
 import { PreJoinCard } from "@/components/PreJoinCard";
 import { CollapsibleSection } from "@/components/CollapsibleSection";
+import { VirtualList } from "@/components/VirtualList";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
 
@@ -1095,32 +1096,65 @@ function BotFlowPage() {
         </CollapsibleSection>
 
         <CollapsibleSection storageKey="botflow.logs" title="Live logs">
-          <div className="max-h-[50vh] space-y-1 overflow-auto font-mono text-xs">
-            {logs.length === 0 && <p className="text-muted-foreground">No activity yet.</p>}
-            {logs.map((l, i) => {
-              const acc = accountList.find((a) => a.id === l.accountId);
-              const who = acc ? acc.first_name || acc.username || acc.phone : l.accountId ? l.accountId.slice(0, 8) : "—";
-              const color =
-                l.level === "error"
-                  ? "text-destructive"
-                  : l.level === "success"
-                    ? "text-green-600 dark:text-green-400"
-                    : l.level === "warn"
-                      ? "text-yellow-600 dark:text-yellow-400"
-                      : "text-foreground";
-              return (
-                <div key={i} className={color}>
-                  <span className="text-muted-foreground">
-                    {new Date(l.ts).toLocaleTimeString()} [{who}]
-                  </span>{" "}
-                  {l.target ? <span className="text-muted-foreground">{l.target} —</span> : null} {l.message}
-                </div>
-              );
-            })}
-          </div>
+          <LiveLogsPanel logs={logs} accountList={accountList} onClear={() => setLogs([])} />
         </CollapsibleSection>
       </div>
     </main>
+  );
+}
+
+function LiveLogsPanel({
+  logs,
+  accountList,
+  onClear,
+}: {
+  logs: LogEntry[];
+  accountList: Array<{ id: string; first_name?: string | null; username?: string | null; phone?: string | null }>;
+  onClear: () => void;
+}) {
+  const [hidden, setHidden] = useState<boolean>(() => {
+    try { return localStorage.getItem("botflow.logs.hidden") === "1"; } catch { return false; }
+  });
+  const toggle = () => {
+    setHidden((v) => {
+      const nv = !v;
+      try { localStorage.setItem("botflow.logs.hidden", nv ? "1" : "0"); } catch {}
+      return nv;
+    });
+  };
+  return (
+    <div className="space-y-2">
+      <div className="flex items-center justify-end gap-2">
+        <Button size="sm" variant="outline" onClick={toggle}>{hidden ? "Show" : "Hide"}</Button>
+        <Button size="sm" variant="outline" onClick={onClear} disabled={logs.length === 0}>Clear</Button>
+      </div>
+      {!hidden && (
+        <VirtualList<LogEntry>
+          items={logs}
+          estimateSize={20}
+          className="h-96 overflow-auto rounded bg-muted/40 p-2 font-mono text-xs"
+          emptyState={<div className="text-muted-foreground">No activity yet</div>}
+          getKey={(_l, i) => i}
+          renderItem={(l) => {
+            const acc = accountList.find((a) => a.id === l.accountId);
+            const who = acc ? acc.first_name || acc.username || acc.phone : l.accountId ? l.accountId.slice(0, 8) : "—";
+            const color =
+              l.level === "error"
+                ? "text-destructive"
+                : l.level === "success"
+                  ? "text-green-500"
+                  : l.level === "warn"
+                    ? "text-yellow-500"
+                    : "text-foreground";
+            return (
+              <div className={color}>
+                [{new Date(l.ts).toLocaleTimeString()}] {who}{l.target ? ` · ${l.target}` : ""} — {l.message}
+              </div>
+            );
+          }}
+        />
+      )}
+    </div>
   );
 }
 
