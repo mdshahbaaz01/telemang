@@ -55,23 +55,23 @@ function AuthenticatedLayout() {
     <SidebarProvider defaultOpen={false}>
       <div className="flex min-h-screen w-full">
         <AppSidebar />
-        <SidebarInset>
+        <SidebarInset className="min-w-0">
           <header className="sticky top-0 z-10 flex h-14 items-center gap-3 border-b border-hairline bg-background/70 px-4 backdrop-blur-md">
             <SidebarTrigger />
             <div className="flex items-center gap-2">
               <span aria-hidden className="h-2 w-2 rounded-full bg-primary shadow-[0_0_10px_var(--primary)]" />
-              <span className="font-mono text-[11px] uppercase tracking-[0.22em] text-muted-foreground">
+              <span className="truncate font-mono text-[11px] uppercase tracking-[0.22em] text-muted-foreground">
                 Tele<span className="gold-gradient-text">Manager</span>
               </span>
             </div>
-            <div className="ml-auto flex items-center gap-2">
+            <div className="ml-auto flex shrink-0 items-center gap-2">
               <ThemeCustomizer />
               <Button variant="ghost" size="icon" onClick={signOut} aria-label="Sign out">
                 <LogOut className="h-4 w-4" />
               </Button>
             </div>
           </header>
-          <div className="flex-1">
+          <div className="min-w-0 flex-1 overflow-x-hidden">
             <FavoritesBar />
             <Outlet />
           </div>
