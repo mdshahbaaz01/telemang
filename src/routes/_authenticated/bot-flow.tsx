@@ -159,7 +159,18 @@ function BotFlowPage() {
         let data: any = {};
         try { data = JSON.parse(dataLine.slice(6)); } catch {}
         if (event === "start") addLog({ level: "info", message: "Run started" });
-        else if (event === "log") addLog({ accountId: data.accountId, level: data.level ?? "info", target: data.target, message: data.message ?? "" });
+        else if (event === "log") {
+          const msg: string = data.message ?? "";
+          const m = msg.match(/(@[A-Za-z0-9_]{4,}|\+[A-Za-z0-9_-]{6,}|t\.me\/[A-Za-z0-9_+/-]+)/gi);
+          if (m && /Joined|Verified|Pre-join|pending|Skip |already/i.test(msg)) {
+            setBotChannels((prev) => {
+              const next = new Set(prev);
+              for (const c of m) next.add(c.replace(/^t\.me\//i, ""));
+              return next;
+            });
+          }
+          addLog({ accountId: data.accountId, level: data.level ?? "info", target: data.target, message: msg });
+        }
         else if (event === "done") addLog({ accountId: data.accountId, level: data.fail ? "warn" : "info", message: `Account done — ok ${data.ok}, fail ${data.fail}` });
         else if (event === "joinProgress") {
           if (Array.isArray(data.remainingList) && data.remainingList.length) {
