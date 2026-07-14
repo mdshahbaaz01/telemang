@@ -16,6 +16,7 @@ import { Route as IndexRouteImport } from './routes/index'
 import { Route as AuthenticatedWorkspaceRouteImport } from './routes/_authenticated/workspace'
 import { Route as AuthenticatedWatchlistsRouteImport } from './routes/_authenticated/watchlists'
 import { Route as AuthenticatedStealthRouteImport } from './routes/_authenticated/stealth'
+import { Route as AuthenticatedSecurityRouteImport } from './routes/_authenticated/security'
 import { Route as AuthenticatedSearchRouteImport } from './routes/_authenticated/search'
 import { Route as AuthenticatedReferralsRouteImport } from './routes/_authenticated/referrals'
 import { Route as AuthenticatedRecipesRouteImport } from './routes/_authenticated/recipes'
@@ -82,6 +83,11 @@ const AuthenticatedWatchlistsRoute = AuthenticatedWatchlistsRouteImport.update({
 const AuthenticatedStealthRoute = AuthenticatedStealthRouteImport.update({
   id: '/stealth',
   path: '/stealth',
+  getParentRoute: () => AuthenticatedRouteRoute,
+} as any)
+const AuthenticatedSecurityRoute = AuthenticatedSecurityRouteImport.update({
+  id: '/security',
+  path: '/security',
   getParentRoute: () => AuthenticatedRouteRoute,
 } as any)
 const AuthenticatedSearchRoute = AuthenticatedSearchRouteImport.update({
@@ -279,6 +285,7 @@ export interface FileRoutesByFullPath {
   '/recipes': typeof AuthenticatedRecipesRoute
   '/referrals': typeof AuthenticatedReferralsRoute
   '/search': typeof AuthenticatedSearchRoute
+  '/security': typeof AuthenticatedSecurityRoute
   '/stealth': typeof AuthenticatedStealthRoute
   '/watchlists': typeof AuthenticatedWatchlistsRoute
   '/workspace': typeof AuthenticatedWorkspaceRoute
@@ -320,6 +327,7 @@ export interface FileRoutesByTo {
   '/recipes': typeof AuthenticatedRecipesRoute
   '/referrals': typeof AuthenticatedReferralsRoute
   '/search': typeof AuthenticatedSearchRoute
+  '/security': typeof AuthenticatedSecurityRoute
   '/stealth': typeof AuthenticatedStealthRoute
   '/watchlists': typeof AuthenticatedWatchlistsRoute
   '/workspace': typeof AuthenticatedWorkspaceRoute
@@ -363,6 +371,7 @@ export interface FileRoutesById {
   '/_authenticated/recipes': typeof AuthenticatedRecipesRoute
   '/_authenticated/referrals': typeof AuthenticatedReferralsRoute
   '/_authenticated/search': typeof AuthenticatedSearchRoute
+  '/_authenticated/security': typeof AuthenticatedSecurityRoute
   '/_authenticated/stealth': typeof AuthenticatedStealthRoute
   '/_authenticated/watchlists': typeof AuthenticatedWatchlistsRoute
   '/_authenticated/workspace': typeof AuthenticatedWorkspaceRoute
@@ -406,6 +415,7 @@ export interface FileRouteTypes {
     | '/recipes'
     | '/referrals'
     | '/search'
+    | '/security'
     | '/stealth'
     | '/watchlists'
     | '/workspace'
@@ -447,6 +457,7 @@ export interface FileRouteTypes {
     | '/recipes'
     | '/referrals'
     | '/search'
+    | '/security'
     | '/stealth'
     | '/watchlists'
     | '/workspace'
@@ -489,6 +500,7 @@ export interface FileRouteTypes {
     | '/_authenticated/recipes'
     | '/_authenticated/referrals'
     | '/_authenticated/search'
+    | '/_authenticated/security'
     | '/_authenticated/stealth'
     | '/_authenticated/watchlists'
     | '/_authenticated/workspace'
@@ -572,6 +584,13 @@ declare module '@tanstack/react-router' {
       path: '/stealth'
       fullPath: '/stealth'
       preLoaderRoute: typeof AuthenticatedStealthRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
+    '/_authenticated/security': {
+      id: '/_authenticated/security'
+      path: '/security'
+      fullPath: '/security'
+      preLoaderRoute: typeof AuthenticatedSecurityRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
     '/_authenticated/search': {
@@ -829,6 +848,7 @@ interface AuthenticatedRouteRouteChildren {
   AuthenticatedRecipesRoute: typeof AuthenticatedRecipesRoute
   AuthenticatedReferralsRoute: typeof AuthenticatedReferralsRoute
   AuthenticatedSearchRoute: typeof AuthenticatedSearchRoute
+  AuthenticatedSecurityRoute: typeof AuthenticatedSecurityRoute
   AuthenticatedStealthRoute: typeof AuthenticatedStealthRoute
   AuthenticatedWatchlistsRoute: typeof AuthenticatedWatchlistsRoute
   AuthenticatedWorkspaceRoute: typeof AuthenticatedWorkspaceRoute
@@ -859,6 +879,7 @@ const AuthenticatedRouteRouteChildren: AuthenticatedRouteRouteChildren = {
   AuthenticatedRecipesRoute: AuthenticatedRecipesRoute,
   AuthenticatedReferralsRoute: AuthenticatedReferralsRoute,
   AuthenticatedSearchRoute: AuthenticatedSearchRoute,
+  AuthenticatedSecurityRoute: AuthenticatedSecurityRoute,
   AuthenticatedStealthRoute: AuthenticatedStealthRoute,
   AuthenticatedWatchlistsRoute: AuthenticatedWatchlistsRoute,
   AuthenticatedWorkspaceRoute: AuthenticatedWorkspaceRoute,
