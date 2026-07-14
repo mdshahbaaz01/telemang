@@ -99,6 +99,8 @@ function BotFlowPage() {
   const [running, setRunning] = useState(false);
   const [totals, setTotals] = useState<{ ok: number; fail: number } | null>(null);
   const [joinState, setJoinState] = useState<Record<string, JoinState>>({});
+  const [botChannels, setBotChannels] = useState<Set<string>>(new Set());
+  const [showBotChannels, setShowBotChannels] = useState(false);
   const abortRef = useRef<AbortController | null>(null);
 
   const accountList = accountsQ.data ?? [];
@@ -157,9 +159,27 @@ function BotFlowPage() {
         let data: any = {};
         try { data = JSON.parse(dataLine.slice(6)); } catch {}
         if (event === "start") addLog({ level: "info", message: "Run started" });
-        else if (event === "log") addLog({ accountId: data.accountId, level: data.level ?? "info", target: data.target, message: data.message ?? "" });
+        else if (event === "log") {
+          const msg: string = data.message ?? "";
+          const m = msg.match(/(@[A-Za-z0-9_]{4,}|\+[A-Za-z0-9_-]{6,}|t\.me\/[A-Za-z0-9_+/-]+)/gi);
+          if (m && /Joined|Verified|Pre-join|pending|Skip |already/i.test(msg)) {
+            setBotChannels((prev) => {
+              const next = new Set(prev);
+              for (const c of m) next.add(c.replace(/^t\.me\//i, ""));
+              return next;
+            });
+          }
+          addLog({ accountId: data.accountId, level: data.level ?? "info", target: data.target, message: msg });
+        }
         else if (event === "done") addLog({ accountId: data.accountId, level: data.fail ? "warn" : "info", message: `Account done — ok ${data.ok}, fail ${data.fail}` });
         else if (event === "joinProgress") {
+          if (Array.isArray(data.remainingList) && data.remainingList.length) {
+            setBotChannels((prev) => {
+              const next = new Set(prev);
+              for (const c of data.remainingList as string[]) if (c) next.add(c);
+              return next;
+            });
+          }
           setJoinState((prev) => ({
             ...prev,
             [data.accountId]: {
@@ -564,6 +584,63 @@ function BotFlowPage() {
               </div>
             )}
           </div>
+
+          {botChannels.size > 0 && (
+            <div className="rounded-md border border-border bg-muted/20 p-2 space-y-2">
+              <div className="flex flex-wrap items-center gap-2">
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() => setShowBotChannels((v) => !v)}
+                >
+                  {showBotChannels ? "Hide" : "Show"} bot channels ({botChannels.size})
+                </Button>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() => {
+                    const list = Array.from(botChannels)
+                      .map((c) => (c.startsWith("@") || c.startsWith("+") ? `https://t.me/${c.replace(/^@/, "")}` : `https://t.me/${c}`))
+                      .join("\n");
+                    copyWithToast(list, toast, `Copied ${botChannels.size} link(s)`);
+                  }}
+                >
+                  <Copy className="mr-1 h-3.5 w-3.5" /> Copy links
+                </Button>
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  onClick={() => setBotChannels(new Set())}
+                  title="Clear collected list"
+                >
+                  Clear
+                </Button>
+              </div>
+              {showBotChannels && (
+                <div className="max-h-48 overflow-auto rounded border border-border bg-background/60 p-2 font-mono text-[11px]">
+                  {Array.from(botChannels).map((c) => {
+                    const url = c.startsWith("+")
+                      ? `https://t.me/${c}`
+                      : `https://t.me/${c.replace(/^@/, "")}`;
+                    return (
+                      <div key={c} className="flex items-center justify-between gap-2 py-0.5">
+                        <a href={url} target="_blank" rel="noreferrer" className="truncate hover:underline">
+                          {c}
+                        </a>
+                        <button
+                          onClick={() => copyWithToast(url, toast, "Copied")}
+                          className="shrink-0 text-muted-foreground hover:text-foreground"
+                          title="Copy link"
+                        >
+                          <Copy className="h-3 w-3" />
+                        </button>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          )}
 
           {Object.keys(joinState).length > 0 && (
             <div className="rounded-md border border-border bg-muted/20 p-3 space-y-2">
