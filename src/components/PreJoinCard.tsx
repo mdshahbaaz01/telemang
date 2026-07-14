@@ -342,7 +342,7 @@ export function PreJoinCard({ accounts }: { accounts: Account[] }) {
                 </Button>
               </div>
               {statusOpen && (
-                <div className="max-h-80 overflow-auto p-2 space-y-2">
+                <div className="max-h-80 overflow-auto p-2 grid grid-cols-1 sm:grid-cols-2 gap-2">
                   {(() => {
                     // Invert: group by account id, each account gets a box with its channel chips.
                     const perAcct = new Map<string, Array<{ channel: string; status: ChStatus; ts: number; message?: string }>>();
