@@ -1662,18 +1662,13 @@ export type Database = {
         Args: { _allowed: boolean; _key: string; _target: string }
         Returns: undefined
       }
-      owner_set_role:
-        | {
-            Args: { _make_admin: boolean; _target: string }
-            Returns: undefined
-          }
-        | {
-            Args: {
-              _role: Database["public"]["Enums"]["app_role"]
-              _target: string
-            }
-            Returns: undefined
-          }
+      owner_set_role: {
+        Args: {
+          _role: Database["public"]["Enums"]["app_role"]
+          _target: string
+        }
+        Returns: undefined
+      }
       owner_set_user_settings: {
         Args: {
           _account_limit: number
