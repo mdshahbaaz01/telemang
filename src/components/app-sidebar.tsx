@@ -266,7 +266,7 @@ export function AppSidebar() {
         </div>
       </SidebarHeader>
       <SidebarContent>
-        <SidebarGroup>
+        {isAdmin !== false && <SidebarGroup>
           <SidebarGroupLabel>Create</SidebarGroupLabel>
           <SidebarGroupContent>
             <SidebarMenu>
@@ -285,7 +285,7 @@ export function AppSidebar() {
               </SidebarMenuItem>
             </SidebarMenu>
           </SidebarGroupContent>
-        </SidebarGroup>
+        </SidebarGroup>}
         <SidebarGroup>
           <SidebarGroupLabel>
             {editing ? "Drag to reorder" : "Navigation"}
