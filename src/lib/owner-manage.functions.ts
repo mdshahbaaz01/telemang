@@ -13,6 +13,22 @@ async function assertOwner(ctx: { supabase: any; userId: string }) {
   if (!data) throw new Error("Forbidden: owner only");
 }
 
+function logTiming(op: string, marks: Record<string, number>, extra: Record<string, unknown> = {}) {
+  const entries = Object.entries(marks);
+  const total = entries.length ? entries[entries.length - 1][1] - entries[0][1] : 0;
+  const steps: Record<string, number> = {};
+  for (let i = 1; i < entries.length; i++) {
+    steps[entries[i][0]] = Math.round(entries[i][1] - entries[i - 1][1]);
+  }
+  console.log(JSON.stringify({
+    kind: "owner_toggle_timing",
+    op,
+    total_ms: Math.round(total),
+    steps_ms: steps,
+    ...extra,
+  }));
+}
+
 /** Sidebar/feature keys — must match app-sidebar item ids. */
 export const FEATURE_KEYS = [
   "dashboard","cleanup","actions","broadcast","bot-flow","alerts","buttons",
@@ -119,13 +135,18 @@ export const ownerSetRole = createServerFn({ method: "POST" })
     }).parse(d),
   )
   .handler(async ({ data, context }) => {
+    const t0 = performance.now();
     await assertOwner(context);
+    const t1 = performance.now();
     const { error } = await context.supabase.rpc("owner_set_role", {
       _target: data.userId,
       _role: data.role,
     });
+    const t2 = performance.now();
+    logTiming("ownerSetRole", { start: t0, assertOwner: t1, rpc: t2 },
+      { userId: data.userId, role: data.role, ok: !error });
     if (error) throw new Error(error.message);
-    return { ok: true };
+    return { ok: true, timing_ms: Math.round(t2 - t0) };
   });
 
 export const ownerSetFeature = createServerFn({ method: "POST" })
@@ -138,14 +159,19 @@ export const ownerSetFeature = createServerFn({ method: "POST" })
     }).parse(d),
   )
   .handler(async ({ data, context }) => {
+    const t0 = performance.now();
     await assertOwner(context);
+    const t1 = performance.now();
     const { error } = await context.supabase.rpc("owner_set_feature", {
       _target: data.userId,
       _key: data.key,
       _allowed: data.allowed,
     });
+    const t2 = performance.now();
+    logTiming("ownerSetFeature", { start: t0, assertOwner: t1, rpc: t2 },
+      { userId: data.userId, key: data.key, allowed: data.allowed, ok: !error });
     if (error) throw new Error(error.message);
-    return { ok: true };
+    return { ok: true, timing_ms: Math.round(t2 - t0) };
   });
 
 export const ownerSetUserSettings = createServerFn({ method: "POST" })
@@ -159,13 +185,18 @@ export const ownerSetUserSettings = createServerFn({ method: "POST" })
     }).parse(d),
   )
   .handler(async ({ data, context }) => {
+    const t0 = performance.now();
     await assertOwner(context);
+    const t1 = performance.now();
     const { error } = await context.supabase.rpc("owner_set_user_settings", {
       _target: data.userId,
       _approved: (data.approved ?? null) as unknown as boolean,
       _account_limit: (data.accountLimit ?? null) as unknown as number,
       _notes: (data.notes ?? null) as unknown as string,
     });
+    const t2 = performance.now();
+    logTiming("ownerSetUserSettings", { start: t0, assertOwner: t1, rpc: t2 },
+      { userId: data.userId, ok: !error });
     if (error) throw new Error(error.message);
-    return { ok: true };
+    return { ok: true, timing_ms: Math.round(t2 - t0) };
   });
