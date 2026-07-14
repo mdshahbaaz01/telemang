@@ -28,7 +28,6 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { toast } from "sonner";
 import { redirect } from "@tanstack/react-router";
-import { supabase as _supaClient } from "@/integrations/supabase/client";
 import { AccountIdPaste } from "@/components/AccountIdPaste";
 import { Square, Play, Paperclip, X, AlertTriangle, Copy, Trash2, RotateCw, Pencil, Clock, CalendarClock, Eye, EyeOff, MessageSquareReply, ExternalLink, Loader2 } from "lucide-react";
 import { copyWithToast } from "@/lib/clipboard";
@@ -110,11 +109,15 @@ export const Route = createFileRoute("/_authenticated/actions")({
         tab: z.enum(["react", "forward", "vote", "broadcast", "comment", "reply", "edit", "deleteMessages"]).optional(),
       })
       .parse(s),
-  component: () => (
-    <AdminGate>
-      <ActionsPage />
-    </AdminGate>
-  ),
+  beforeLoad: ({ context, search }) => {
+    const ctx = context as { isAdmin?: boolean };
+    const s = search as { tab?: string };
+    // Non-admins may only use the Broadcast tab.
+    if (!ctx?.isAdmin && s?.tab !== "broadcast") {
+      throw redirect({ to: "/actions", search: { tab: "broadcast" } });
+    }
+  },
+  component: ActionsPage,
 });
 
 type Tab = "react" | "forward" | "vote" | "broadcast" | "comment" | "reply" | "edit" | "deleteMessages";
