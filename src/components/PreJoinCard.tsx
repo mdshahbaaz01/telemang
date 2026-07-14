@@ -336,41 +336,51 @@ export function PreJoinCard({ accounts }: { accounts: Account[] }) {
           {Object.keys(statuses).length > 0 && (
             <div className="rounded-md border border-border bg-muted/10">
               <div className="flex items-center gap-2 border-b border-border/60 px-2 py-1">
-                <div className="text-xs font-medium mr-auto">Per-channel status</div>
+                <div className="text-xs font-medium mr-auto">Per-account status</div>
                 <Button size="sm" variant="ghost" onClick={() => setStatusOpen((v) => !v)}>
                   {statusOpen ? "Hide" : "Show"}
                 </Button>
               </div>
               {statusOpen && (
-                <div className="max-h-64 overflow-auto p-2 space-y-1">
-                  {Object.entries(statuses).map(([ch, row]) => {
-                    const cells = Object.entries(row);
-                    const counts: Record<ChStatus, number> = { pending: 0, running: 0, joined: 0, skipped: 0, failed: 0 };
-                    let latest = 0;
-                    for (const [, c] of cells) { counts[c.status]++; if (c.ts > latest) latest = c.ts; }
-                    return (
-                      <div key={ch} className="rounded border border-border/50 bg-background/60 p-1.5 text-[11px]">
-                        <div className="flex flex-wrap items-center gap-2">
-                          <span className="font-mono truncate max-w-[220px]" title={ch}>{ch}</span>
-                          {(["joined","skipped","running","failed","pending"] as ChStatus[]).map((s) => counts[s] ? (
-                            <span key={s} className={`rounded px-1.5 py-0.5 ${STATUS_STYLES[s]}`}>{s} {counts[s]}</span>
-                          ) : null)}
-                          <span className="ml-auto text-muted-foreground">{latest ? new Date(latest).toLocaleTimeString() : ""}</span>
+                <div className="max-h-80 overflow-auto p-2 space-y-2">
+                  {(() => {
+                    // Invert: group by account id, each account gets a box with its channel chips.
+                    const perAcct = new Map<string, Array<{ channel: string; status: ChStatus; ts: number; message?: string }>>();
+                    for (const [ch, row] of Object.entries(statuses)) {
+                      for (const [aid, cell] of Object.entries(row)) {
+                        if (!perAcct.has(aid)) perAcct.set(aid, []);
+                        perAcct.get(aid)!.push({ channel: ch, ...cell });
+                      }
+                    }
+                    return Array.from(perAcct.entries()).map(([aid, list]) => {
+                      const counts: Record<ChStatus, number> = { pending: 0, running: 0, joined: 0, skipped: 0, failed: 0 };
+                      let latest = 0;
+                      for (const c of list) { counts[c.status]++; if (c.ts > latest) latest = c.ts; }
+                      return (
+                        <div key={aid} className="rounded-md border border-border/60 bg-background/60 p-2 text-[11px]">
+                          <div className="flex flex-wrap items-center gap-2 border-b border-border/40 pb-1.5 mb-1.5">
+                            <span className="font-medium text-xs">{nameOf(aid)}</span>
+                            <span className="text-muted-foreground">· {list.length} ch</span>
+                            {(["joined","skipped","running","failed","pending"] as ChStatus[]).map((s) => counts[s] ? (
+                              <span key={s} className={`rounded px-1.5 py-0.5 ${STATUS_STYLES[s]}`}>{s} {counts[s]}</span>
+                            ) : null)}
+                            <span className="ml-auto text-muted-foreground">{latest ? new Date(latest).toLocaleTimeString() : ""}</span>
+                          </div>
+                          <div className="flex flex-wrap gap-1">
+                            {list.map((c) => (
+                              <span
+                                key={c.channel}
+                                className={`rounded px-1.5 py-0.5 font-mono ${STATUS_STYLES[c.status]}`}
+                                title={`${c.channel} · ${c.status} · ${new Date(c.ts).toLocaleTimeString()}${c.message ? ` — ${c.message}` : ""}`}
+                              >
+                                {c.channel}
+                              </span>
+                            ))}
+                          </div>
                         </div>
-                        <div className="mt-1 flex flex-wrap gap-1">
-                          {cells.map(([aid, c]) => (
-                            <span
-                              key={aid}
-                              className={`rounded px-1.5 py-0.5 ${STATUS_STYLES[c.status]}`}
-                              title={`${nameOf(aid)} · ${c.status} · ${new Date(c.ts).toLocaleTimeString()}${c.message ? ` — ${c.message}` : ""}`}
-                            >
-                              {nameOf(aid)}
-                            </span>
-                          ))}
-                        </div>
-                      </div>
-                    );
-                  })}
+                      );
+                    });
+                  })()}
                 </div>
               )}
             </div>
