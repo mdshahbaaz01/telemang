@@ -1,5 +1,6 @@
 import { Link, useRouterState } from "@tanstack/react-router";
 import { useEffect, useMemo, useState } from "react";
+import { supabase } from "@/integrations/supabase/client";
 import {
   LayoutDashboard,
   ShieldCheck,
@@ -107,6 +108,9 @@ const items: Item[] = [
   { id: "health", title: "Health", to: "/health", icon: Activity },
 ];
 
+// Route IDs allowed for non-admin users. Everyone can broadcast + view dashboard.
+const USER_ALLOWED_IDS = new Set(["dashboard", "broadcast"]);
+
 const ORDER_KEY = "tm.sidebarOrder.v1";
 
 function loadOrder(): string[] {
@@ -183,10 +187,31 @@ export function AppSidebar() {
   const [order, setOrder] = useState<string[]>(() => loadOrder());
   const [editing, setEditing] = useState(false);
   const [hydrated, setHydrated] = useState(false);
+  const [isAdmin, setIsAdmin] = useState<boolean | null>(null);
 
   useEffect(() => {
     setOrder(loadOrder());
     setHydrated(true);
+  }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      const { data: userRes } = await supabase.auth.getUser();
+      if (!userRes.user) {
+        if (!cancelled) setIsAdmin(false);
+        return;
+      }
+      const { data } = await supabase
+        .from("user_roles")
+        .select("role")
+        .eq("user_id", userRes.user.id);
+      if (cancelled) return;
+      setIsAdmin((data ?? []).some((r) => r.role === "admin"));
+    })();
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   useEffect(() => {
@@ -196,8 +221,12 @@ export function AppSidebar() {
 
   const byId = useMemo(() => new Map(items.map((i) => [i.id, i])), []);
   const orderedItems = useMemo(
-    () => order.map((id) => byId.get(id)).filter(Boolean) as Item[],
-    [order, byId],
+    () => {
+      const all = order.map((id) => byId.get(id)).filter(Boolean) as Item[];
+      if (isAdmin === false) return all.filter((i) => USER_ALLOWED_IDS.has(i.id));
+      return all;
+    },
+    [order, byId, isAdmin],
   );
 
   const isActive = (item: Item) =>
