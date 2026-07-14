@@ -1,9 +1,12 @@
 import { createServerFn } from "@tanstack/react-start";
+import { z } from "zod";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
+
+const kindSchema = z.string().trim().min(1).max(64);
 
 export const getPickMemory = createServerFn({ method: "GET" })
   .middleware([requireSupabaseAuth])
-  .inputValidator((d: { kind: string }) => d)
+  .inputValidator((d: unknown) => z.object({ kind: kindSchema }).parse(d))
   .handler(async ({ data, context }) => {
     const { data: row } = await context.supabase
       .from("account_pick_memory")
@@ -26,7 +29,14 @@ export const getPickMemory = createServerFn({ method: "GET" })
 
 export const setPickMemory = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
-  .inputValidator((d: { kind: string; accountIds: string[] }) => d)
+  .inputValidator((d: unknown) =>
+    z
+      .object({
+        kind: kindSchema,
+        accountIds: z.array(z.string().uuid()).max(2000),
+      })
+      .parse(d),
+  )
   .handler(async ({ data, context }) => {
     const { error } = await context.supabase
       .from("account_pick_memory")
