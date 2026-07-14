@@ -22,6 +22,8 @@ export type FeatureRequestRow = {
 export const listFeatureRequests = createServerFn({ method: "GET" })
   .middleware([requireSupabaseAuth])
   .handler(async ({ context }) => {
+    const { data: isOwner } = await context.supabase.rpc("is_owner");
+    const owner = !!isOwner;
     const { data, error } = await context.supabase
       .from("feature_requests")
       .select("*")
@@ -40,17 +42,24 @@ export const listFeatureRequests = createServerFn({ method: "GET" })
         .in("request_id", ids);
       voted = new Set((vs ?? []).map((v: any) => v.request_id));
     }
-    // Emails via admin listUsers (owner tab needs them)
-    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
-    const { data: list } = await supabaseAdmin.auth.admin.listUsers({ page: 1, perPage: 200 });
+    // Emails are owner-only to prevent PII harvesting by regular users.
     const emails = new Map<string, string>();
-    for (const u of list?.users ?? []) if (u.email) emails.set(u.id, u.email);
-    return rows.map((r) => ({
-      ...r,
-      email: emails.get(r.user_id) ?? "",
-      voted: voted.has(r.id),
-      mine: r.user_id === context.userId,
-    }));
+    if (owner) {
+      const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+      const { data: list } = await supabaseAdmin.auth.admin.listUsers({ page: 1, perPage: 200 });
+      for (const u of list?.users ?? []) if (u.email) emails.set(u.id, u.email);
+    }
+    return rows.map((r) => {
+      const mine = r.user_id === context.userId;
+      return {
+        ...r,
+        // Private triage field — hide from non-owners
+        owner_note: owner ? r.owner_note : null,
+        email: owner ? (emails.get(r.user_id) ?? "") : "",
+        voted: voted.has(r.id),
+        mine,
+      };
+    });
   });
 
 export const createFeatureRequest = createServerFn({ method: "POST" })
