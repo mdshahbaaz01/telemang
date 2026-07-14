@@ -1,0 +1,1 @@
+REVOKE EXECUTE ON FUNCTION public.fr_bump_votes() FROM PUBLIC, anon;
