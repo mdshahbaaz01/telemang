@@ -8,8 +8,10 @@ import { Badge } from "@/components/ui/badge";
 import { Loader } from "@/components/ui/loader";
 import { RefreshCw, Activity, AlertTriangle, Users, Send, Bell, Zap } from "lucide-react";
 import { getHealthMetrics, type HealthMetrics } from "@/lib/health.functions";
+import { requireAdminBeforeLoad } from "@/lib/access-guard";
 
 export const Route = createFileRoute("/_authenticated/health")({
+  beforeLoad: requireAdminBeforeLoad,
   component: HealthPage,
   errorComponent: ({ error }) => (
     <div className="p-6 text-sm text-destructive">Failed to load: {String(error)}</div>

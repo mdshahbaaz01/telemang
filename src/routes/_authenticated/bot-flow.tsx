@@ -22,8 +22,10 @@ import { CollapsibleSection } from "@/components/CollapsibleSection";
 import { VirtualList } from "@/components/VirtualList";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
+import { requireAdminBeforeLoad } from "@/lib/access-guard";
 
 export const Route = createFileRoute("/_authenticated/bot-flow")({
+  beforeLoad: requireAdminBeforeLoad,
   component: () => (
     <AdminGate>
       <BotFlowPage />

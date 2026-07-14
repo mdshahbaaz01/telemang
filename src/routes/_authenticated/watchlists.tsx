@@ -12,8 +12,10 @@ import { toast } from "sonner";
 import { Eye, RefreshCw, Trash2 } from "lucide-react";
 import { listWatchlists, saveWatchlist, deleteWatchlist, scanWatchlist } from "@/lib/watchlists.functions";
 import { listAccounts } from "@/lib/accounts.functions";
+import { requireAdminBeforeLoad } from "@/lib/access-guard";
 
 export const Route = createFileRoute("/_authenticated/watchlists")({
+  beforeLoad: requireAdminBeforeLoad,
   component: WatchlistsPage,
 });
 

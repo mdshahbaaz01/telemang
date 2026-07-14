@@ -11,8 +11,10 @@ import { Badge } from "@/components/ui/badge";
 import { toast } from "sonner";
 import { Trash2, Upload, Copy } from "lucide-react";
 import { listMedia, saveMedia, updateMedia, deleteMedia } from "@/lib/media-library.functions";
+import { requireAdminBeforeLoad } from "@/lib/access-guard";
 
 export const Route = createFileRoute("/_authenticated/media")({
+  beforeLoad: requireAdminBeforeLoad,
   component: MediaPage,
 });
 

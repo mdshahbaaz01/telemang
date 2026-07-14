@@ -20,8 +20,10 @@ import { Trash2, RotateCw } from "lucide-react";
 import { cloneJoinTask } from "@/lib/clone.functions";
 import { useNavigate } from "@tanstack/react-router";
 import { VirtualList } from "@/components/VirtualList";
+import { requireAdminBeforeLoad } from "@/lib/access-guard";
 
 export const Route = createFileRoute("/_authenticated/tasks/$id")({
+  beforeLoad: requireAdminBeforeLoad,
   component: () => (
     <AdminGate>
       <TaskDetail />

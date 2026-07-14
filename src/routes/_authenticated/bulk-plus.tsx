@@ -13,10 +13,12 @@ import { Textarea } from "@/components/ui/textarea";
 import { toast } from "sonner";
 import { Loader } from "@/components/ui/loader";
 import {
+import { requireAdminBeforeLoad } from "@/lib/access-guard";
   Users, UserPlus, MessagesSquare, Pencil, Copy, Mic, ListChecks, CheckCheck, Square, Play, Rocket,
 } from "lucide-react";
 
 export const Route = createFileRoute("/_authenticated/bulk-plus")({
+  beforeLoad: requireAdminBeforeLoad,
   head: () => ({ meta: [{ title: "Bulk+ · TeleManager Pro" }] }),
   component: BulkPlusPage,
 });

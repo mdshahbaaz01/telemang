@@ -10,6 +10,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { toast } from "sonner";
 import { ArrowLeft, Bell, RefreshCw, Save } from "lucide-react";
 import {
+import { requireAdminBeforeLoad } from "@/lib/access-guard";
   getReferralStats,
   getNotificationSettings,
   saveNotificationSettings,
@@ -17,6 +18,7 @@ import {
 } from "@/lib/actions.functions";
 
 export const Route = createFileRoute("/_authenticated/alerts")({
+  beforeLoad: requireAdminBeforeLoad,
   component: () => (
     <AdminGate>
       <AlertsPage />

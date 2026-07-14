@@ -7,8 +7,10 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { toast } from "sonner";
 import { EyeOff } from "lucide-react";
+import { requireAdminBeforeLoad } from "@/lib/access-guard";
 
 export const Route = createFileRoute("/_authenticated/stealth")({
+  beforeLoad: requireAdminBeforeLoad,
   component: StealthPage,
 });
 

@@ -14,8 +14,10 @@ import { toast } from "sonner";
 import { Play, Plus, Save, Trash2, ChefHat } from "lucide-react";
 import { listRecipes, saveRecipe, deleteRecipe, type RecipeStep } from "@/lib/recipes.functions";
 import { listAccounts } from "@/lib/accounts.functions";
+import { requireAdminBeforeLoad } from "@/lib/access-guard";
 
 export const Route = createFileRoute("/_authenticated/recipes")({
+  beforeLoad: requireAdminBeforeLoad,
   component: RecipesPage,
 });
 

@@ -13,8 +13,10 @@ import { toast } from "sonner";
 import { ArrowLeft } from "lucide-react";
 import { AdminGate } from "@/components/AdminGate";
 import { AccountIdPaste } from "@/components/AccountIdPaste";
+import { requireAdminBeforeLoad } from "@/lib/access-guard";
 
 export const Route = createFileRoute("/_authenticated/tasks/new")({
+  beforeLoad: requireAdminBeforeLoad,
   component: () => (
     <AdminGate>
       <NewTaskPage />

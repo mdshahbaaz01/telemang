@@ -14,6 +14,7 @@ import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { AdminGate } from "@/components/AdminGate";
 import { ArrowLeft, Play, Trash2, Plus, Download } from "lucide-react";
 import { toast } from "sonner";
+import { requireAdminBeforeLoad } from "@/lib/access-guard";
 
 function downloadCsv(filename: string, rows: (string | number | null | undefined)[][]) {
   const esc = (v: any) => {
@@ -28,6 +29,7 @@ function downloadCsv(filename: string, rows: (string | number | null | undefined
 }
 
 export const Route = createFileRoute("/_authenticated/bot-parser")({
+  beforeLoad: requireAdminBeforeLoad,
   component: () => <AdminGate><Page /></AdminGate>,
 });
 

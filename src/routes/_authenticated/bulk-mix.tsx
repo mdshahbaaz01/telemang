@@ -14,8 +14,10 @@ import { Switch } from "@/components/ui/switch";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { Loader2, Smile, Eye, Trash2, Plus, X } from "lucide-react";
+import { requireAdminBeforeLoad } from "@/lib/access-guard";
 
 export const Route = createFileRoute("/_authenticated/bulk-mix")({
+  beforeLoad: requireAdminBeforeLoad,
   head: () => ({
     meta: [
       { title: "Bulk Mix — Reactions & Views" },

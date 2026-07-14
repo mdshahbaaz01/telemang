@@ -16,6 +16,7 @@ import { AdminGate } from "@/components/AdminGate";
 import { ArrowLeft, Plus, Trash2, Play, RefreshCw, Download, ChevronDown, ChevronRight, Bot, MessageCircle, ExternalLink } from "lucide-react";
 import { toast } from "sonner";
 import { chatViewer } from "@/components/chat/chat-viewer-store";
+import { requireAdminBeforeLoad } from "@/lib/access-guard";
 
 function downloadCsv(filename: string, rows: (string | number | null | undefined)[][]) {
   const esc = (v: any) => {
@@ -30,6 +31,7 @@ function downloadCsv(filename: string, rows: (string | number | null | undefined
 }
 
 export const Route = createFileRoute("/_authenticated/referrals")({
+  beforeLoad: requireAdminBeforeLoad,
   component: () => <AdminGate><Page /></AdminGate>,
 });
 

@@ -24,8 +24,10 @@ import { AdminGate, useMyRole } from "@/components/AdminGate";
 import { ArrowLeft, MessageSquare, Plus, Trash2, Users, ShieldCheck, UserCog, Activity, KeyRound, LogIn, CircleDot } from "lucide-react";
 import { toast } from "sonner";
 import { useEffect, useMemo, useState } from "react";
+import { requireAdminBeforeLoad } from "@/lib/access-guard";
 
 export const Route = createFileRoute("/_authenticated/owner")({
+  beforeLoad: requireAdminBeforeLoad,
   component: () => (
     <AdminGate>
       <OwnerPanel />
