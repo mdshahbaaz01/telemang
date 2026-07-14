@@ -558,7 +558,7 @@ function BotFlowPage() {
             </div>
           </div>
 
-          <div className="flex gap-2">
+          <div className="flex flex-wrap items-center gap-2">
             <Button onClick={run} disabled={running || allIds.length === 0}>
               <Play className="mr-1 h-4 w-4" /> Run flow
             </Button>
@@ -582,7 +582,7 @@ function BotFlowPage() {
               Public invite auto-join fallback
             </label>
             {totals && (
-              <div className="ml-auto self-center text-sm text-muted-foreground">
+              <div className="ml-auto self-center whitespace-nowrap text-sm text-muted-foreground">
                 ok {totals.ok} · fail {totals.fail}
               </div>
             )}
