@@ -36,6 +36,7 @@ import { MessageSquare, Pencil, Plus, RefreshCw, RotateCcw, Trash2 } from "lucid
 import { AccountIdPaste } from "@/components/AccountIdPaste";
 import { myAccess, requestAccountAccess, cancelMyAccountRequest } from "@/lib/access.functions";
 import { Badge } from "@/components/ui/badge";
+import { OnboardingChecklist } from "@/components/OnboardingChecklist";
 
 export const Route = createFileRoute("/_authenticated/dashboard")({
   component: Dashboard,
@@ -122,6 +123,7 @@ function Dashboard() {
       </div>
 
       <div className="mx-auto max-w-7xl space-y-10 px-4 py-8 md:px-8">
+        <OnboardingChecklist />
         <section>
           <div className="mb-6 flex flex-wrap items-start justify-between gap-3">
             <div>
