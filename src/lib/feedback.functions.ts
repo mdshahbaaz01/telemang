@@ -122,8 +122,11 @@ export const ownerUpdateFeatureRequest = createServerFn({ method: "POST" })
     }).parse(d),
   )
   .handler(async ({ data, context }) => {
-    // is_owner check on RLS handles authorization
-    const patch: Record<string, unknown> = {};
+    const patch: {
+      status?: FeatureRequestRow["status"];
+      priority?: FeatureRequestRow["priority"];
+      owner_note?: string | null;
+    } = {};
     if (data.status !== undefined) patch.status = data.status;
     if (data.priority !== undefined) patch.priority = data.priority;
     if (data.owner_note !== undefined) patch.owner_note = data.owner_note;
