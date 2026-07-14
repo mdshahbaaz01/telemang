@@ -94,7 +94,7 @@ export const requestAccountAccess = createServerFn({ method: "POST" })
   )
   .handler(async ({ data, context }) => {
     const { data: rid, error } = await context.supabase.rpc("request_account_access", {
-      _message: data.message ?? null,
+      _message: (data.message ?? "") as string,
       _requested_limit: data.requestedLimit ?? 1,
     });
     if (error) throw new Error(error.message);
