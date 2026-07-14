@@ -21,7 +21,7 @@ import { Switch } from "@/components/ui/switch";
 import { Badge } from "@/components/ui/badge";
 import { FloodWaitBadge } from "@/components/FloodWaitBadge";
 import { AdminGate, useMyRole } from "@/components/AdminGate";
-import { ArrowLeft, MessageSquare, Plus, Trash2, Users, ShieldCheck, UserCog, Activity, KeyRound, LogIn, CircleDot } from "lucide-react";
+import { ArrowLeft, MessageSquare, Plus, Trash2, Users, ShieldCheck, UserCog, Activity, KeyRound, LogIn, CircleDot, ChevronDown, ChevronRight } from "lucide-react";
 import { toast } from "sonner";
 import { useEffect, useMemo, useState } from "react";
 import { requireAdminBeforeLoad } from "@/lib/access-guard";
@@ -425,6 +425,15 @@ function OwnerCard({
   subtitle?: string;
   children: React.ReactNode;
 }) {
+  const storageKey = `owner-card-collapsed:${title}`;
+  const [collapsed, setCollapsed] = useState<boolean>(() => {
+    if (typeof window === "undefined") return false;
+    return window.localStorage.getItem(storageKey) === "1";
+  });
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    window.localStorage.setItem(storageKey, collapsed ? "1" : "0");
+  }, [storageKey, collapsed]);
   return (
     <section className="owner-card" aria-label={title}>
       <header className="owner-card__head">
@@ -442,8 +451,20 @@ function OwnerCard({
             {subtitle && <p className="truncate text-xs text-muted-foreground">{subtitle}</p>}
           </div>
         </div>
+        <Button
+          type="button"
+          size="sm"
+          variant="ghost"
+          className="ml-auto h-8 px-2 text-xs"
+          aria-expanded={!collapsed}
+          aria-label={collapsed ? `Expand ${title}` : `Minimize ${title}`}
+          onClick={() => setCollapsed((v) => !v)}
+        >
+          {collapsed ? <ChevronRight className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
+          <span className="ml-1 hidden sm:inline">{collapsed ? "Expand" : "Minimize"}</span>
+        </Button>
       </header>
-      <div className="owner-card__body">{children}</div>
+      {!collapsed && <div className="owner-card__body">{children}</div>}
     </section>
   );
 }
