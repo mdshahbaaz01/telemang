@@ -7,11 +7,11 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { chatViewer, useChatViewer } from "./chat-viewer-store";
-import { previewChat, loadChatHistory, loadChatMembers, sendQuickReply, joinChatTarget, leaveChatTarget } from "@/lib/chat-viewer.functions";
+import { previewChat, loadChatHistory, loadChatMembers, sendQuickReply, joinChatTarget, leaveChatTarget, cancelJoinRequest } from "@/lib/chat-viewer.functions";
 import { pressInlineButtonAs } from "@/lib/tg-viewer.functions";
 import { recordInlineButtonClick } from "@/lib/button-clicks.functions";
 import { listAccounts } from "@/lib/accounts.functions";
-import { ExternalLink, Send, Users, Info, MessageCircle, Loader2, Image as ImageIcon, Video, FileText, Music, Link as LinkIcon, LogIn, LogOut, UserPlus, ArrowLeft, Lock } from "lucide-react";
+import { ExternalLink, Send, Users, Info, MessageCircle, Loader2, Image as ImageIcon, Video, FileText, Music, Link as LinkIcon, LogIn, LogOut, UserPlus, ArrowLeft, Lock, XCircle } from "lucide-react";
 import { toast } from "sonner";
 
 const IST_FMT = new Intl.DateTimeFormat("en-IN", {
@@ -70,6 +70,7 @@ function ChatViewerInner({ target, accountId }: { target: string; accountId: str
   const recordClickFn = useServerFn(recordInlineButtonClick);
   const joinFn = useServerFn(joinChatTarget);
   const leaveFn = useServerFn(leaveChatTarget);
+  const cancelReqFn = useServerFn(cancelJoinRequest);
 
   const [activeAccountId, setActiveAccountId] = useState<string | null>(accountId);
   useEffect(() => setActiveAccountId(accountId), [accountId, target]);
@@ -239,6 +240,18 @@ function ChatViewerInner({ target, accountId }: { target: string; accountId: str
     onError: (e) => toast.error((e as Error).message),
   });
 
+  const cancelReqMut = useMutation({
+    mutationFn: async () => {
+      if (!activeAccountId) throw new Error("Pick an account first");
+      return cancelReqFn({ data: { target, accountId: activeAccountId } });
+    },
+    onSuccess: (res: any) => {
+      toast.success(res?.note ?? "Join request cancelled");
+      previewQ.refetch();
+    },
+    onError: (e) => toast.error((e as Error).message),
+  });
+
   const groups = useMemo(() => {
     const g: Record<string, typeof allMessages> = {};
     for (const m of allMessages) {
@@ -306,7 +319,27 @@ function ChatViewerInner({ target, accountId }: { target: string; accountId: str
                 )}
                 {(chat as any)?.requestNeeded ? "Request to join" : "Join"}
               </Button>
-            ) : (
+            ) : null}
+            {(chat as any)?.needsJoin && (chat as any)?.requestNeeded && (
+              <Button
+                size="sm"
+                variant="outline"
+                className="h-8"
+                disabled={!activeAccountId || cancelReqMut.isPending}
+                onClick={() => {
+                  if (confirm("Cancel your pending join request?")) cancelReqMut.mutate();
+                }}
+                title="Withdraw pending join request"
+              >
+                {cancelReqMut.isPending ? (
+                  <Loader2 className="mr-1 h-4 w-4 animate-spin" />
+                ) : (
+                  <XCircle className="mr-1 h-4 w-4" />
+                )}
+                Cancel request
+              </Button>
+            )}
+            {!(chat as any)?.needsJoin && (
               <Button
                 size="sm"
                 variant="outline"

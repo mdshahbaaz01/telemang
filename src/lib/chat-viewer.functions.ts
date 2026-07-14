@@ -321,6 +321,49 @@ export const leaveChatTarget = createServerFn({ method: "POST" })
     }
   });
 
+// Cancel a pending join request for approval-required channels.
+// Uses messages.HideChatJoinRequest with the caller's own userId + approved=false.
+export const cancelJoinRequest = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((d: unknown) =>
+    z.object({ target: z.string().min(1).max(200), accountId: z.string().uuid() }).parse(d),
+  )
+  .handler(async ({ data, context }) => {
+    const { openClientForAccount } = await import("./cleanup.server");
+    const { Api } = await import("telegram");
+    const client = await openClientForAccount(context.supabase, data.accountId, {
+      requireOwnerId: context.userId,
+    });
+    try {
+      // Resolve entity — for invite-hash links, fall back to CheckChatInvite.
+      let entity: any = null;
+      try {
+        entity = await resolveTargetEntity(client, Api, data.target);
+      } catch {
+        const hash = extractInviteHash(data.target);
+        if (!hash) throw new Error("Could not resolve chat");
+        const info: any = await client.invoke(new Api.messages.CheckChatInvite({ hash }));
+        entity = info?.chat ?? info?.channel ?? null;
+        if (!entity) throw new Error("Chat not resolvable from invite link");
+      }
+      const me = await client.getMe(true);
+      try {
+        await client.invoke(
+          new Api.messages.HideChatJoinRequest({ peer: entity, userId: me, approved: false }),
+        );
+      } catch (err: any) {
+        const msg = String(err?.message ?? err ?? "");
+        if (/HIDE_REQUESTER_MISSING|USER_NOT_PARTICIPANT|PEER_ID_INVALID/i.test(msg)) {
+          return { ok: true, note: "No pending request found" };
+        }
+        throw err;
+      }
+      return { ok: true };
+    } finally {
+      await client.disconnect().catch(() => {});
+    }
+  });
+
 export const loadChatHistory = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .inputValidator((d: unknown) =>
