@@ -625,7 +625,7 @@ function BotFlowPage() {
                     return (
                       <div key={c} className="flex items-center justify-between gap-2 py-0.5">
                         <a href={url} target="_blank" rel="noreferrer" className="truncate hover:underline">
-                          {c}
+                          {url}
                         </a>
                         <button
                           onClick={() => copyWithToast(url, toast, "Copied")}
