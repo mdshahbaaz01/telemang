@@ -29,6 +29,8 @@ import {
   ShieldAlert,
   Gauge,
   Activity,
+  MessageSquare,
+  ShieldCheck as ShieldCheckIcon2,
 } from "lucide-react";
 import {
   DndContext,
@@ -106,11 +108,13 @@ const items: Item[] = [
   { id: "captcha", title: "Captcha Solver", to: "/captcha", icon: ShieldAlert },
   { id: "join-pacing", title: "Join Pacing", to: "/join-pacing", icon: Gauge },
   { id: "health", title: "Health", to: "/health", icon: Activity },
+  { id: "feedback", title: "Feedback", to: "/feedback", icon: MessageSquare },
+  { id: "security", title: "Security", to: "/security", icon: ShieldCheckIcon2 },
 ];
 
 // Route IDs allowed for non-admin users by default. Everyone can broadcast + view dashboard.
 // Owner may additionally grant admins any feature key here (matching item id).
-const USER_ALLOWED_IDS = new Set(["dashboard", "broadcast"]);
+const USER_ALLOWED_IDS = new Set(["dashboard", "broadcast", "feedback", "security"]);
 // Owner-only items — always hidden from non-owner regardless of features.
 const OWNER_ONLY_IDS = new Set(["owner"]);
 
