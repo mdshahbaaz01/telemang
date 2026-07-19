@@ -980,7 +980,18 @@ export const Route = createFileRoute("/api/public/actions-stream")({
                        return extractTelegramErrorCode(s);
                     };
                     const isTransient = (em: string) =>
-                      /TIMEOUT|TIMED?OUT|NETWORK|ECONNRESET|ECONNREFUSED|EAI_AGAIN|EPIPE|fetch failed|socket hang up|INTERNAL|503|502|504|Server closed the connection|TransportError|MTProtoError/i.test(em);
+                      /TIMEOUT|TIMED?OUT|NETWORK|ECONNRESET|ECONNREFUSED|EAI_AGAIN|EPIPE|fetch failed|socket hang up|INTERNAL|503|502|504|Server closed the connection|TransportError|MTProtoError|No workers running|workers running|JOIN_NOT_VERIFIED/i.test(em);
+                    const reconnectForRetry = async (reason: string) => {
+                      try {
+                        send("log", { accountId, level: "info", target: botLabel, message: `Reconnecting Telegram session after retryable error: ${reason}` });
+                        await client?.disconnect?.().catch(() => {});
+                        client = await openClientForAccount(supabase, accountId);
+                        return true;
+                      } catch (error) {
+                        send("log", { accountId, level: "warn", target: botLabel, message: `Reconnect failed: ${errorText(error)}` });
+                        return false;
+                      }
+                    };
                     const attempt = async (): Promise<"ok" | "requested" | "flood" | "skip" | "transient"> => {
                     try {
                        const result = await joinTelegramTargetVerified({
@@ -1013,7 +1024,7 @@ export const Route = createFileRoute("/api/public/actions-stream")({
                         return "flood";
                       }
                         if (isTransient(em)) {
-                          send("log", { accountId, level: "warn", target: botLabel, message: `Transient join error (${target}): ${em}` });
+                          send("log", { accountId, level: "warn", target: botLabel, message: `Retryable join error (${target}): ${em}` });
                           return "transient";
                         }
                        send("log", { accountId, level: "warn", target: botLabel, message: `Join ${target} (path=${joinPath}, code=${joinErrorCode ?? "?"}): ${em}` });
@@ -1028,6 +1039,7 @@ export const Route = createFileRoute("/api/public/actions-stream")({
                       for (let i = 0; i < 3 && !stopRequested; i++) {
                         const backoff = Math.round((1000 * Math.pow(2, i)) * (0.85 + Math.random() * 0.3));
                         send("log", { accountId, level: "info", target: botLabel, message: `Retry ${i + 1}/3 in ${Math.round(backoff / 1000)}s…` });
+                        await reconnectForRetry(target);
                         await new Promise((r) => setTimeout(r, backoff));
                         if (stopRequested) return "stop";
                         out = await attempt();
