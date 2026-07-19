@@ -14,6 +14,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { toast } from "sonner";
 import { Play, Square, ArrowLeft, Loader2, RefreshCw, X, MessageSquare, Copy, ExternalLink } from "lucide-react";
+import { BrowserPickerButton } from "@/components/BrowserPickerButton";
 import { AccountIdPaste } from "@/components/AccountIdPaste";
 import { copyWithToast } from "@/lib/clipboard";
 import { useBotFlowCaptchaConfig, CAPTCHA_KIND_OPTIONS, CAPTCHA_PROVIDER_OPTIONS } from "@/lib/bot-flow-captcha-config";
