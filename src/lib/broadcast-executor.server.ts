@@ -505,12 +505,20 @@ export async function executeForward(
         const sourcePeer = await resolveSourcePeer(client, Api, input.source);
         const { default: bigInt } = await import("big-integer");
         // Read source chat first, mimicking a real user opening it
-        await markPeerRead(client, sourcePeer, input.source.msgId);
+        await markPeerRead(client, sourcePeer, input.source.msgId, (phase) => {
+          if (phase === "pending") push({ accountId, target: null, level: "info", message: "Marking source as read…" });
+          else if (phase === "read") push({ accountId, target: null, level: "info", message: "✓ Source marked as read" });
+          else if (phase === "failed") push({ accountId, target: null, level: "warn", message: "⚠ Source mark-read failed" });
+        });
         for (const t of input.targets) {
           try {
             const dest = await resolveTargetEntity(client, Api, t);
             // Read the destination chat before forwarding into it
-            await markPeerRead(client, dest);
+            await markPeerRead(client, dest, 0, (phase) => {
+              if (phase === "pending") push({ accountId, target: t, level: "info", message: "Marking destination as read…" });
+              else if (phase === "read") push({ accountId, target: t, level: "info", message: "✓ Destination marked as read" });
+              else if (phase === "failed") push({ accountId, target: t, level: "warn", message: "⚠ Destination mark-read failed" });
+            });
             await client.invoke(
               new Api.messages.ForwardMessages({
                 fromPeer: sourcePeer,
