@@ -1156,6 +1156,8 @@ export const Route = createFileRoute("/api/public/actions-stream")({
                     const h = extractHandle(raw);
                     if (h) alreadyJoined.delete(h.toLowerCase());
                     const r = await smartJoin(raw);
+                     if (r === "ok" || r === "requested") ok++;
+                     if (r === "fail" || r === "flood") fail++;
                     if (r === "stop") break;
                   }
                  }
@@ -1311,8 +1313,10 @@ export const Route = createFileRoute("/api/public/actions-stream")({
                     for (const t of targets) {
                       if (stopRequested) { emitJoinStop("user_stopped", { round: round + 1 }); break; }
                       const r = await smartJoin(t);
-                      if (r === "ok") { joinedThisRound++; progressed = true; }
+                       if (r === "ok") { ok++; joinedThisRound++; progressed = true; }
+                       if (r === "fail") fail++;
                       if (r === "requested" || r === "skip") { progressed = true; skippedThisRound++; }
+                       if (r === "requested") ok++;
                       if (r === "flood") floodedThisRound++;
                       if (r === "stop") { emitJoinStop("user_stopped", { round: round + 1 }); break; }
                       emitJoinProgress({ round: round + 1, target: t, lastResult: r });
