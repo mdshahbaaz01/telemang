@@ -531,7 +531,7 @@ function BotFlowPage() {
     const ids = selectedIds.length ? selectedIds : allIds;
     if (!ids.length) return toast.error("Select at least one account");
     const isMobile = typeof window !== "undefined" && window.matchMedia("(max-width: 767px)").matches;
-    setChatVisibleCount(isMobile ? 1 : Math.min(6, ids.length));
+    setChatVisibleCount(isMobile ? 1 : ids.length);
     setChatOpen(ids);
   };
   const closeChat = (id: string) =>
