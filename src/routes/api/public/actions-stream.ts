@@ -7,7 +7,6 @@ import {
   loadCacheForAccount,
   tryAcquireJoinLock,
   finalizeJoinLock,
-  releaseJoinLock,
   logJoinAttempt,
   jitteredDelayMs,
   normalizeTargetKey,
