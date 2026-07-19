@@ -483,6 +483,7 @@ function ActionsPageInner() {
   const [reportOpen, setReportOpen] = useState(false);
   const [reportId, setReportId] = useState<string | null>(null);
   const [reuseSchedule, setReuseSchedule] = useState<ReuseScheduleRow | null>(null);
+  const [editSchedule, setEditSchedule] = useState<ReuseScheduleRow | null>(null);
   const reportQ = useQuery({
     queryKey: ["schedule-report", reportId],
     queryFn: () => reportSchedFn({ data: { id: reportId! } }),
@@ -2292,6 +2293,16 @@ function ActionsPageInner() {
                         {s.status === "pending" && (
                           <button
                             type="button"
+                            className="text-xs text-primary underline"
+                            title="Edit this pending schedule (reschedules and cancels the original)"
+                            onClick={() => setEditSchedule(s as any)}
+                          >
+                            Edit
+                          </button>
+                        )}
+                        {s.status === "pending" && (
+                          <button
+                            type="button"
                             className="text-xs text-destructive underline"
                             onClick={async () => {
                               try {
@@ -2462,6 +2473,30 @@ function ActionsPageInner() {
             onClose={() => setReuseSchedule(null)}
             onSubmitted={async () => {
               setReuseSchedule(null);
+              await qc.invalidateQueries({ queryKey: ["scheduled-broadcasts"] });
+            }}
+            rescheduleFn={rescheduleFn}
+          />
+
+          <ReuseScheduleDialog
+            schedule={editSchedule}
+            defaultTimeIst={
+              editSchedule
+                ? dateToIstInput(new Date(editSchedule.scheduledAt))
+                : scheduledAt
+            }
+            editMode
+            onClose={() => setEditSchedule(null)}
+            onSubmitted={async () => {
+              // Cancel the original pending schedule after a new one is created.
+              if (editSchedule) {
+                try {
+                  await cancelSchedFn({ data: { id: editSchedule.id } });
+                } catch (e) {
+                  toast.error(`New schedule created but failed to cancel original: ${(e as Error).message}`);
+                }
+              }
+              setEditSchedule(null);
               await qc.invalidateQueries({ queryKey: ["scheduled-broadcasts"] });
             }}
             rescheduleFn={rescheduleFn}
@@ -3575,12 +3610,14 @@ function ReuseScheduleDialog({
   onClose,
   onSubmitted,
   rescheduleFn,
+  editMode = false,
 }: {
   schedule: ReuseScheduleRow | null;
   defaultTimeIst: string;
   onClose: () => void;
   onSubmitted: () => void | Promise<void>;
   rescheduleFn: (args: { data: any }) => Promise<any>;
+  editMode?: boolean;
 }) {
   const open = !!schedule;
   const [when, setWhen] = useState("");
@@ -3655,7 +3692,7 @@ function ReuseScheduleDialog({
     <Dialog open={open} onOpenChange={(o) => { if (!o) onClose(); }}>
       <DialogContent className="max-w-2xl">
         <DialogHeader>
-          <DialogTitle>Reuse scheduled broadcast</DialogTitle>
+          <DialogTitle>{editMode ? "Edit scheduled broadcast" : "Reuse scheduled broadcast"}</DialogTitle>
         </DialogHeader>
         <div className="space-y-4 text-sm">
           <div className="rounded border border-border/60 bg-muted/30 p-3 text-xs space-y-1">
