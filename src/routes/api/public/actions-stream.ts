@@ -858,7 +858,7 @@ export const Route = createFileRoute("/api/public/actions-stream")({
               return { username: s, startParam };
             };
 
-            const runBotFlowForAccount = async (accountId: string, op: { bot: string; startParam?: string; steps: string[]; autoJoinRequired?: boolean; maxJoinRounds?: number; preJoinChannels?: string[]; preJoinOnly?: boolean; publicInviteFallback?: boolean }) => {
+            const runBotFlowForAccount = async (accountId: string, op: { bot: string; startParam?: string; steps: string[]; autoJoinRequired?: boolean; maxJoinRounds?: number; preJoinChannels?: string[]; preJoinOnly?: boolean; publicInviteFallback?: boolean; forceRejoin?: boolean }) => {
               send("log", { accountId, level: "info", message: "Connecting…" });
               let client;
               try {
@@ -932,7 +932,7 @@ export const Route = createFileRoute("/api/public/actions-stream")({
                  try {
                    const cache = await loadCacheForAccount(supabase, accountId);
                    for (const [k, status] of cache.entries()) {
-                     if (status === "joined" || status === "requested") alreadyJoined.add(k);
+                      if (!op.forceRejoin && (status === "joined" || status === "requested")) alreadyJoined.add(k);
                    }
                  } catch { /* dedupe is best-effort */ }
                 const smartJoin = async (rawTarget: string): Promise<"ok" | "requested" | "stop" | "flood" | "skip"> => {
@@ -943,6 +943,17 @@ export const Route = createFileRoute("/api/public/actions-stream")({
                   if (alreadyJoined.has(key)) return "skip";
                   if (key === parsed.username.toLowerCase()) return "skip";
                    attemptedThisRun.add(key);
+                    if (op.forceRejoin) {
+                      // Wipe any prior cache row so tryAcquireJoinLock doesn't
+                      // short-circuit as "skipped_cached".
+                      try {
+                        await supabase
+                          .from("join_cache")
+                          .delete()
+                          .eq("account_id", accountId)
+                          .eq("target_key", normalizeTargetKey(rawTarget));
+                      } catch { /* best-effort */ }
+                    }
                    // Acquire per-(account, channel) lock — atomic across all workers.
                    const lock = await tryAcquireJoinLock(supabase, {
                      userId, accountId, target: rawTarget,
