@@ -95,6 +95,10 @@ export async function executeReactions(
             }),
           );
         } catch {}
+        try {
+          const { markPeerRead } = await import("./telegram-read-helper.server");
+          await markPeerRead(client, peer, input.source.msgId);
+        } catch { /* best-effort */ }
         await client.invoke(
           new Api.messages.SendReaction({
             peer,
