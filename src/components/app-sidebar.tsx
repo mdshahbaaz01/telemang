@@ -29,6 +29,7 @@ import {
   ShieldAlert,
   Gauge,
   Activity,
+  Trophy,
 } from "lucide-react";
 import {
   DndContext,
