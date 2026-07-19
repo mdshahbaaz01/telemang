@@ -1310,7 +1310,7 @@ function VerifyFrame({ url, accountId }: { url: string; accountId: string }) {
 // differ per run — even for the same account. If the server has
 // MINIAPP_PROXY_URL_TEMPLATE set, each upstream fetch also rotates its
 // outbound IP via the configured proxy service.
-type BulkRowStatus = "queued" | "running" | "success" | "failed";
+type BulkRowStatus = "queued" | "running" | "success" | "failed" | "manual";
 type BulkRowLog = { ts: number; level: "info" | "warn" | "error" | "success"; msg: string };
 type BulkRow = {
   id: string;
@@ -1331,7 +1331,24 @@ function BulkVerifyRunner({
   const [rows, setRows] = useState<BulkRow[]>([]);
   const [runNonce, setRunNonce] = useState(0);
   const [openLogs, setOpenLogs] = useState<Record<string, boolean>>({});
+  const [stableDevice, setStableDevice] = useState(true);
   const iframeRefs = useRef<Record<string, HTMLIFrameElement | null>>({});
+
+  // Stable fingerprint per account: same seed every run for the same account,
+  // so the target site sees a consistent device instead of a brand-new one.
+  const stableSeedFor = (accountId: string) => `acc-${accountId}`;
+
+  // Patterns that indicate the site refused the request because of device /
+  // account fingerprint checks — do not fake success, mark for manual review.
+  const MANUAL_PATTERNS = [
+    /same device/i,
+    /device.*(blocked|banned|not allowed|already)/i,
+    /already (verified|claimed|used)/i,
+    /multi(ple)?[- ]?accounts?/i,
+    /suspicious/i,
+    /fraud/i,
+    /vpn|proxy detected/i,
+  ];
 
   const appendLog = useCallback((id: string, entry: BulkRowLog, statusPatch?: BulkRowStatus) => {
     setRows((prev) =>
@@ -1369,7 +1386,8 @@ function BulkVerifyRunner({
         const level = (eventData?.level as BulkRowLog["level"]) || "info";
         const msg = String(eventData?.msg || "");
         let status: BulkRowStatus | undefined;
-        if (/callback fired with token/i.test(msg)) status = "success";
+        if (MANUAL_PATTERNS.some((re) => re.test(msg))) status = "manual";
+        else if (/callback fired with token/i.test(msg)) status = "success";
         else if (level === "error") status = "failed";
         appendLog(id, { ts: now, level, msg }, status);
       } else if (eventType === "captcha_detected") {
@@ -1410,8 +1428,11 @@ function BulkVerifyRunner({
       id: `${salt}-${i}`,
       url,
       accountId: accs[i % accs.length],
-      // Unique per-row seed → distinct browser fingerprint per iframe.
-      fpSeed: `${salt}-${i}-${Math.random().toString(36).slice(2, 8)}`,
+      // Stable per-account seed by default → same device is presented every
+      // time for that account. Turn off "Stable device" to use a fresh one.
+      fpSeed: stableDevice
+        ? stableSeedFor(accs[i % accs.length])
+        : `${salt}-${i}-${Math.random().toString(36).slice(2, 8)}`,
       status: "queued" as BulkRowStatus,
       logs: [] as BulkRowLog[],
     }));
@@ -1424,7 +1445,9 @@ function BulkVerifyRunner({
     setRows((prev) =>
       prev.map((r, i) => ({
         ...r,
-        fpSeed: `${salt}-${i}-${Math.random().toString(36).slice(2, 8)}`,
+        fpSeed: stableDevice
+          ? stableSeedFor(r.accountId)
+          : `${salt}-${i}-${Math.random().toString(36).slice(2, 8)}`,
         status: "queued",
         logs: [],
       })),
@@ -1452,6 +1475,22 @@ function BulkVerifyRunner({
         Outbound IP rotation is applied automatically when the server proxy template is configured
         (secret <code>MINIAPP_PROXY_URL_TEMPLATE</code>).
       </p>
+
+      <label className="flex items-start gap-2 rounded-md border border-border bg-muted/20 p-2 text-xs">
+        <input
+          type="checkbox"
+          className="mt-0.5"
+          checked={stableDevice}
+          onChange={(e) => setStableDevice(e.target.checked)}
+        />
+        <span>
+          <span className="font-medium">Stable device per account</span>{" "}
+          <span className="text-muted-foreground">
+            (recommended) — reuse the same fingerprint for each account across runs instead of a fresh one.
+            Sites that block repeat / same-device attempts are flagged as <em>manual</em> instead of faked as success.
+          </span>
+        </span>
+      </label>
 
       <div className="grid gap-3 md:grid-cols-[1fr_260px]">
         <div>
@@ -1528,6 +1567,11 @@ function BulkVerifyRunner({
                   </span>
                 );
               })}
+              <span>
+                manual: <span className="font-mono text-yellow-600 dark:text-yellow-400">
+                  {rows.filter((r) => r.status === "manual").length}
+                </span>
+              </span>
               <span>total: <span className="font-mono text-foreground">{rows.length}</span></span>
             </div>
           </div>
@@ -1541,6 +1585,7 @@ function BulkVerifyRunner({
               const color =
                 r.status === "success" ? "bg-green-500/15 text-green-600 dark:text-green-400"
                 : r.status === "failed" ? "bg-destructive/15 text-destructive"
+                : r.status === "manual" ? "bg-yellow-500/15 text-yellow-600 dark:text-yellow-400"
                 : r.status === "running" ? "bg-blue-500/15 text-blue-600 dark:text-blue-400"
                 : "bg-muted text-muted-foreground";
               return (
