@@ -1641,6 +1641,55 @@ function BulkVerifyRunner({
   );
 }
 
+function OverallProgress({
+  running,
+  startAt,
+  nowTick,
+  accountsTotal,
+  accountsDone,
+  joinState,
+  totals,
+}: {
+  running: boolean;
+  startAt: number | null;
+  nowTick: number;
+  accountsTotal: number;
+  accountsDone: number;
+  joinState: Record<string, { total: number; joined: number; remaining: number; stopped?: boolean }>;
+  totals: { ok: number; fail: number } | null;
+}) {
+  const entries = Object.values(joinState);
+  const total = entries.reduce((s, j) => s + (j.total || 0), 0);
+  const joined = entries.reduce((s, j) => s + (j.joined || 0), 0);
+  const remaining = entries.reduce((s, j) => s + (j.remaining || 0), 0);
+  const running_ = entries.filter((j) => !j.stopped && j.remaining > 0).length;
+  const elapsed = startAt ? Math.max(1, nowTick - startAt) : 0;
+  const rate = joined > 0 && elapsed > 0 ? joined / (elapsed / 1000) : 0;
+  const etaSec = rate > 0 && remaining > 0 ? Math.round(remaining / rate) : null;
+  const pct = total > 0 ? Math.round((joined / total) * 100) : accountsTotal > 0 ? Math.round((accountsDone / accountsTotal) * 100) : 0;
+  const fmt = (s: number) => s < 60 ? `${s}s` : s < 3600 ? `${Math.floor(s / 60)}m ${s % 60}s` : `${Math.floor(s / 3600)}h ${Math.floor((s % 3600) / 60)}m`;
+  return (
+    <div className="rounded-md border border-border bg-muted/20 p-3 space-y-2">
+      <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs">
+        <div className="text-sm font-medium">Overall progress</div>
+        <span className="text-muted-foreground">Accounts <span className="text-foreground">{accountsDone}/{accountsTotal}</span></span>
+        <span className="text-muted-foreground">Running <span className="text-blue-600 dark:text-blue-400">{running_}</span></span>
+        <span className="text-muted-foreground">Joined <span className="text-green-600 dark:text-green-400">{joined}</span>/{total}</span>
+        <span className="text-muted-foreground">Remaining <span className={remaining ? "text-yellow-600 dark:text-yellow-400" : "text-foreground"}>{remaining}</span></span>
+        {totals && <span className="text-muted-foreground">ok <span className="text-green-600 dark:text-green-400">{totals.ok}</span> · fail <span className="text-destructive">{totals.fail}</span></span>}
+        <span className="ml-auto text-muted-foreground">
+          {startAt && <>Elapsed <span className="text-foreground">{fmt(Math.floor(elapsed / 1000))}</span></>}
+          {running && etaSec != null && <> · ETA <span className="text-foreground">{fmt(etaSec)}</span></>}
+          {rate > 0 && <> · {rate.toFixed(2)}/s</>}
+        </span>
+      </div>
+      <div className="h-2 w-full overflow-hidden rounded bg-muted">
+        <div className="h-full bg-primary transition-all" style={{ width: `${pct}%` }} />
+      </div>
+    </div>
+  );
+}
+
 function BulkVerifyFrame({
   url,
   accountId,
