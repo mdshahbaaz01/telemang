@@ -1142,6 +1142,14 @@ function BotFlowPage() {
         <CollapsibleSection storageKey="botflow.logs" title="Live logs">
           <LiveLogsPanel logs={logs} accountList={accountList} onClear={() => setLogs([])} />
         </CollapsibleSection>
+
+        <CollapsibleSection
+          storageKey="botflow.verifybulk"
+          title="Bulk verification link runner"
+          defaultOpen={false}
+        >
+          <BulkVerifyRunner accountList={accountList} />
+        </CollapsibleSection>
       </div>
     </main>
   );
