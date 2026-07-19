@@ -2293,6 +2293,16 @@ function ActionsPageInner() {
                         {s.status === "pending" && (
                           <button
                             type="button"
+                            className="text-xs text-primary underline"
+                            title="Edit this pending schedule (reschedules and cancels the original)"
+                            onClick={() => setEditSchedule(s as any)}
+                          >
+                            Edit
+                          </button>
+                        )}
+                        {s.status === "pending" && (
+                          <button
+                            type="button"
                             className="text-xs text-destructive underline"
                             onClick={async () => {
                               try {
