@@ -4,6 +4,7 @@ import { resolveTargetEntity } from "./telegram-target-resolver.server";
 import { runWithLimit } from "./p-limit";
 import type { SpintaxVars } from "./spintax";
 import { withIdempotency, adaptivePacing, idemKey } from "./telegram/executor.server";
+import { markPeerRead } from "./telegram-read-helper.server";
 
 export type Attachment = { path: string; filename: string; mimeType?: string; isVoice?: boolean };
 
