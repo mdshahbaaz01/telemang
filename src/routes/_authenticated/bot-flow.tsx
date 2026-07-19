@@ -271,6 +271,9 @@ function BotFlowPage() {
     setTotals(null);
     setJoinState({});
     setRunning(true);
+    const botKey = (parsed?.username || "").toLowerCase();
+    runningBotKeyRef.current = botKey;
+    if (botKey) setLastBotKey(botKey);
     const ac = new AbortController();
     abortRef.current = ac;
     try {
