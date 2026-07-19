@@ -3692,7 +3692,7 @@ function ReuseScheduleDialog({
     <Dialog open={open} onOpenChange={(o) => { if (!o) onClose(); }}>
       <DialogContent className="max-w-2xl">
         <DialogHeader>
-          <DialogTitle>Reuse scheduled broadcast</DialogTitle>
+          <DialogTitle>{editMode ? "Edit scheduled broadcast" : "Reuse scheduled broadcast"}</DialogTitle>
         </DialogHeader>
         <div className="space-y-4 text-sm">
           <div className="rounded border border-border/60 bg-muted/30 p-3 text-xs space-y-1">
