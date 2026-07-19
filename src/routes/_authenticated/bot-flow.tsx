@@ -213,22 +213,14 @@ function BotFlowPage() {
           const msg: string = data.message ?? "";
           const m = msg.match(/(@[A-Za-z0-9_]{4,}|\+[A-Za-z0-9_-]{6,}|t\.me\/[A-Za-z0-9_+/-]+)/gi);
           if (m && /Joined|Verified|Pre-join|pending|Skip |already/i.test(msg)) {
-            setBotChannels((prev) => {
-              const next = new Set(prev);
-              for (const c of m) next.add(c.replace(/^t\.me\//i, ""));
-              return next;
-            });
+            addChannelsToCurrentBot(m.map((c) => c.replace(/^t\.me\//i, "")));
           }
           addLog({ accountId: data.accountId, level: data.level ?? "info", target: data.target, message: msg });
         }
         else if (event === "done") addLog({ accountId: data.accountId, level: data.fail ? "warn" : "info", message: `Account done — ok ${data.ok}, fail ${data.fail}` });
         else if (event === "joinProgress") {
           if (Array.isArray(data.remainingList) && data.remainingList.length) {
-            setBotChannels((prev) => {
-              const next = new Set(prev);
-              for (const c of data.remainingList as string[]) if (c) next.add(c);
-              return next;
-            });
+            addChannelsToCurrentBot(data.remainingList as string[]);
           }
           setJoinState((prev) => ({
             ...prev,
