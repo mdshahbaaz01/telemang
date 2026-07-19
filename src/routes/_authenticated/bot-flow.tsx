@@ -626,6 +626,17 @@ function BotFlowPage() {
               />
               Public invite auto-join fallback
             </label>
+            <label
+              className="flex items-center gap-2 self-center text-xs text-muted-foreground"
+              title="Fire the /start + auto-join flow on every selected account at the same time. Faster but more likely to trigger FloodWait when many accounts try to join the same required channel at once."
+            >
+              <input
+                type="checkbox"
+                checked={runParallel}
+                onChange={(e) => setRunParallel(e.target.checked)}
+              />
+              Run all accounts in parallel
+            </label>
             {totals && (
               <div className="ml-auto self-center whitespace-nowrap text-sm text-muted-foreground">
                 ok {totals.ok} · fail {totals.fail}
