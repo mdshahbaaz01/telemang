@@ -97,6 +97,7 @@ function BotFlowPage() {
 
   const [referLink, setReferLink] = useState("");
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
+  const [fetchBotAccountId, setFetchBotAccountId] = useState<string>("");
   const [autoJoinRequired, setAutoJoinRequired] = useState(true);
   const [publicInviteFallback, setPublicInviteFallback] = useState(true);
   const [runParallel, setRunParallel] = useState(false);
