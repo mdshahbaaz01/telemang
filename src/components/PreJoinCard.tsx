@@ -9,7 +9,7 @@ type Account = { id: string; first_name?: string | null; username?: string | nul
 
 type PreJoinLog = { level: "info" | "success" | "warn" | "error"; message: string; ts: number; target?: string; accountId?: string };
 
-type ChStatus = "pending" | "running" | "joined" | "skipped" | "failed";
+type ChStatus = "queued" | "attempting" | "requested" | "succeeded" | "skipped" | "failed";
 type ChCell = { status: ChStatus; ts: number; message?: string };
 type ChMap = Record<string, Record<string, ChCell>>; // channel -> accountId -> cell
 
@@ -17,20 +17,34 @@ function normalizeTarget(t: string): string {
   return t.trim().replace(/^https?:\/\/(t\.me|telegram\.me)\//i, "").replace(/^@/, "").toLowerCase();
 }
 
-function classify(level: string, message: string): ChStatus {
+function classify(level: string, message: string): ChStatus | null {
   const m = (message || "").toLowerCase();
-  if (/already|member/.test(m) && !/error|fail/.test(m)) return "skipped";
-  if (level === "success" || /\bjoined\b|join ok|success/.test(m)) return "joined";
-  if (level === "error" || /\bfail|error|flood|invalid|forbidden|banned\b/.test(m)) return "failed";
-  return "running";
+  // Terminal skipped states (cache hit, in-flight elsewhere, already a member).
+  if (/^skip\b|already cached|in-flight elsewhere|already[_ ]participant|user_already/.test(m)) return "skipped";
+  // Explicit failures.
+  if (level === "error" || /\bfail\b|\berror\b|flood_wait|floodwait|invalid|forbidden|banned|channel_private|channels_too_much|peer_id_invalid|username_not_occupied|invite_hash_expired|invite_hash_invalid/.test(m)) return "failed";
+  // Approval-required channels — request queued on Telegram side.
+  if (/invite_request_sent|request(ed)? to join|approval|pending approval/.test(m)) return "requested";
+  // Terminal success.
+  if (level === "success" || /membership verified|\bjoined\b|join ok|successfully joined|already a member/.test(m)) return "succeeded";
+  // Attempt in flight — peek/import/direct calls.
+  if (/attempt|trying|peek|import|resolving|connecting|joining|check invite|checkchatinvite/.test(m)) return "attempting";
+  return null;
 }
 
 const STATUS_STYLES: Record<ChStatus, string> = {
-  pending: "bg-muted text-muted-foreground",
-  running: "bg-blue-500/15 text-blue-600 dark:text-blue-400",
-  joined: "bg-green-500/15 text-green-600 dark:text-green-400",
+  queued: "bg-muted text-muted-foreground",
+  attempting: "bg-blue-500/15 text-blue-600 dark:text-blue-400",
+  requested: "bg-purple-500/15 text-purple-600 dark:text-purple-400",
+  succeeded: "bg-green-500/15 text-green-600 dark:text-green-400",
   skipped: "bg-yellow-500/15 text-yellow-700 dark:text-yellow-400",
   failed: "bg-destructive/15 text-destructive",
+};
+
+// Rank so a later log that classifies to a weaker state (e.g. "attempting")
+// cannot regress a terminal state (succeeded/failed/skipped/requested).
+const STATUS_RANK: Record<ChStatus, number> = {
+  queued: 0, attempting: 1, requested: 3, skipped: 3, failed: 3, succeeded: 4,
 };
 
 type PreJoinHistoryEntry = {
