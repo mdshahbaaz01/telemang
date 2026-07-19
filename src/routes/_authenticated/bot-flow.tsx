@@ -103,6 +103,15 @@ function BotFlowPage() {
   const [running, setRunning] = useState(false);
   const [totals, setTotals] = useState<{ ok: number; fail: number } | null>(null);
   const [joinState, setJoinState] = useState<Record<string, JoinState>>({});
+  const [runStartAt, setRunStartAt] = useState<number | null>(null);
+  const [accountsDone, setAccountsDone] = useState(0);
+  const [nowTick, setNowTick] = useState(() => Date.now());
+  const [accountsTotal, setAccountsTotal] = useState(0);
+  useEffect(() => {
+    if (!running) return;
+    const t = setInterval(() => setNowTick(Date.now()), 1000);
+    return () => clearInterval(t);
+  }, [running]);
   const BOT_CHANNELS_KEY = "botflow.channels.byBot.v1";
   const BOT_CHANNELS_LAST_KEY = "botflow.channels.lastBot.v1";
   const [botChannelsMap, setBotChannelsMap] = useState<Record<string, string[]>>(() => {
@@ -219,6 +228,7 @@ function BotFlowPage() {
           addLog({ accountId: data.accountId, level: data.level ?? "info", target: data.target, message: msg });
         }
         else if (event === "done") addLog({ accountId: data.accountId, level: data.fail ? "warn" : "info", message: `Account done — ok ${data.ok}, fail ${data.fail}` });
+        if (event === "done") setAccountsDone((n) => n + 1);
         else if (event === "joinProgress") {
           if (Array.isArray(data.remainingList) && data.remainingList.length) {
             addChannelsToCurrentBot(data.remainingList as string[]);
@@ -271,6 +281,9 @@ function BotFlowPage() {
     setLogs([]);
     setTotals(null);
     setJoinState({});
+    setAccountsDone(0);
+    setAccountsTotal(accountIds.length);
+    setRunStartAt(Date.now());
     setRunning(true);
     const botKey = (parsed?.username || "").toLowerCase();
     runningBotKeyRef.current = botKey;
