@@ -3,6 +3,8 @@ import { X, Loader2, RefreshCw } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useTelegramWebviewBridge } from "@/lib/telegram-webview-bridge";
 import { useMiniAppProxyUrl } from "@/lib/miniapp-proxy-url";
+import { useServerFn } from "@tanstack/react-start";
+import { solveCaptcha } from "@/lib/captcha.functions";
 
 export type MiniAppRequest = {
   accountId: string;
@@ -31,8 +33,52 @@ export function MiniAppDrawer({
   const [reloadNonce, setReloadNonce] = useState(0);
   const iframeRef = useRef<HTMLIFrameElement | null>(null);
   useTelegramWebviewBridge(iframeRef);
+  const solve = useServerFn(solveCaptcha);
 
-  const { url: iframeUrl } = useMiniAppProxyUrl(resolvedUrl, request?.accountId ?? "anon");
+  // Auto-solve captchas detected inside the mini-app iframe. The proxy
+  // injects a bridge that posts { eventType: "captcha_detected", eventData:
+  // { items: [{ type, sitekey, pageUrl }] } }. We forward each to the
+  // solver and post the token back so the widget passes without user input.
+  useEffect(() => {
+    const seen = new Set<string>();
+    const handler = async (ev: MessageEvent) => {
+      const iframe = iframeRef.current;
+      if (!iframe || ev.source !== iframe.contentWindow) return;
+      let data: any = ev.data;
+      if (typeof data === "string") { try { data = JSON.parse(data); } catch { return; } }
+      if (!data || data.eventType !== "captcha_detected") return;
+      const items = Array.isArray(data.eventData?.items) ? data.eventData.items : [];
+      for (const it of items) {
+        const key = `${it.type}|${it.sitekey}`;
+        if (seen.has(key)) continue;
+        seen.add(key);
+        try {
+          const res = await solve({
+            data: {
+              kind: it.type,
+              sitekey: it.sitekey,
+              pageUrl: it.pageUrl,
+              accountId: request?.accountId,
+            } as any,
+          });
+          const token = (res as any)?.answer;
+          if (token && iframe.contentWindow) {
+            iframe.contentWindow.postMessage(
+              JSON.stringify({ __lovableCaptchaSolved: true, kind: it.type, token }),
+              "*",
+            );
+          }
+        } catch {
+          // solver not configured or failed — silently continue; the
+          // in-frame Turnstile watchdog will keep retrying the widget.
+        }
+      }
+    };
+    window.addEventListener("message", handler);
+    return () => window.removeEventListener("message", handler);
+  }, [solve, request?.accountId]);
+
+  const { url: iframeUrl } = useMiniAppProxyUrl(resolvedUrl, request?.accountId ?? "anon", { captcha: true });
 
   useEffect(() => {
     if (!open || !request) {

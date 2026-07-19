@@ -31,6 +31,8 @@ function buildOverrideScript(accountId: string, upstreamUrl: string, token: stri
   // ---------- Captcha auto-detect + solver bridge ----------
   try {
     const ORIGIN = location.origin;
+    const CAPTCHA_STATE = { announced: {}, retries: {} };
+    const seenKey = (o) => (o.type || '') + '|' + (o.sitekey || '');
     const detectAndAnnounce = () => {
       const found = [];
       document.querySelectorAll('[data-sitekey]').forEach((el) => {
@@ -42,8 +44,70 @@ function buildOverrideScript(accountId: string, upstreamUrl: string, token: stri
         else if (cls.includes('cf-turnstile')) type = 'turnstile';
         found.push({ type, sitekey, pageUrl: UPSTREAM });
       });
-      if (found.length) hostPost('captcha_detected', { items: found });
+      // Only announce items we haven't already asked the host to solve.
+      const fresh = found.filter((it) => !CAPTCHA_STATE.announced[seenKey(it)]);
+      fresh.forEach((it) => { CAPTCHA_STATE.announced[seenKey(it)] = Date.now(); });
+      if (fresh.length) hostPost('captcha_detected', { items: fresh });
     };
+    // ---- Turnstile watchdog: auto-reset the widget on failure ------------
+    // Cloudflare frequently shows "Verification failed" for embedded/iframed
+    // widgets on the first render. Reset the widget in-place; a legit
+    // browser environment often passes on the 2nd or 3rd attempt.
+    const turnstileReset = () => {
+      try {
+        if (window.turnstile && typeof window.turnstile.reset === 'function') {
+          window.turnstile.reset();
+          return true;
+        }
+      } catch {}
+      return false;
+    };
+    const looksFailed = (el) => {
+      try {
+        const txt = (el.innerText || '').toLowerCase();
+        return txt.includes('verification failed') || txt.includes('try again') || txt.includes('error');
+      } catch { return false; }
+    };
+    const watchTurnstile = () => {
+      document.querySelectorAll('.cf-turnstile,[data-sitekey]').forEach((el) => {
+        const cls = String(el.className || '').toLowerCase();
+        if (!cls.includes('cf-turnstile')) return;
+        const key = 'ts:' + (el.getAttribute('data-sitekey') || '');
+        const n = CAPTCHA_STATE.retries[key] || 0;
+        if (looksFailed(el) && n < 4) {
+          CAPTCHA_STATE.retries[key] = n + 1;
+          setTimeout(() => { turnstileReset(); }, 400 + n * 800);
+        }
+      });
+    };
+    setInterval(watchTurnstile, 2500);
+    // Hook turnstile.render so we can capture the success callback and
+    // inject the token when host-side auto-solver returns one.
+    try {
+      const install = () => {
+        if (!window.turnstile || window.__lovableTurnstileHooked) return;
+        window.__lovableTurnstileHooked = true;
+        const orig = window.turnstile.render.bind(window.turnstile);
+        window.turnstile.render = function(container, params) {
+          try {
+            const cb = params && params.callback;
+            const wrapped = Object.assign({}, params, {
+              callback: (token) => {
+                try { cb && cb(token); } catch {}
+                document.querySelectorAll('input[name="cf-turnstile-response"]').forEach((el) => { el.value = token; });
+              },
+            });
+            const id = orig(container, wrapped);
+            window.__lovableTurnstileWidgetId = id;
+            window.__lovableTurnstileCallback = wrapped.callback;
+            return id;
+          } catch { return orig(container, params); }
+        };
+      };
+      install();
+      const hookInt = setInterval(install, 500);
+      setTimeout(() => clearInterval(hookInt), 15000);
+    } catch {}
     window.__lovableInjectCaptcha = (kind, token) => {
       try {
         if (kind === 'recaptchaV2' || kind === 'recaptchaV3') {
@@ -67,6 +131,9 @@ function buildOverrideScript(accountId: string, upstreamUrl: string, token: stri
         } else if (kind === 'turnstile') {
           document.querySelectorAll('input[name="cf-turnstile-response"]')
             .forEach((el) => { el.value = token; });
+          try {
+            if (window.__lovableTurnstileCallback) window.__lovableTurnstileCallback(token);
+          } catch {}
         }
         return true;
       } catch (e) { return false; }
