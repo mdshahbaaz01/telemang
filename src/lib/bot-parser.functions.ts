@@ -50,6 +50,7 @@ const ruleSchema = z.object({
   regex: z.string().min(1).max(MAX_PATTERN_LEN),
   field_name: z.string().min(1).max(64),
   unit: z.string().max(20).optional().nullable(),
+  classification: z.enum(["success", "warning", "error", "info"]).optional().nullable(),
 });
 
 export const listParseRules = createServerFn({ method: "GET" })
