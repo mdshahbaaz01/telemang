@@ -195,15 +195,19 @@ export const listTaskGroups = createServerFn({ method: "GET" })
     const allTaskIds = Array.from(groups.values()).flatMap((g) => g.taskIds);
     const itemsByTask = new Map<string, string[]>();
     if (allTaskIds.length) {
-      const { data: allItems, error: iErr } = await context.supabase
-        .from("join_task_items")
-        .select("task_id, status")
-        .in("task_id", allTaskIds);
-      if (iErr) throw new Error(iErr.message);
-      for (const it of allItems ?? []) {
-        const arr = itemsByTask.get(it.task_id) ?? [];
-        arr.push(it.status);
-        itemsByTask.set(it.task_id, arr);
+      const CHUNK = 200;
+      for (let i = 0; i < allTaskIds.length; i += CHUNK) {
+        const slice = allTaskIds.slice(i, i + CHUNK);
+        const { data: allItems, error: iErr } = await context.supabase
+          .from("join_task_items")
+          .select("task_id, status")
+          .in("task_id", slice);
+        if (iErr) throw new Error(iErr.message);
+        for (const it of allItems ?? []) {
+          const arr = itemsByTask.get(it.task_id) ?? [];
+          arr.push(it.status);
+          itemsByTask.set(it.task_id, arr);
+        }
       }
     }
 
