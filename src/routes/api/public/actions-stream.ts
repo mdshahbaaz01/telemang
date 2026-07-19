@@ -440,7 +440,7 @@ export const Route = createFileRoute("/api/public/actions-stream")({
               if (body.op.kind === "broadcast" || body.op.kind === "reply" || body.op.kind === "botflow") return { ok: 0, fail: 0 };
               const op = body.op;
               send("log", { accountId, level: "info", message: "Connecting…" });
-              let client;
+              let client: any;
               try {
                 client = await openClientForAccount(supabase, accountId);
               } catch (e) {
