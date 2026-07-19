@@ -25,7 +25,6 @@ import { ArrowLeft, MessageSquare, Plus, Trash2, Users, ShieldCheck, UserCog, Ac
 import { toast } from "sonner";
 import { useEffect, useMemo, useState } from "react";
 import { requireAdminBeforeLoad } from "@/lib/access-guard";
-import { OwnerAccessControl } from "@/components/OwnerAccessControl";
 
 export const Route = createFileRoute("/_authenticated/owner")({
   beforeLoad: requireAdminBeforeLoad,
