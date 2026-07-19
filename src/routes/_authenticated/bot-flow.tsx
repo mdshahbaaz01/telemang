@@ -6,6 +6,7 @@ import { useTelegramWebviewBridge } from "@/lib/telegram-webview-bridge";
 import { supabase } from "@/integrations/supabase/client";
 import { listAccounts } from "@/lib/accounts.functions";
 import { openStartAppLink, joinFromLink, extractVerifyLink } from "@/lib/tg-viewer.functions";
+import { previewChat } from "@/lib/chat-viewer.functions";
 import { useMiniAppProxyUrl } from "@/lib/miniapp-proxy-url";
 import { AdminGate } from "@/components/AdminGate";
 import { Button } from "@/components/ui/button";
@@ -130,6 +131,8 @@ function BotFlowPage() {
     try { return window.localStorage.getItem(BOT_CHANNELS_LAST_KEY) ?? ""; } catch { return ""; }
   });
   const [showBotChannels, setShowBotChannels] = useState(false);
+  const [fetchingBotChannels, setFetchingBotChannels] = useState(false);
+  const previewChatFn = useServerFn(previewChat);
   useEffect(() => {
     try { window.localStorage.setItem(BOT_CHANNELS_KEY, JSON.stringify(botChannelsMap)); } catch {}
   }, [botChannelsMap]);
@@ -657,19 +660,24 @@ function BotFlowPage() {
             )}
           </div>
 
-          {botChannels.size > 0 && (
+          {parsed?.username && (
             <div className="rounded-md border border-border bg-muted/20 p-2 space-y-2">
               <div className="flex flex-wrap items-center gap-2">
+                <div className="text-xs font-medium">
+                  Channels collected from <span className="font-mono">@{parsed.username}</span>
+                </div>
                 <Button
                   size="sm"
                   variant="outline"
                   onClick={() => setShowBotChannels((v) => !v)}
+                  disabled={botChannels.size === 0}
                 >
                   {showBotChannels ? "Hide" : "Show"} bot channels ({botChannels.size})
                 </Button>
                 <Button
                   size="sm"
                   variant="outline"
+                  disabled={botChannels.size === 0}
                   onClick={() => {
                     const list = Array.from(botChannels)
                       .map((c) => (c.startsWith("@") || c.startsWith("+") ? `https://t.me/${c.replace(/^@/, "")}` : `https://t.me/${c}`))
@@ -681,13 +689,70 @@ function BotFlowPage() {
                 </Button>
                 <Button
                   size="sm"
+                  variant="outline"
+                  disabled={fetchingBotChannels || accountList.length === 0}
+                  onClick={async () => {
+                    if (!parsed?.username) return;
+                    const accId = (selectedIds[0] || allIds[0]);
+                    if (!accId) return toast.error("No account selected");
+                    setFetchingBotChannels(true);
+                    try {
+                      const res: any = await previewChatFn({
+                        data: { target: `@${parsed.username}`, accountId: accId },
+                      });
+                      const found = new Set<string>();
+                      const pushFromText = (s?: string | null) => {
+                        if (!s) return;
+                        const re = /(?:https?:\/\/)?t\.me\/(\+[A-Za-z0-9_-]{6,}|[A-Za-z0-9_]{4,})/gi;
+                        let m: RegExpExecArray | null;
+                        while ((m = re.exec(s))) found.add(m[1]);
+                        const at = s.match(/@[A-Za-z0-9_]{4,}/g) ?? [];
+                        for (const h of at) found.add(h.slice(1));
+                      };
+                      for (const m of res?.messages ?? []) {
+                        pushFromText(m?.text);
+                        const rows = m?.replyMarkup?.rows ?? [];
+                        for (const row of rows) for (const b of row) {
+                          if (b?.url) pushFromText(b.url);
+                        }
+                      }
+                      // Skip the bot itself
+                      found.delete(parsed.username);
+                      const list = Array.from(found);
+                      if (!list.length) toast.info("No channel links found in bot chat");
+                      else {
+                        addChannelsToCurrentBot(list);
+                        setShowBotChannels(true);
+                        toast.success(`Imported ${list.length} link(s)`);
+                      }
+                    } catch (e) {
+                      toast.error(`Fetch failed: ${(e as Error).message}`);
+                    } finally {
+                      setFetchingBotChannels(false);
+                    }
+                  }}
+                  title="Read the bot's last messages and extract channel/invite links"
+                >
+                  {fetchingBotChannels ? <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" /> : <RefreshCw className="mr-1 h-3.5 w-3.5" />}
+                  Fetch from bot chat
+                </Button>
+                <Button
+                  size="sm"
                   variant="ghost"
+                  disabled={botChannels.size === 0}
                   onClick={() => clearCurrentBotChannels()}
                   title="Clear collected list"
                 >
                   Clear
                 </Button>
               </div>
+              {botChannels.size === 0 && (
+                <div className="text-[11px] text-muted-foreground">
+                  No links collected yet for this bot. Run the flow to auto-harvest, or click
+                  <span className="mx-1 font-medium">Fetch from bot chat</span>
+                  to pull the latest links straight from <span className="font-mono">@{parsed.username}</span>.
+                </div>
+              )}
               {showBotChannels && (
                 <div className="max-h-48 overflow-auto rounded border border-border bg-background/60 p-2 font-mono text-[11px]">
                   {Array.from(botChannels).map((c) => {
