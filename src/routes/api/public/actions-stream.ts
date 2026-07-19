@@ -736,7 +736,7 @@ export const Route = createFileRoute("/api/public/actions-stream")({
             ) => {
               const accountId = row.accountId;
               send("log", { accountId, level: "info", message: "Connecting…" });
-              let client;
+              let client: any;
               try {
                 client = await openClientForAccount(supabase, accountId);
               } catch (e) {
@@ -861,7 +861,7 @@ export const Route = createFileRoute("/api/public/actions-stream")({
 
             const runBotFlowForAccount = async (accountId: string, op: { bot: string; startParam?: string; steps: string[]; autoJoinRequired?: boolean; maxJoinRounds?: number; preJoinChannels?: string[]; preJoinOnly?: boolean; publicInviteFallback?: boolean; forceRejoin?: boolean }) => {
               send("log", { accountId, level: "info", message: "Connecting…" });
-              let client;
+              let client: any;
               try {
                 client = await openClientForAccount(supabase, accountId);
               } catch (e) {
