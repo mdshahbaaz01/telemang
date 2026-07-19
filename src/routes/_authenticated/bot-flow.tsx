@@ -525,15 +525,23 @@ function BotFlowPage() {
 
   // ─── Per-account inline chat boxes for the refer bot ──────────────
   const [chatOpen, setChatOpen] = useState<string[]>([]);
+  const [chatVisibleCount, setChatVisibleCount] = useState(1);
   const openChats = () => {
     if (!parsed?.username) return toast.error("Paste a bot referral link first");
     const ids = selectedIds.length ? selectedIds : allIds;
     if (!ids.length) return toast.error("Select at least one account");
+    const isMobile = typeof window !== "undefined" && window.matchMedia("(max-width: 767px)").matches;
+    setChatVisibleCount(isMobile ? 1 : ids.length);
     setChatOpen(ids);
   };
   const closeChat = (id: string) =>
     setChatOpen((prev) => prev.filter((x) => x !== id));
-  const clearChats = () => setChatOpen([]);
+  const clearChats = () => {
+    setChatOpen([]);
+    setChatVisibleCount(1);
+  };
+  const visibleChatIds = chatOpen.slice(0, chatVisibleCount);
+  const queuedChatCount = Math.max(0, chatOpen.length - visibleChatIds.length);
 
   return (
     <main className="min-h-screen bg-background">
@@ -872,8 +880,34 @@ function BotFlowPage() {
               </p>
 
               {chatOpen.length > 0 && (
-                <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3">
-                  {chatOpen.map((id) => {
+                <div className="space-y-3">
+                  <div className="flex flex-wrap items-center gap-2 rounded-md border border-border bg-background/60 px-2 py-1.5 text-xs">
+                    <span className="text-muted-foreground">
+                      Showing {visibleChatIds.length} of {chatOpen.length}
+                      {queuedChatCount > 0 ? ` · ${queuedChatCount} queued` : ""}
+                    </span>
+                    {queuedChatCount > 0 && (
+                      <>
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={() => setChatVisibleCount((n) => Math.min(chatOpen.length, n + 1))}
+                        >
+                          Open next
+                        </Button>
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          className="hidden md:inline-flex"
+                          onClick={() => setChatVisibleCount((n) => Math.min(chatOpen.length, n + 3))}
+                        >
+                          Show 3 more
+                        </Button>
+                      </>
+                    )}
+                  </div>
+                  <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3">
+                  {visibleChatIds.map((id) => {
                     const a = accountList.find((x) => x.id === id);
                     const who = a?.first_name || a?.username || a?.phone || id.slice(0, 8);
                     const src = `/accounts/${id}?peer=${encodeURIComponent(`@${parsed.username}`)}&solo=1`;
@@ -899,10 +933,12 @@ function BotFlowPage() {
                           src={src}
                           title={`${who} — @${parsed.username}`}
                           className="h-full w-full flex-1 border-0"
+                          loading="lazy"
                         />
                       </div>
                     );
                   })}
+                  </div>
                 </div>
               )}
             </div>
