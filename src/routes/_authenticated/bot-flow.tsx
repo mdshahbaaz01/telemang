@@ -127,6 +127,22 @@ function BotFlowPage() {
     try { if (lastBotKey) window.localStorage.setItem(BOT_CHANNELS_LAST_KEY, lastBotKey); } catch {}
   }, [lastBotKey]);
   const abortRef = useRef<AbortController | null>(null);
+  const runningBotKeyRef = useRef<string>("");
+
+  const currentBotKey = (parsed?.username || lastBotKey || "").toLowerCase();
+  const botChannels = useMemo(
+    () => new Set<string>(currentBotKey ? botChannelsMap[currentBotKey] ?? [] : []),
+    [botChannelsMap, currentBotKey],
+  );
+  const addChannelsToCurrentBot = (chans: string[]) => {
+    const key = (runningBotKeyRef.current || currentBotKey).toLowerCase();
+    if (!key || !chans.length) return;
+    setBotChannelsMap((prev) => {
+      const existing = new Set(prev[key] ?? []);
+      for (const c of chans) if (c) existing.add(c);
+      return { ...prev, [key]: Array.from(existing) };
+    });
+  };
 
   const accountList = accountsQ.data ?? [];
   const allIds = useMemo(() => accountList.map((a) => a.id), [accountList]);
