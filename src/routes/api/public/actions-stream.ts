@@ -689,6 +689,8 @@ export const Route = createFileRoute("/api/public/actions-stream")({
                     if (stopRequested) break;
                     try {
                       const dest = await resolveTarget(client, t);
+                      // Mark destination as read before broadcasting
+                      await markPeerRead(client, dest);
                       if (attDatas.length > 1) {
                         const formatted = formatMessage(row.message, row.format);
                         await client.sendFile(dest, {
