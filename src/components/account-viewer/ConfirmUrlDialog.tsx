@@ -111,7 +111,7 @@ export function ConfirmUrlDialog({ url, onClose, accountId }: { url: string; onC
                 <Globe className="mr-1 h-4 w-4" /> Browser…
               </Button>
             </PopoverTrigger>
-            <PopoverContent align="end" className="w-56 p-1">
+            <PopoverContent align="end" className="z-[60] w-56 p-1">
               <div className="px-2 py-1 text-[10px] uppercase tracking-wide text-muted-foreground">
                 Open in browser
               </div>
