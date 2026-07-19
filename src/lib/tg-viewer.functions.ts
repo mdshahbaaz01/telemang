@@ -858,6 +858,10 @@ export const extractVerifyLink = createServerFn({ method: "POST" })
           ? `/start ${data.startParam}`
           : "/start";
         try {
+          try {
+            const { markPeerRead } = await import("./telegram-read-helper.server");
+            await markPeerRead(client, bot);
+          } catch { /* best-effort */ }
           await client.sendMessage(bot, { message: startMsg });
         } catch {
           /* ignore — bot may already be started */
