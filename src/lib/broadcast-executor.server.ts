@@ -260,6 +260,8 @@ export async function executeBroadcast(
             try {
               const runSend = async () => {
                 const dest = await resolveTarget(client, t);
+                // Mark chat as read before sending (behave like a real user)
+                await markPeerRead(client, dest);
               const vars = varsFromEntity(dest, tIdx, am.name);
               if (attDatas.length > 1) {
                 const formatted = formatMessage(row.message, row.format, { vars, signature: am.signature });
