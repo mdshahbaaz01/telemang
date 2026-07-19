@@ -1024,7 +1024,7 @@ export const Route = createFileRoute("/api/public/actions-stream")({
                         return "flood";
                       }
                         if (isTransient(em)) {
-                          send("log", { accountId, level: "warn", target: botLabel, message: `Retryable join error (${target}): ${em}` });
+                          send("log", { accountId, level: "info", target: botLabel, message: `Retryable join issue (${target}): ${em}` });
                           return "transient";
                         }
                        send("log", { accountId, level: "warn", target: botLabel, message: `Join ${target} (path=${joinPath}, code=${joinErrorCode ?? "?"}): ${em}` });
@@ -1045,7 +1045,10 @@ export const Route = createFileRoute("/api/public/actions-stream")({
                         out = await attempt();
                         if (out !== "transient") break;
                       }
-                      if (out === "transient") out = "skip";
+                      if (out === "transient") {
+                        send("log", { accountId, level: "warn", target: botLabel, message: `Skip ${target} — Telegram session stayed disconnected after retries` });
+                        out = "skip";
+                      }
                     }
                    // Strict single-attempt policy: one (account, channel) →
                    // exactly one request. On FLOOD/short-wait we do NOT retry
