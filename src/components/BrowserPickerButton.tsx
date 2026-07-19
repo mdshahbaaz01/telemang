@@ -9,8 +9,8 @@ const strip = (u: string) => u.replace(/^https?:\/\//i, "");
 export const BROWSER_OPTIONS: BrowserOption[] = [
   {
     id: "android",
-    label: "Android: pick browser…",
-    build: (u) => `intent://${strip(u)}#Intent;scheme=https;action=android.intent.action.VIEW;end`,
+    label: "📱 System chooser (Just once / Always)",
+    build: (u) => `intent://${strip(u)}#Intent;scheme=https;action=android.intent.action.VIEW;category=android.intent.category.BROWSABLE;end`,
   },
   { id: "chrome", label: "Chrome", build: (u) => `googlechrome://navigate?url=${encodeURIComponent(u)}` },
   { id: "firefox", label: "Firefox", build: (u) => `firefox://open-url?url=${encodeURIComponent(u)}` },
@@ -23,8 +23,17 @@ export const BROWSER_OPTIONS: BrowserOption[] = [
 
 export function openInBrowser(url: string, opt: BrowserOption) {
   const target = opt.build(url);
+  // Intent URLs must navigate the top window — window.open('intent://…') is
+  // blocked/ignored on most Android browsers, which is why the chooser never
+  // appeared. Same-tab navigation reliably triggers the OS "Open with" sheet
+  // (with Just once / Always buttons) when no default browser is set.
+  if (target.startsWith("intent://") || target.startsWith("intent:")) {
+    window.location.href = target;
+    return;
+  }
   try {
-    window.open(target, "_blank", "noopener,noreferrer");
+    const w = window.open(target, "_blank", "noopener,noreferrer");
+    if (!w) window.location.href = target;
   } catch {
     window.location.href = target;
   }
@@ -69,7 +78,10 @@ export function BrowserPickerButton({
           </button>
         ))}
         <div className="px-2 py-1 text-[10px] text-muted-foreground">
-          Agar browser installed nahi hai to link silently fail ho sakta hai.
+          Tip: "System chooser" tabhi popup dikhayega (Just once / Always)
+          jab aapne koi default browser set nahi kiya ho. Agar already default
+          set hai → Android Settings → Apps → Default apps → Browser app →
+          "Clear defaults", phir dubara try karo.
         </div>
       </PopoverContent>
     </Popover>
