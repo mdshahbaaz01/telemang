@@ -1030,12 +1030,12 @@ function BotFlowPage() {
           )}
         </CollapsibleSection>
 
-        <CollapsibleSection storageKey="botflow.verifyrunner" title="Verification Link Runner" defaultOpen={false}>
-          <p className="text-xs text-muted-foreground">
-            Paste the direct mini-app verification URL and open it with one account identity.
-          </p>
-
-          {/* ── Extract verify links per account ── */}
+        <CollapsibleSection
+          storageKey="botflow.verifyrunner"
+          title="Bulk Verification Link Runner"
+          defaultOpen={false}
+        >
+          <BulkVerifyRunner accountList={accountList} />
         </CollapsibleSection>
 
         <CollapsibleSection storageKey="botflow.verifysingle" title="Verification URL runner (single account)" defaultOpen={false}>
@@ -1141,14 +1141,6 @@ function BotFlowPage() {
 
         <CollapsibleSection storageKey="botflow.logs" title="Live logs">
           <LiveLogsPanel logs={logs} accountList={accountList} onClear={() => setLogs([])} />
-        </CollapsibleSection>
-
-        <CollapsibleSection
-          storageKey="botflow.verifybulk"
-          title="Bulk verification link runner"
-          defaultOpen={false}
-        >
-          <BulkVerifyRunner accountList={accountList} />
         </CollapsibleSection>
       </div>
     </main>
