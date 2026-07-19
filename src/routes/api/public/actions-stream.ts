@@ -1377,6 +1377,7 @@ export const Route = createFileRoute("/api/public/actions-stream")({
                       await new Promise((r) => setTimeout(r, secs * 1000));
                     } else if (cmd === "text" || cmd === "send") {
                       if (!arg) throw new Error("empty text");
+                      await markPeerRead(client, botPeer);
                       await client.sendMessage(botPeer, { message: arg });
                       ok++;
                       send("log", { accountId, level: "success", target: botLabel, message: `Sent: ${arg.slice(0, 80)}` });
@@ -1393,6 +1394,7 @@ export const Route = createFileRoute("/api/public/actions-stream")({
                     } else if (cmd === "click" || cmd === "tap" || cmd === "button") {
                       // Find latest bot message with an inline/reply keyboard button matching arg.
                       const wanted = arg.toLowerCase();
+                      await markPeerRead(client, botPeer);
                       const recent = await client.getMessages(botPeer, { limit: 10 });
                       let clicked = false;
                       for (const m of recent as any[]) {
