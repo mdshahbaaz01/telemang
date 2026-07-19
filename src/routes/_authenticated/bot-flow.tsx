@@ -789,13 +789,16 @@ function BotFlowPage() {
                         <a href={url} target="_blank" rel="noreferrer" className="truncate hover:underline">
                           {url}
                         </a>
-                        <button
-                          onClick={() => copyWithToast(url, toast, "Copied")}
-                          className="shrink-0 text-muted-foreground hover:text-foreground"
-                          title="Copy link"
-                        >
-                          <Copy className="h-3 w-3" />
-                        </button>
+                        <div className="flex shrink-0 items-center gap-1">
+                          <BrowserPickerButton url={url} compact />
+                          <button
+                            onClick={() => copyWithToast(url, toast, "Copied")}
+                            className="text-muted-foreground hover:text-foreground"
+                            title="Copy link"
+                          >
+                            <Copy className="h-3 w-3" />
+                          </button>
+                        </div>
                       </div>
                     );
                   })}
