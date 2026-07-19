@@ -440,7 +440,7 @@ export const Route = createFileRoute("/api/public/actions-stream")({
               if (body.op.kind === "broadcast" || body.op.kind === "reply" || body.op.kind === "botflow") return { ok: 0, fail: 0 };
               const op = body.op;
               send("log", { accountId, level: "info", message: "Connecting…" });
-              let client;
+              let client: any;
               try {
                 client = await openClientForAccount(supabase, accountId);
               } catch (e) {
@@ -646,7 +646,7 @@ export const Route = createFileRoute("/api/public/actions-stream")({
 
             const runBroadcastRowsForAccount = async (accountId: string, rows: Array<{ accountId: string; message: string; targets: string[]; attachment?: { path: string; filename: string; mimeType?: string; isVoice?: boolean }; format?: "plain" | "mono" | "quote" | "html" }>) => {
               send("log", { accountId, level: "info", message: "Connecting…" });
-              let client;
+              let client: any;
               try {
                 client = await openClientForAccount(supabase, accountId);
               } catch (e) {
@@ -736,7 +736,7 @@ export const Route = createFileRoute("/api/public/actions-stream")({
             ) => {
               const accountId = row.accountId;
               send("log", { accountId, level: "info", message: "Connecting…" });
-              let client;
+              let client: any;
               try {
                 client = await openClientForAccount(supabase, accountId);
               } catch (e) {
@@ -861,7 +861,7 @@ export const Route = createFileRoute("/api/public/actions-stream")({
 
             const runBotFlowForAccount = async (accountId: string, op: { bot: string; startParam?: string; steps: string[]; autoJoinRequired?: boolean; maxJoinRounds?: number; preJoinChannels?: string[]; preJoinOnly?: boolean; publicInviteFallback?: boolean; forceRejoin?: boolean }) => {
               send("log", { accountId, level: "info", message: "Connecting…" });
-              let client;
+              let client: any;
               try {
                 client = await openClientForAccount(supabase, accountId);
               } catch (e) {
@@ -980,7 +980,18 @@ export const Route = createFileRoute("/api/public/actions-stream")({
                        return extractTelegramErrorCode(s);
                     };
                     const isTransient = (em: string) =>
-                      /TIMEOUT|TIMED?OUT|NETWORK|ECONNRESET|ECONNREFUSED|EAI_AGAIN|EPIPE|fetch failed|socket hang up|INTERNAL|503|502|504|Server closed the connection|TransportError|MTProtoError/i.test(em);
+                      /TIMEOUT|TIMED?OUT|NETWORK|ECONNRESET|ECONNREFUSED|EAI_AGAIN|EPIPE|fetch failed|socket hang up|INTERNAL|503|502|504|Server closed the connection|TransportError|MTProtoError|No workers running|workers running|JOIN_NOT_VERIFIED/i.test(em);
+                    const reconnectForRetry = async (reason: string) => {
+                      try {
+                        send("log", { accountId, level: "info", target: botLabel, message: `Reconnecting Telegram session after retryable error: ${reason}` });
+                        await client?.disconnect?.().catch(() => {});
+                        client = await openClientForAccount(supabase, accountId);
+                        return true;
+                      } catch (error) {
+                        send("log", { accountId, level: "warn", target: botLabel, message: `Reconnect failed: ${errorText(error)}` });
+                        return false;
+                      }
+                    };
                     const attempt = async (): Promise<"ok" | "requested" | "flood" | "skip" | "transient"> => {
                     try {
                        const result = await joinTelegramTargetVerified({
@@ -1013,7 +1024,7 @@ export const Route = createFileRoute("/api/public/actions-stream")({
                         return "flood";
                       }
                         if (isTransient(em)) {
-                          send("log", { accountId, level: "warn", target: botLabel, message: `Transient join error (${target}): ${em}` });
+                          send("log", { accountId, level: "info", target: botLabel, message: `Retryable join issue (${target}): ${em}` });
                           return "transient";
                         }
                        send("log", { accountId, level: "warn", target: botLabel, message: `Join ${target} (path=${joinPath}, code=${joinErrorCode ?? "?"}): ${em}` });
@@ -1028,12 +1039,16 @@ export const Route = createFileRoute("/api/public/actions-stream")({
                       for (let i = 0; i < 3 && !stopRequested; i++) {
                         const backoff = Math.round((1000 * Math.pow(2, i)) * (0.85 + Math.random() * 0.3));
                         send("log", { accountId, level: "info", target: botLabel, message: `Retry ${i + 1}/3 in ${Math.round(backoff / 1000)}s…` });
+                        await reconnectForRetry(target);
                         await new Promise((r) => setTimeout(r, backoff));
                         if (stopRequested) return "stop";
                         out = await attempt();
                         if (out !== "transient") break;
                       }
-                      if (out === "transient") out = "skip";
+                      if (out === "transient") {
+                        send("log", { accountId, level: "warn", target: botLabel, message: `Skip ${target} — Telegram session stayed disconnected after retries` });
+                        out = "skip";
+                      }
                     }
                    // Strict single-attempt policy: one (account, channel) →
                    // exactly one request. On FLOOD/short-wait we do NOT retry
