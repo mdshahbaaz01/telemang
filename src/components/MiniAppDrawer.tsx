@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { X, Loader2, RefreshCw } from "lucide-react";
+import { X, Loader2, RefreshCw, ChevronDown, ChevronUp, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useTelegramWebviewBridge } from "@/lib/telegram-webview-bridge";
 import { useMiniAppProxyUrl } from "@/lib/miniapp-proxy-url";
@@ -35,6 +35,15 @@ export function MiniAppDrawer({
   useTelegramWebviewBridge(iframeRef);
   const solve = useServerFn(solveCaptcha);
 
+  type CapLog = { ts: number; level: "info" | "warn" | "error"; source: "iframe" | "host"; msg: string; extra?: any };
+  const [capLogs, setCapLogs] = useState<CapLog[]>([]);
+  const [capOpen, setCapOpen] = useState(false);
+  const pushLog = (l: Omit<CapLog, "ts"> & { ts?: number }) =>
+    setCapLogs((prev) => {
+      const next = [...prev, { ts: l.ts ?? Date.now(), level: l.level, source: l.source, msg: l.msg, extra: l.extra }];
+      return next.length > 200 ? next.slice(-200) : next;
+    });
+
   // Auto-solve captchas detected inside the mini-app iframe. The proxy
   // injects a bridge that posts { eventType: "captcha_detected", eventData:
   // { items: [{ type, sitekey, pageUrl }] } }. We forward each to the
@@ -46,12 +55,20 @@ export function MiniAppDrawer({
       if (!iframe || ev.source !== iframe.contentWindow) return;
       let data: any = ev.data;
       if (typeof data === "string") { try { data = JSON.parse(data); } catch { return; } }
-      if (!data || data.eventType !== "captcha_detected") return;
+      if (!data) return;
+      if (data.eventType === "captcha_log") {
+        const d = data.eventData || {};
+        pushLog({ level: d.level || "info", source: "iframe", msg: d.msg || "(no message)", extra: d.extra, ts: d.ts });
+        return;
+      }
+      if (data.eventType !== "captcha_detected") return;
       const items = Array.isArray(data.eventData?.items) ? data.eventData.items : [];
+      pushLog({ level: "info", source: "host", msg: `received captcha_detected (${items.length} item(s))`, extra: items });
       for (const it of items) {
         const key = `${it.type}|${it.sitekey}`;
-        if (seen.has(key)) continue;
+        if (seen.has(key)) { pushLog({ level: "info", source: "host", msg: "skip duplicate", extra: { key } }); continue; }
         seen.add(key);
+        pushLog({ level: "info", source: "host", msg: `calling solveCaptcha`, extra: { kind: it.type, sitekey: it.sitekey } });
         try {
           const res = await solve({
             data: {
@@ -62,15 +79,18 @@ export function MiniAppDrawer({
             } as any,
           });
           const token = (res as any)?.answer;
+          const method = (res as any)?.method ?? (res as any)?.provider ?? "unknown";
           if (token && iframe.contentWindow) {
+            pushLog({ level: "info", source: "host", msg: "solver returned token, posting to iframe", extra: { kind: it.type, tokenLen: String(token).length, method } });
             iframe.contentWindow.postMessage(
               JSON.stringify({ __lovableCaptchaSolved: true, kind: it.type, token }),
               "*",
             );
+          } else {
+            pushLog({ level: "warn", source: "host", msg: "solver returned no token", extra: { kind: it.type, method, res } });
           }
-        } catch {
-          // solver not configured or failed — silently continue; the
-          // in-frame Turnstile watchdog will keep retrying the widget.
+        } catch (e) {
+          pushLog({ level: "error", source: "host", msg: "solver threw", extra: { kind: it.type, err: (e as Error)?.message || String(e) } });
         }
       }
     };
@@ -85,6 +105,7 @@ export function MiniAppDrawer({
       setResolvedUrl(null);
       setError(null);
       setReloadNonce(0);
+      setCapLogs([]);
       return;
     }
     let cancelled = false;
