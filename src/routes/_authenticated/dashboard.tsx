@@ -34,8 +34,6 @@ import {
 import { toast } from "sonner";
 import { MessageSquare, Pencil, Plus, RefreshCw, RotateCcw, Trash2 } from "lucide-react";
 import { AccountIdPaste } from "@/components/AccountIdPaste";
-import { myAccess, requestAccountAccess, cancelMyAccountRequest } from "@/lib/access.functions";
-import { Badge } from "@/components/ui/badge";
 import { OnboardingChecklist } from "@/components/OnboardingChecklist";
 
 export const Route = createFileRoute("/_authenticated/dashboard")({
@@ -52,9 +50,6 @@ function Dashboard() {
   const resetGroupFn = useServerFn(resetGroupItems);
   const clearHistoryFn = useServerFn(clearTaskHistory);
   const delAcc = useServerFn(deleteAccount);
-  const accessFn = useServerFn(myAccess);
-  const requestFn = useServerFn(requestAccountAccess);
-  const cancelReqFn = useServerFn(cancelMyAccountRequest);
   const [email, setEmail] = useState<string>("");
 
   useEffect(() => {
@@ -62,11 +57,6 @@ function Dashboard() {
   }, []);
 
   const accountsQ = useQuery({ queryKey: ["accounts"], queryFn: () => listAcc() });
-  const accessQ = useQuery({
-    queryKey: ["my-access"],
-    queryFn: () => accessFn(),
-    refetchInterval: 30000,
-  });
   const groupsQ = useQuery({
     queryKey: ["task-groups"],
     queryFn: () => listGroupsFn(),
@@ -134,52 +124,8 @@ function Dashboard() {
                 Every admin sees and can use every account added here.
               </p>
             </div>
-            {accessQ.data?.accountAddApproved || accessQ.data?.isAdmin ? (
-              <AddAccountDialog onDone={() => qc.invalidateQueries({ queryKey: ["accounts"] })} />
-            ) : (
-              <RequestAccessButton
-                latest={accessQ.data?.latestRequest ?? null}
-                onRequest={async (message, requestedLimit) => {
-                  try {
-                    await requestFn({ data: { message, requestedLimit } });
-                    toast.success("Request sent to owner");
-                    qc.invalidateQueries({ queryKey: ["my-access"] });
-                  } catch (e) { toast.error((e as Error).message); }
-                }}
-                onCancel={async (id) => {
-                  try {
-                    await cancelReqFn({ data: { id } });
-                    toast.success("Request cancelled");
-                    qc.invalidateQueries({ queryKey: ["my-access"] });
-                  } catch (e) { toast.error((e as Error).message); }
-                }}
-              />
-            )}
+            <AddAccountDialog onDone={() => qc.invalidateQueries({ queryKey: ["accounts"] })} />
           </div>
-
-          {!accessQ.data?.accountAddApproved && !accessQ.data?.isAdmin && (
-            <div className="mb-4 rounded-lg border border-border bg-muted/30 p-3 text-sm">
-              <div className="flex flex-wrap items-center gap-2">
-                <Badge variant="secondary">Awaiting owner approval</Badge>
-                <span className="text-muted-foreground">
-                  You cannot add Telegram accounts until the owner approves your request.
-                </span>
-              </div>
-              {accessQ.data?.latestRequest && (
-                <div className="mt-1 text-xs text-muted-foreground">
-                  Latest request: <b>{accessQ.data.latestRequest.status}</b> ·{" "}
-                  {new Date(accessQ.data.latestRequest.created_at).toLocaleString()}
-                </div>
-              )}
-            </div>
-          )}
-
-          {accessQ.data?.accountAddApproved && !accessQ.data?.isAdmin && (
-            <div className="mb-4 text-xs text-muted-foreground">
-              Approved. You can add up to {accessQ.data.accountLimit} account
-              {accessQ.data.accountLimit === 1 ? "" : "s"} (using {accessQ.data.accountCount}).
-            </div>
-          )}
 
           {accountsQ.isLoading ? (
             <Loader size="sm" />
