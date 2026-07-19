@@ -714,6 +714,17 @@ function BotFlowPage() {
             </div>
           )}
 
+          {(running || Object.keys(joinState).length > 0 || totals) && (
+            <OverallProgress
+              running={running}
+              startAt={runStartAt}
+              nowTick={nowTick}
+              accountsTotal={accountsTotal}
+              accountsDone={accountsDone}
+              joinState={joinState}
+              totals={totals}
+            />
+          )}
           {Object.keys(joinState).length > 0 && (
             <div className="rounded-md border border-border bg-muted/20 p-3 space-y-2">
               <div className="flex items-center justify-between">
