@@ -13,6 +13,7 @@ import {
   type PacingConfig,
 } from "@/lib/join-cache.server";
 import { adaptivePacing } from "@/lib/telegram/executor.server";
+import { markPeerRead } from "@/lib/telegram-read-helper.server";
 
 // A single Telegram message reference: `t.me/<user>/<id>` or `t.me/c/<internalId>/<id>`
 const msgRefSchema = z.object({
@@ -480,6 +481,8 @@ export const Route = createFileRoute("/api/public/actions-stream")({
                       );
                       send("log", { accountId, level: "info", target: `${src.chat}/${src.msgId}`, message: "Viewed post" });
                     } catch {}
+                    // Mark chat as read like a real user would before reacting
+                    await markPeerRead(client, sourcePeer, src.msgId);
                     // Always clear any previous reaction so a re-run is idempotent.
                     try {
                       await client.invoke(
@@ -569,10 +572,14 @@ export const Route = createFileRoute("/api/public/actions-stream")({
                     );
                     send("log", { accountId, level: "info", target: `${src.chat}/${src.msgId}`, message: "Viewed source post" });
                   } catch {}
+                  // Mark source chat as read before forwarding
+                  await markPeerRead(client, sourcePeer, src.msgId);
                   for (const t of op.targets) {
                     if (stopRequested) break;
                     try {
                       const dest = await resolveTarget(client, t);
+                      // Read destination chat first, then forward
+                      await markPeerRead(client, dest);
                       const { default: bigInt } = await import("big-integer");
                       await client.invoke(
                         new Api.messages.ForwardMessages({
@@ -682,6 +689,8 @@ export const Route = createFileRoute("/api/public/actions-stream")({
                     if (stopRequested) break;
                     try {
                       const dest = await resolveTarget(client, t);
+                      // Mark destination as read before broadcasting
+                      await markPeerRead(client, dest);
                       if (attDatas.length > 1) {
                         const formatted = formatMessage(row.message, row.format);
                         await client.sendFile(dest, {
@@ -766,6 +775,8 @@ export const Route = createFileRoute("/api/public/actions-stream")({
                   );
                   send("log", { accountId, level: "info", target: `${src.chat}/${src.msgId}`, message: "Viewed post" });
                 } catch {}
+                // Mark source as read before replying/commenting
+                await markPeerRead(client, sourcePeer, src.msgId);
                 let replyPeer: any = sourcePeer;
                 let replyToId = src.msgId;
                 let topMsgId: number | undefined;
@@ -784,6 +795,8 @@ export const Route = createFileRoute("/api/public/actions-stream")({
                   topMsgId = discussionTarget.msgId;
                   // Also join the linked discussion group so comments can be posted.
                   await ensureJoined(client, replyPeer, `${src.chat} (discussion)`, accountId);
+                  // Mark the discussion group as read too before commenting
+                  await markPeerRead(client, replyPeer, replyToId);
                 }
                 const rowAtts = ((row as any).attachments && (row as any).attachments.length > 0
                   ? (row as any).attachments
@@ -1364,6 +1377,7 @@ export const Route = createFileRoute("/api/public/actions-stream")({
                       await new Promise((r) => setTimeout(r, secs * 1000));
                     } else if (cmd === "text" || cmd === "send") {
                       if (!arg) throw new Error("empty text");
+                      await markPeerRead(client, botPeer);
                       await client.sendMessage(botPeer, { message: arg });
                       ok++;
                       send("log", { accountId, level: "success", target: botLabel, message: `Sent: ${arg.slice(0, 80)}` });
@@ -1380,6 +1394,7 @@ export const Route = createFileRoute("/api/public/actions-stream")({
                     } else if (cmd === "click" || cmd === "tap" || cmd === "button") {
                       // Find latest bot message with an inline/reply keyboard button matching arg.
                       const wanted = arg.toLowerCase();
+                      await markPeerRead(client, botPeer);
                       const recent = await client.getMessages(botPeer, { limit: 10 });
                       let clicked = false;
                       for (const m of recent as any[]) {

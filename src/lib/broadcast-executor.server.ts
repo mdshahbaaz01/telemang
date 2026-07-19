@@ -4,6 +4,7 @@ import { resolveTargetEntity } from "./telegram-target-resolver.server";
 import { runWithLimit } from "./p-limit";
 import type { SpintaxVars } from "./spintax";
 import { withIdempotency, adaptivePacing, idemKey } from "./telegram/executor.server";
+import { markPeerRead } from "./telegram-read-helper.server";
 
 export type Attachment = { path: string; filename: string; mimeType?: string; isVoice?: boolean };
 
@@ -259,6 +260,8 @@ export async function executeBroadcast(
             try {
               const runSend = async () => {
                 const dest = await resolveTarget(client, t);
+                // Mark chat as read before sending (behave like a real user)
+                await markPeerRead(client, dest);
               const vars = varsFromEntity(dest, tIdx, am.name);
               if (attDatas.length > 1) {
                 const formatted = formatMessage(row.message, row.format, { vars, signature: am.signature });
@@ -380,6 +383,8 @@ export async function executeReply(
           );
           push({ accountId, target: targetLabel, level: "info", message: "Viewed post" });
         } catch {}
+        // Mark source chat as read before replying/commenting
+        await markPeerRead(client, sourcePeer, input.source.msgId);
         let replyPeer: any = sourcePeer;
         let replyToId = input.source.msgId;
         let topMsgId: number | undefined;
@@ -393,6 +398,7 @@ export async function executeReply(
           replyToId = dt.msgId;
           topMsgId = dt.msgId;
           await ensureJoined(client, Api, replyPeer);
+          await markPeerRead(client, replyPeer, replyToId);
         }
         const am = meta.get(accountId) ?? { signature: null, name: "" };
         let idx = 0;
@@ -482,9 +488,13 @@ export async function executeForward(
       try {
         const sourcePeer = await resolveSourcePeer(client, Api, input.source);
         const { default: bigInt } = await import("big-integer");
+        // Read source chat first, mimicking a real user opening it
+        await markPeerRead(client, sourcePeer, input.source.msgId);
         for (const t of input.targets) {
           try {
             const dest = await resolveTargetEntity(client, Api, t);
+            // Read the destination chat before forwarding into it
+            await markPeerRead(client, dest);
             await client.invoke(
               new Api.messages.ForwardMessages({
                 fromPeer: sourcePeer,

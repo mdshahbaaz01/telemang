@@ -509,6 +509,9 @@ export const sendQuickReply = createServerFn({ method: "POST" })
     });
     try {
       const entity = await resolveTargetEntity(client, Api, data.target);
+      // Mark chat as read before sending (mirror real-user behaviour)
+      const { markPeerRead } = await import("./telegram-read-helper.server");
+      await markPeerRead(client, entity);
       const sent: any = data.shareContact
         ? await sendOwnContact(client, Api, entity, data.replyToMsgId)
         : await client.sendMessage(entity, {
