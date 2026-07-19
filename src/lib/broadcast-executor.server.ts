@@ -383,6 +383,8 @@ export async function executeReply(
           );
           push({ accountId, target: targetLabel, level: "info", message: "Viewed post" });
         } catch {}
+        // Mark source chat as read before replying/commenting
+        await markPeerRead(client, sourcePeer, input.source.msgId);
         let replyPeer: any = sourcePeer;
         let replyToId = input.source.msgId;
         let topMsgId: number | undefined;
@@ -396,6 +398,7 @@ export async function executeReply(
           replyToId = dt.msgId;
           topMsgId = dt.msgId;
           await ensureJoined(client, Api, replyPeer);
+          await markPeerRead(client, replyPeer, replyToId);
         }
         const am = meta.get(accountId) ?? { signature: null, name: "" };
         let idx = 0;
