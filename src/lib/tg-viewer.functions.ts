@@ -321,6 +321,11 @@ export const sendMessageAs = createServerFn({ method: "POST" })
     const client = await openClientForAccount(context.supabase, data.accountId);
     try {
       const peer = await resolvePeerFromKey(client, Api, data.peerKey);
+      // Mark chat as read before posting (behave like a real user)
+      try {
+        const { markPeerRead } = await import("./telegram-read-helper.server");
+        await markPeerRead(client, peer, data.replyToMsgId);
+      } catch { /* best-effort */ }
       try {
         const sent: any = data.shareContact
           ? await sendOwnContact(client, Api, peer, data.replyToMsgId)
