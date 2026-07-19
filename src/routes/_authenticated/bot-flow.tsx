@@ -1310,7 +1310,7 @@ function VerifyFrame({ url, accountId }: { url: string; accountId: string }) {
 // differ per run — even for the same account. If the server has
 // MINIAPP_PROXY_URL_TEMPLATE set, each upstream fetch also rotates its
 // outbound IP via the configured proxy service.
-type BulkRowStatus = "queued" | "running" | "success" | "failed";
+type BulkRowStatus = "queued" | "running" | "success" | "failed" | "manual";
 type BulkRowLog = { ts: number; level: "info" | "warn" | "error" | "success"; msg: string };
 type BulkRow = {
   id: string;
