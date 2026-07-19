@@ -979,7 +979,9 @@ export const Route = createFileRoute("/api/public/actions-stream")({
                     const extractErrCode = (s: string): string | null => {
                        return extractTelegramErrorCode(s);
                     };
-                   const attempt = async (): Promise<"ok" | "requested" | "flood" | "skip"> => {
+                    const isTransient = (em: string) =>
+                      /TIMEOUT|TIMED?OUT|NETWORK|ECONNRESET|ECONNREFUSED|EAI_AGAIN|EPIPE|fetch failed|socket hang up|INTERNAL|503|502|504|Server closed the connection|TransportError|MTProtoError/i.test(em);
+                    const attempt = async (): Promise<"ok" | "requested" | "flood" | "skip" | "transient"> => {
                     try {
                        const result = await joinTelegramTargetVerified({
                          client,
@@ -1010,11 +1012,29 @@ export const Route = createFileRoute("/api/public/actions-stream")({
                         send("log", { accountId, level: "warn", target: botLabel, message: `FloodWait ${p ?? secs}s — account paused` });
                         return "flood";
                       }
+                        if (isTransient(em)) {
+                          send("log", { accountId, level: "warn", target: botLabel, message: `Transient join error (${target}): ${em}` });
+                          return "transient";
+                        }
                        send("log", { accountId, level: "warn", target: botLabel, message: `Join ${target} (path=${joinPath}, code=${joinErrorCode ?? "?"}): ${em}` });
                       return "skip";
                     }
                   };
                    let out = await attempt();
+                    // Exponential backoff for transient errors — up to 3 tries
+                    // (1s, 2s, 4s ± jitter). Non-flood transient failures no
+                    // longer permanently skip the target.
+                    if (out === "transient") {
+                      for (let i = 0; i < 3 && !stopRequested; i++) {
+                        const backoff = Math.round((1000 * Math.pow(2, i)) * (0.85 + Math.random() * 0.3));
+                        send("log", { accountId, level: "info", target: botLabel, message: `Retry ${i + 1}/3 in ${Math.round(backoff / 1000)}s…` });
+                        await new Promise((r) => setTimeout(r, backoff));
+                        if (stopRequested) return "stop";
+                        out = await attempt();
+                        if (out !== "transient") break;
+                      }
+                      if (out === "transient") out = "skip";
+                    }
                    // Strict single-attempt policy: one (account, channel) →
                    // exactly one request. On FLOOD/short-wait we do NOT retry
                    // (the local sleep inside attempt() has already elapsed),
@@ -1025,6 +1045,7 @@ export const Route = createFileRoute("/api/public/actions-stream")({
                      send("log", { accountId, level: "info", target: botLabel, message: `Skip retry (strict 1-req/channel policy)` });
                    } else if (out === "flood") {
                      out = await attempt();
+                      if (out === "transient") out = "skip";
                    }
                    const waitMs = Date.now() - t0;
                    const errLike = out === "flood" ? "FLOOD_WAIT" : null;
@@ -1390,9 +1411,9 @@ export const Route = createFileRoute("/api/public/actions-stream")({
                        // where the per-(account, channel) join lock already
                        // guarantees exactly one request per pair).
                        ? ((body.op as any).preJoinOnly || (body.op as any).parallel)
-                         ? await runWithConcurrency(body.accountIds, Math.max(body.concurrency, 1), (id) => runBotFlowForAccount(id, body.op as any))
-                         : await runWithConcurrency(body.accountIds, 1, (id) => runBotFlowForAccount(id, body.op as any))
-                      : await runWithConcurrency(body.accountIds, Math.max(body.concurrency, 1), (id) => runOne(id));
+                         ? await runWithConcurrency(body.accountIds, Math.max(body.concurrency, 1), (id) => stopRequested ? Promise.resolve({ ok: 0, fail: 0 }) : runBotFlowForAccount(id, body.op as any))
+                         : await runWithConcurrency(body.accountIds, 1, (id) => stopRequested ? Promise.resolve({ ok: 0, fail: 0 }) : runBotFlowForAccount(id, body.op as any))
+                      : await runWithConcurrency(body.accountIds, Math.max(body.concurrency, 1), (id) => stopRequested ? Promise.resolve({ ok: 0, fail: 0 }) : runOne(id));
               for (const r of results) {
                 totalOk += r.ok;
                 totalFail += r.fail;
