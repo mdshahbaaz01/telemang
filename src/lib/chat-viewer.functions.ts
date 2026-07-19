@@ -2,6 +2,7 @@ import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
 import { serializeReplyMarkup } from "./tg-viewer.functions";
+import { markPeerRead } from "./telegram-read-helper.server";
 
 function computePeerKey(entity: any): string | null {
   if (!entity) return null;
@@ -509,6 +510,8 @@ export const sendQuickReply = createServerFn({ method: "POST" })
     });
     try {
       const entity = await resolveTargetEntity(client, Api, data.target);
+      // Mark chat as read before sending (mirror real-user behaviour)
+      await markPeerRead(client, entity);
       const sent: any = data.shareContact
         ? await sendOwnContact(client, Api, entity, data.replyToMsgId)
         : await client.sendMessage(entity, {
