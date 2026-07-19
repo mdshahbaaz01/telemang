@@ -119,6 +119,8 @@ export function PreJoinCard({ accounts }: { accounts: Account[] }) {
     if (!key) return;
     setStatuses((prev) => {
       const row = { ...(prev[key] || {}) };
+      const cur = row[accountId];
+      if (cur && STATUS_RANK[cur.status] > STATUS_RANK[status]) return prev;
       row[accountId] = { status, ts: Date.now(), message };
       return { ...prev, [key]: row };
     });
@@ -152,7 +154,7 @@ export function PreJoinCard({ accounts }: { accounts: Account[] }) {
       for (const ch of channels) {
         const key = normalizeTarget(ch);
         seed[key] = {};
-        for (const id of ids) seed[key][id] = { status: "pending", ts };
+        for (const id of ids) seed[key][id] = { status: "queued", ts };
       }
       setStatuses(seed);
     }
