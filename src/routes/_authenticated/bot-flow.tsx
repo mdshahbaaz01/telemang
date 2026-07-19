@@ -14,6 +14,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { toast } from "sonner";
 import { Play, Square, ArrowLeft, Loader2, RefreshCw, X, MessageSquare, Copy, ExternalLink } from "lucide-react";
+import { BrowserPickerButton } from "@/components/BrowserPickerButton";
 import { AccountIdPaste } from "@/components/AccountIdPaste";
 import { copyWithToast } from "@/lib/clipboard";
 import { useBotFlowCaptchaConfig, CAPTCHA_KIND_OPTIONS, CAPTCHA_PROVIDER_OPTIONS } from "@/lib/bot-flow-captcha-config";
@@ -788,13 +789,16 @@ function BotFlowPage() {
                         <a href={url} target="_blank" rel="noreferrer" className="truncate hover:underline">
                           {url}
                         </a>
-                        <button
-                          onClick={() => copyWithToast(url, toast, "Copied")}
-                          className="shrink-0 text-muted-foreground hover:text-foreground"
-                          title="Copy link"
-                        >
-                          <Copy className="h-3 w-3" />
-                        </button>
+                        <div className="flex shrink-0 items-center gap-1">
+                          <BrowserPickerButton url={url} compact />
+                          <button
+                            onClick={() => copyWithToast(url, toast, "Copied")}
+                            className="text-muted-foreground hover:text-foreground"
+                            title="Copy link"
+                          >
+                            <Copy className="h-3 w-3" />
+                          </button>
+                        </div>
                       </div>
                     );
                   })}
