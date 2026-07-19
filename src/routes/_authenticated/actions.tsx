@@ -3610,12 +3610,14 @@ function ReuseScheduleDialog({
   onClose,
   onSubmitted,
   rescheduleFn,
+  editMode = false,
 }: {
   schedule: ReuseScheduleRow | null;
   defaultTimeIst: string;
   onClose: () => void;
   onSubmitted: () => void | Promise<void>;
   rescheduleFn: (args: { data: any }) => Promise<any>;
+  editMode?: boolean;
 }) {
   const open = !!schedule;
   const [when, setWhen] = useState("");
