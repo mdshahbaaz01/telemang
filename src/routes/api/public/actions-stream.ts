@@ -1411,9 +1411,9 @@ export const Route = createFileRoute("/api/public/actions-stream")({
                        // where the per-(account, channel) join lock already
                        // guarantees exactly one request per pair).
                        ? ((body.op as any).preJoinOnly || (body.op as any).parallel)
-                         ? await runWithConcurrency(body.accountIds, Math.max(body.concurrency, 1), (id) => runBotFlowForAccount(id, body.op as any))
-                         : await runWithConcurrency(body.accountIds, 1, (id) => runBotFlowForAccount(id, body.op as any))
-                      : await runWithConcurrency(body.accountIds, Math.max(body.concurrency, 1), (id) => runOne(id));
+                         ? await runWithConcurrency(body.accountIds, Math.max(body.concurrency, 1), (id) => stopRequested ? Promise.resolve({ ok: 0, fail: 0 }) : runBotFlowForAccount(id, body.op as any))
+                         : await runWithConcurrency(body.accountIds, 1, (id) => stopRequested ? Promise.resolve({ ok: 0, fail: 0 }) : runBotFlowForAccount(id, body.op as any))
+                      : await runWithConcurrency(body.accountIds, Math.max(body.concurrency, 1), (id) => stopRequested ? Promise.resolve({ ok: 0, fail: 0 }) : runOne(id));
               for (const r of results) {
                 totalOk += r.ok;
                 totalFail += r.fail;
