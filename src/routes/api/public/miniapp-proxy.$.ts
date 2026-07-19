@@ -743,6 +743,11 @@ async function handle(request: Request, params: { _splat?: string }) {
   const accountId = proxyReqUrl.searchParams.get("a") || "anon";
   const token = proxyReqUrl.searchParams.get("t") || readTokenCookie(request);
   const captchaEnabled = proxyReqUrl.searchParams.get("cap") === "1";
+  // Optional per-run fingerprint seed. When present, the derived
+  // navigator/screen/timezone/UA identity varies even for the same
+  // account, so the bot sees a different "device" on each run.
+  const fpSeed = proxyReqUrl.searchParams.get("fp") || "";
+  const identityKey = fpSeed ? `${accountId}:${fpSeed}` : accountId;
 
   // Auth: require a valid short-lived HMAC token (minted by an authenticated
   // server function). Blocks anonymous use of the proxy as an open relay.
@@ -763,7 +768,7 @@ async function handle(request: Request, params: { _splat?: string }) {
   }
 
   const upstreamHeaders = new Headers();
-  const fp = deriveMiniAppIdentity(accountId).fingerprint;
+  const fp = deriveMiniAppIdentity(identityKey).fingerprint;
   const targetUrl = targetUrlEarly;
   upstreamHeaders.set("user-agent", fp.userAgent);
   upstreamHeaders.set("accept-language", fp.languages.join(","));
@@ -786,10 +791,22 @@ async function handle(request: Request, params: { _splat?: string }) {
     const method = request.method;
     const bodyBuf = method === "GET" || method === "HEAD" ? undefined : await request.arrayBuffer();
     let currentUrl = target;
+    // Optional outbound IP rotation. If MINIAPP_PROXY_URL_TEMPLATE is set
+    // (e.g. "https://proxy.example.com/fetch?url={url}&session={session}"),
+    // route every upstream fetch through it. `{session}` receives a
+    // per-run token so a rotating-proxy service assigns a fresh exit IP.
+    const proxyTemplate = process.env.MINIAPP_PROXY_URL_TEMPLATE || "";
+    const proxySession = fpSeed || identityKey;
+    const viaProxy = (u: string) =>
+      proxyTemplate
+        ? proxyTemplate
+            .replace("{url}", encodeURIComponent(u))
+            .replace("{session}", encodeURIComponent(proxySession))
+        : u;
     const MAX_REDIRECTS = 5;
     let hop = 0;
     while (true) {
-      const resp = await fetch(currentUrl, {
+      const resp = await fetch(viaProxy(currentUrl), {
         method,
         headers: upstreamHeaders,
         body: bodyBuf,
