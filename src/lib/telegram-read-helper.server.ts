@@ -5,12 +5,19 @@ import { Api } from "telegram";
 
 export type ReadStatus = "read" | "failed" | "skipped";
 
+export type ReadEmit = (phase: "pending" | ReadStatus) => void;
+
 export async function markPeerRead(
   client: any,
   peer: any,
   maxId: number = 0,
+  emit?: ReadEmit,
 ): Promise<ReadStatus> {
-  if (!client || !peer) return "skipped";
+  if (!client || !peer) {
+    emit?.("skipped");
+    return "skipped";
+  }
+  emit?.("pending");
   const isChannel =
     peer?.className === "InputPeerChannel" ||
     peer?.className === "InputPeerChannelFromMessage" ||
@@ -20,6 +27,7 @@ export async function markPeerRead(
       await client.invoke(
         new Api.channels.ReadHistory({ channel: peer, maxId } as any),
       );
+      emit?.("read");
       return "read";
     } catch {
       /* fall through */
@@ -29,14 +37,17 @@ export async function markPeerRead(
     await client.invoke(
       new Api.messages.ReadHistory({ peer, maxId } as any),
     );
+    emit?.("read");
     return "read";
   } catch {
     try {
       await client.invoke(
         new Api.channels.ReadHistory({ channel: peer, maxId } as any),
       );
+      emit?.("read");
       return "read";
     } catch {
+      emit?.("failed");
       return "failed";
     }
   }
