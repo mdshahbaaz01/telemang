@@ -2478,6 +2478,30 @@ function ActionsPageInner() {
             rescheduleFn={rescheduleFn}
           />
 
+          <ReuseScheduleDialog
+            schedule={editSchedule}
+            defaultTimeIst={
+              editSchedule
+                ? dateToIstInput(new Date(editSchedule.scheduledAt))
+                : scheduledAt
+            }
+            editMode
+            onClose={() => setEditSchedule(null)}
+            onSubmitted={async () => {
+              // Cancel the original pending schedule after a new one is created.
+              if (editSchedule) {
+                try {
+                  await cancelSchedFn({ data: { id: editSchedule.id } });
+                } catch (e) {
+                  toast.error(`New schedule created but failed to cancel original: ${(e as Error).message}`);
+                }
+              }
+              setEditSchedule(null);
+              await qc.invalidateQueries({ queryKey: ["scheduled-broadcasts"] });
+            }}
+            rescheduleFn={rescheduleFn}
+          />
+
           {errorLogs.length > 0 && (
             <div className="rounded-lg border border-destructive/40 bg-destructive/5 p-4">
               <div className="mb-3 flex flex-wrap items-center gap-2">
