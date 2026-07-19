@@ -127,7 +127,6 @@ function BotFlowPage() {
     try { if (lastBotKey) window.localStorage.setItem(BOT_CHANNELS_LAST_KEY, lastBotKey); } catch {}
   }, [lastBotKey]);
   const abortRef = useRef<AbortController | null>(null);
-  const runningBotKeyRef = useRef<string>("");
 
   const accountList = accountsQ.data ?? [];
   const allIds = useMemo(() => accountList.map((a) => a.id), [accountList]);
