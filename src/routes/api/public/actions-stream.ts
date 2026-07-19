@@ -1079,21 +1079,34 @@ export const Route = createFileRoute("/api/public/actions-stream")({
 
                 // ── Pre-join user-supplied channels ─────────────────────
                 if (op.preJoinChannels?.length) {
-                  // Dedupe pre-join list — same channel listed multiple times
-                  // must only be attempted once per account.
+                  // Dedupe only within the pasted list (same link twice = one attempt).
+                  // User-supplied pre-join links MUST always be attempted — do not
+                  // filter by prior cache. Force a fresh attempt per target by
+                  // wiping any stale join_cache row and removing the handle from
+                  // the in-memory alreadyJoined set before calling smartJoin.
                   const seen = new Set<string>();
                   const uniquePre: string[] = [];
                   for (const raw of op.preJoinChannels) {
                     const h = extractHandle(raw);
                     if (!h) continue;
                     const k = h.toLowerCase();
-                    if (seen.has(k) || alreadyJoined.has(k)) continue;
+                    if (seen.has(k)) continue;
                     seen.add(k);
                     uniquePre.push(raw);
                   }
-                  send("log", { accountId, level: "info", target: botLabel, message: `Pre-joining ${uniquePre.length} unique channel(s) (of ${op.preJoinChannels.length})…` });
+                  send("log", { accountId, level: "info", target: botLabel, message: `Pre-joining ${uniquePre.length} channel(s) (of ${op.preJoinChannels.length})…` });
                   for (const raw of uniquePre) {
                     if (stopRequested) break;
+                    // Always give user-supplied links a real attempt.
+                    try {
+                      await supabase
+                        .from("join_cache")
+                        .delete()
+                        .eq("account_id", accountId)
+                        .eq("target_key", normalizeTargetKey(raw));
+                    } catch { /* best-effort */ }
+                    const h = extractHandle(raw);
+                    if (h) alreadyJoined.delete(h.toLowerCase());
                     const r = await smartJoin(raw);
                     if (r === "stop") break;
                   }
