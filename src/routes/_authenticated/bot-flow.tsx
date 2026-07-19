@@ -1580,6 +1580,7 @@ function BulkVerifyRunner({
               const color =
                 r.status === "success" ? "bg-green-500/15 text-green-600 dark:text-green-400"
                 : r.status === "failed" ? "bg-destructive/15 text-destructive"
+                : r.status === "manual" ? "bg-yellow-500/15 text-yellow-600 dark:text-yellow-400"
                 : r.status === "running" ? "bg-blue-500/15 text-blue-600 dark:text-blue-400"
                 : "bg-muted text-muted-foreground";
               return (
