@@ -1051,15 +1051,7 @@ function BotFlowPage() {
                         >
                           <Copy className="h-3.5 w-3.5" />
                         </button>
-                        <a
-                          href={r.url}
-                          target="_blank"
-                          rel="noreferrer"
-                          className="rounded p-1 hover:bg-muted"
-                          title="Open in new tab"
-                        >
-                          <ExternalLink className="h-3.5 w-3.5" />
-                        </a>
+                        <BrowserPickerButton url={r.url} compact />
                       </>
                     )}
                   </div>
