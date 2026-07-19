@@ -410,6 +410,11 @@ export const sendReactionAs = createServerFn({ method: "POST" })
           increment: true,
         }));
       } catch {}
+      // Mark as read before reacting
+      try {
+        const { markPeerRead } = await import("./telegram-read-helper.server");
+        await markPeerRead(client, peer, data.msgId);
+      } catch { /* best-effort */ }
       await client.invoke(new Api.messages.SendReaction({
         peer,
         msgId: data.msgId,
