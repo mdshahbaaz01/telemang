@@ -88,7 +88,7 @@ function buildQueueItems(row: ScheduleRow) {
           account_id: accountId,
           target,
           scheduled_for: nextTime(accountId),
-          payload: { source: payload.source },
+          payload: { source: payload.source, dropAuthor: payload.dropAuthor === true },
         });
       }
     }
