@@ -131,6 +131,8 @@ function BotFlowPage() {
     try { return window.localStorage.getItem(BOT_CHANNELS_LAST_KEY) ?? ""; } catch { return ""; }
   });
   const [showBotChannels, setShowBotChannels] = useState(false);
+  const [fetchingBotChannels, setFetchingBotChannels] = useState(false);
+  const previewChatFn = useServerFn(previewChat);
   useEffect(() => {
     try { window.localStorage.setItem(BOT_CHANNELS_KEY, JSON.stringify(botChannelsMap)); } catch {}
   }, [botChannelsMap]);
