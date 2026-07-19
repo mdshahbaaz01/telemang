@@ -1476,6 +1476,22 @@ function BulkVerifyRunner({
         (secret <code>MINIAPP_PROXY_URL_TEMPLATE</code>).
       </p>
 
+      <label className="flex items-start gap-2 rounded-md border border-border bg-muted/20 p-2 text-xs">
+        <input
+          type="checkbox"
+          className="mt-0.5"
+          checked={stableDevice}
+          onChange={(e) => setStableDevice(e.target.checked)}
+        />
+        <span>
+          <span className="font-medium">Stable device per account</span>{" "}
+          <span className="text-muted-foreground">
+            (recommended) — reuse the same fingerprint for each account across runs instead of a fresh one.
+            Sites that block repeat / same-device attempts are flagged as <em>manual</em> instead of faked as success.
+          </span>
+        </span>
+      </label>
+
       <div className="grid gap-3 md:grid-cols-[1fr_260px]">
         <div>
           <Label>Verification URLs (one per line)</Label>
