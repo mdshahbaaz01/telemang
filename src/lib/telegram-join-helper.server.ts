@@ -149,7 +149,19 @@ async function joinEntityVerified(
       verified = await waitForMembership(client, Api, verifiedEntity);
     } catch {}
   }
-  if (!verified) throw new Error(`JOIN_NOT_VERIFIED: ${label}`);
+  if (!verified) {
+    log?.("warn", `Join accepted for ${label}, but membership sync is still pending (path=${path})`);
+    return {
+      status: "joined",
+      path,
+      message: `Join accepted for ${label}`,
+      note: "Membership verification pending",
+      canonicalTarget: typeof label === "string" && label.startsWith("@") ? label.slice(1) : null,
+      errorCode: "VERIFY_PENDING",
+      verified: false,
+      canonicalChannelId: idOf(verifiedEntity),
+    };
+  }
   const canonicalChannelId = await verifyCanonicalMatch(client, Api, verifiedEntity, label, log);
   log?.("success", `Verified joined ${label} (path=${path}, channelId=${canonicalChannelId})`);
   return {
@@ -220,7 +232,18 @@ export async function joinTelegramTargetVerified(args: {
 
       if (cn === "ChatInviteAlready" && chat) {
       const verified = await waitForMembership(client, Api, chat);
-        if (!verified) throw new Error(`JOIN_NOT_VERIFIED: already ${chat?.username ? "@" + chat.username : chat?.title ?? inviteHash}`);
+        if (!verified) {
+          return {
+            status: "already",
+            path: "peek_already",
+            message: `Already member of ${chat.username ? "@" + chat.username : chat.title || "channel"}`,
+            note: "Membership verification pending",
+            canonicalTarget: chat.username ?? null,
+            errorCode: "VERIFY_PENDING",
+            verified: false,
+            canonicalChannelId: idOf(chat),
+          };
+        }
         const canonicalChannelId = await verifyCanonicalMatch(
           client,
           Api,
@@ -272,7 +295,18 @@ export async function joinTelegramTargetVerified(args: {
     }
     if (importedChat) {
       const verified = await waitForMembership(client, Api, importedChat);
-      if (!verified) throw new Error(`JOIN_NOT_VERIFIED: +${inviteHash.slice(0, 8)}…`);
+      if (!verified) {
+        return {
+          status: "joined",
+          path: "import_invite",
+          message: `Join accepted for invite +${inviteHash.slice(0, 8)}…`,
+          note: "Membership verification pending",
+          canonicalTarget: importedChat.username ?? null,
+          errorCode: "VERIFY_PENDING",
+          verified: false,
+          canonicalChannelId: idOf(importedChat),
+        };
+      }
       const canonicalChannelId = await verifyCanonicalMatch(
         client,
         Api,
