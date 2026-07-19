@@ -16,7 +16,6 @@ import { Route as IndexRouteImport } from './routes/index'
 import { Route as AuthenticatedWorkspaceRouteImport } from './routes/_authenticated/workspace'
 import { Route as AuthenticatedWatchlistsRouteImport } from './routes/_authenticated/watchlists'
 import { Route as AuthenticatedStealthRouteImport } from './routes/_authenticated/stealth'
-import { Route as AuthenticatedSecurityRouteImport } from './routes/_authenticated/security'
 import { Route as AuthenticatedSearchRouteImport } from './routes/_authenticated/search'
 import { Route as AuthenticatedReferralsRouteImport } from './routes/_authenticated/referrals'
 import { Route as AuthenticatedRecipesRouteImport } from './routes/_authenticated/recipes'
@@ -25,7 +24,6 @@ import { Route as AuthenticatedOwnerRouteImport } from './routes/_authenticated/
 import { Route as AuthenticatedMediaRouteImport } from './routes/_authenticated/media'
 import { Route as AuthenticatedJoinPacingRouteImport } from './routes/_authenticated/join-pacing'
 import { Route as AuthenticatedHealthRouteImport } from './routes/_authenticated/health'
-import { Route as AuthenticatedFeedbackRouteImport } from './routes/_authenticated/feedback'
 import { Route as AuthenticatedDashboardRouteImport } from './routes/_authenticated/dashboard'
 import { Route as AuthenticatedCleanupRouteImport } from './routes/_authenticated/cleanup'
 import { Route as AuthenticatedCaptchaRouteImport } from './routes/_authenticated/captcha'
@@ -85,11 +83,6 @@ const AuthenticatedStealthRoute = AuthenticatedStealthRouteImport.update({
   path: '/stealth',
   getParentRoute: () => AuthenticatedRouteRoute,
 } as any)
-const AuthenticatedSecurityRoute = AuthenticatedSecurityRouteImport.update({
-  id: '/security',
-  path: '/security',
-  getParentRoute: () => AuthenticatedRouteRoute,
-} as any)
 const AuthenticatedSearchRoute = AuthenticatedSearchRouteImport.update({
   id: '/search',
   path: '/search',
@@ -129,11 +122,6 @@ const AuthenticatedJoinPacingRoute = AuthenticatedJoinPacingRouteImport.update({
 const AuthenticatedHealthRoute = AuthenticatedHealthRouteImport.update({
   id: '/health',
   path: '/health',
-  getParentRoute: () => AuthenticatedRouteRoute,
-} as any)
-const AuthenticatedFeedbackRoute = AuthenticatedFeedbackRouteImport.update({
-  id: '/feedback',
-  path: '/feedback',
   getParentRoute: () => AuthenticatedRouteRoute,
 } as any)
 const AuthenticatedDashboardRoute = AuthenticatedDashboardRouteImport.update({
@@ -276,7 +264,6 @@ export interface FileRoutesByFullPath {
   '/captcha': typeof AuthenticatedCaptchaRoute
   '/cleanup': typeof AuthenticatedCleanupRoute
   '/dashboard': typeof AuthenticatedDashboardRoute
-  '/feedback': typeof AuthenticatedFeedbackRoute
   '/health': typeof AuthenticatedHealthRoute
   '/join-pacing': typeof AuthenticatedJoinPacingRoute
   '/media': typeof AuthenticatedMediaRoute
@@ -285,7 +272,6 @@ export interface FileRoutesByFullPath {
   '/recipes': typeof AuthenticatedRecipesRoute
   '/referrals': typeof AuthenticatedReferralsRoute
   '/search': typeof AuthenticatedSearchRoute
-  '/security': typeof AuthenticatedSecurityRoute
   '/stealth': typeof AuthenticatedStealthRoute
   '/watchlists': typeof AuthenticatedWatchlistsRoute
   '/workspace': typeof AuthenticatedWorkspaceRoute
@@ -318,7 +304,6 @@ export interface FileRoutesByTo {
   '/captcha': typeof AuthenticatedCaptchaRoute
   '/cleanup': typeof AuthenticatedCleanupRoute
   '/dashboard': typeof AuthenticatedDashboardRoute
-  '/feedback': typeof AuthenticatedFeedbackRoute
   '/health': typeof AuthenticatedHealthRoute
   '/join-pacing': typeof AuthenticatedJoinPacingRoute
   '/media': typeof AuthenticatedMediaRoute
@@ -327,7 +312,6 @@ export interface FileRoutesByTo {
   '/recipes': typeof AuthenticatedRecipesRoute
   '/referrals': typeof AuthenticatedReferralsRoute
   '/search': typeof AuthenticatedSearchRoute
-  '/security': typeof AuthenticatedSecurityRoute
   '/stealth': typeof AuthenticatedStealthRoute
   '/watchlists': typeof AuthenticatedWatchlistsRoute
   '/workspace': typeof AuthenticatedWorkspaceRoute
@@ -362,7 +346,6 @@ export interface FileRoutesById {
   '/_authenticated/captcha': typeof AuthenticatedCaptchaRoute
   '/_authenticated/cleanup': typeof AuthenticatedCleanupRoute
   '/_authenticated/dashboard': typeof AuthenticatedDashboardRoute
-  '/_authenticated/feedback': typeof AuthenticatedFeedbackRoute
   '/_authenticated/health': typeof AuthenticatedHealthRoute
   '/_authenticated/join-pacing': typeof AuthenticatedJoinPacingRoute
   '/_authenticated/media': typeof AuthenticatedMediaRoute
@@ -371,7 +354,6 @@ export interface FileRoutesById {
   '/_authenticated/recipes': typeof AuthenticatedRecipesRoute
   '/_authenticated/referrals': typeof AuthenticatedReferralsRoute
   '/_authenticated/search': typeof AuthenticatedSearchRoute
-  '/_authenticated/security': typeof AuthenticatedSecurityRoute
   '/_authenticated/stealth': typeof AuthenticatedStealthRoute
   '/_authenticated/watchlists': typeof AuthenticatedWatchlistsRoute
   '/_authenticated/workspace': typeof AuthenticatedWorkspaceRoute
@@ -406,7 +388,6 @@ export interface FileRouteTypes {
     | '/captcha'
     | '/cleanup'
     | '/dashboard'
-    | '/feedback'
     | '/health'
     | '/join-pacing'
     | '/media'
@@ -415,7 +396,6 @@ export interface FileRouteTypes {
     | '/recipes'
     | '/referrals'
     | '/search'
-    | '/security'
     | '/stealth'
     | '/watchlists'
     | '/workspace'
@@ -448,7 +428,6 @@ export interface FileRouteTypes {
     | '/captcha'
     | '/cleanup'
     | '/dashboard'
-    | '/feedback'
     | '/health'
     | '/join-pacing'
     | '/media'
@@ -457,7 +436,6 @@ export interface FileRouteTypes {
     | '/recipes'
     | '/referrals'
     | '/search'
-    | '/security'
     | '/stealth'
     | '/watchlists'
     | '/workspace'
@@ -491,7 +469,6 @@ export interface FileRouteTypes {
     | '/_authenticated/captcha'
     | '/_authenticated/cleanup'
     | '/_authenticated/dashboard'
-    | '/_authenticated/feedback'
     | '/_authenticated/health'
     | '/_authenticated/join-pacing'
     | '/_authenticated/media'
@@ -500,7 +477,6 @@ export interface FileRouteTypes {
     | '/_authenticated/recipes'
     | '/_authenticated/referrals'
     | '/_authenticated/search'
-    | '/_authenticated/security'
     | '/_authenticated/stealth'
     | '/_authenticated/watchlists'
     | '/_authenticated/workspace'
@@ -586,13 +562,6 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedStealthRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
-    '/_authenticated/security': {
-      id: '/_authenticated/security'
-      path: '/security'
-      fullPath: '/security'
-      preLoaderRoute: typeof AuthenticatedSecurityRouteImport
-      parentRoute: typeof AuthenticatedRouteRoute
-    }
     '/_authenticated/search': {
       id: '/_authenticated/search'
       path: '/search'
@@ -647,13 +616,6 @@ declare module '@tanstack/react-router' {
       path: '/health'
       fullPath: '/health'
       preLoaderRoute: typeof AuthenticatedHealthRouteImport
-      parentRoute: typeof AuthenticatedRouteRoute
-    }
-    '/_authenticated/feedback': {
-      id: '/_authenticated/feedback'
-      path: '/feedback'
-      fullPath: '/feedback'
-      preLoaderRoute: typeof AuthenticatedFeedbackRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
     '/_authenticated/dashboard': {
@@ -839,7 +801,6 @@ interface AuthenticatedRouteRouteChildren {
   AuthenticatedCaptchaRoute: typeof AuthenticatedCaptchaRoute
   AuthenticatedCleanupRoute: typeof AuthenticatedCleanupRoute
   AuthenticatedDashboardRoute: typeof AuthenticatedDashboardRoute
-  AuthenticatedFeedbackRoute: typeof AuthenticatedFeedbackRoute
   AuthenticatedHealthRoute: typeof AuthenticatedHealthRoute
   AuthenticatedJoinPacingRoute: typeof AuthenticatedJoinPacingRoute
   AuthenticatedMediaRoute: typeof AuthenticatedMediaRoute
@@ -848,7 +809,6 @@ interface AuthenticatedRouteRouteChildren {
   AuthenticatedRecipesRoute: typeof AuthenticatedRecipesRoute
   AuthenticatedReferralsRoute: typeof AuthenticatedReferralsRoute
   AuthenticatedSearchRoute: typeof AuthenticatedSearchRoute
-  AuthenticatedSecurityRoute: typeof AuthenticatedSecurityRoute
   AuthenticatedStealthRoute: typeof AuthenticatedStealthRoute
   AuthenticatedWatchlistsRoute: typeof AuthenticatedWatchlistsRoute
   AuthenticatedWorkspaceRoute: typeof AuthenticatedWorkspaceRoute
@@ -870,7 +830,6 @@ const AuthenticatedRouteRouteChildren: AuthenticatedRouteRouteChildren = {
   AuthenticatedCaptchaRoute: AuthenticatedCaptchaRoute,
   AuthenticatedCleanupRoute: AuthenticatedCleanupRoute,
   AuthenticatedDashboardRoute: AuthenticatedDashboardRoute,
-  AuthenticatedFeedbackRoute: AuthenticatedFeedbackRoute,
   AuthenticatedHealthRoute: AuthenticatedHealthRoute,
   AuthenticatedJoinPacingRoute: AuthenticatedJoinPacingRoute,
   AuthenticatedMediaRoute: AuthenticatedMediaRoute,
@@ -879,7 +838,6 @@ const AuthenticatedRouteRouteChildren: AuthenticatedRouteRouteChildren = {
   AuthenticatedRecipesRoute: AuthenticatedRecipesRoute,
   AuthenticatedReferralsRoute: AuthenticatedReferralsRoute,
   AuthenticatedSearchRoute: AuthenticatedSearchRoute,
-  AuthenticatedSecurityRoute: AuthenticatedSecurityRoute,
   AuthenticatedStealthRoute: AuthenticatedStealthRoute,
   AuthenticatedWatchlistsRoute: AuthenticatedWatchlistsRoute,
   AuthenticatedWorkspaceRoute: AuthenticatedWorkspaceRoute,
@@ -911,13 +869,3 @@ const rootRouteChildren: RootRouteChildren = {
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
   ._addFileTypes<FileRouteTypes>()
-
-import type { getRouter } from './router.tsx'
-import type { startInstance } from './start.ts'
-declare module '@tanstack/react-start' {
-  interface Register {
-    ssr: true
-    router: Awaited<ReturnType<typeof getRouter>>
-    config: Awaited<ReturnType<typeof startInstance.getOptions>>
-  }
-}

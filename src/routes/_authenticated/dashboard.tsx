@@ -34,9 +34,6 @@ import {
 import { toast } from "sonner";
 import { MessageSquare, Pencil, Plus, RefreshCw, RotateCcw, Trash2 } from "lucide-react";
 import { AccountIdPaste } from "@/components/AccountIdPaste";
-import { myAccess, requestAccountAccess, cancelMyAccountRequest } from "@/lib/access.functions";
-import { Badge } from "@/components/ui/badge";
-import { OnboardingChecklist } from "@/components/OnboardingChecklist";
 
 export const Route = createFileRoute("/_authenticated/dashboard")({
   component: Dashboard,
@@ -52,9 +49,6 @@ function Dashboard() {
   const resetGroupFn = useServerFn(resetGroupItems);
   const clearHistoryFn = useServerFn(clearTaskHistory);
   const delAcc = useServerFn(deleteAccount);
-  const accessFn = useServerFn(myAccess);
-  const requestFn = useServerFn(requestAccountAccess);
-  const cancelReqFn = useServerFn(cancelMyAccountRequest);
   const [email, setEmail] = useState<string>("");
 
   useEffect(() => {
@@ -62,11 +56,6 @@ function Dashboard() {
   }, []);
 
   const accountsQ = useQuery({ queryKey: ["accounts"], queryFn: () => listAcc() });
-  const accessQ = useQuery({
-    queryKey: ["my-access"],
-    queryFn: () => accessFn(),
-    refetchInterval: 30000,
-  });
   const groupsQ = useQuery({
     queryKey: ["task-groups"],
     queryFn: () => listGroupsFn(),
@@ -123,7 +112,6 @@ function Dashboard() {
       </div>
 
       <div className="mx-auto max-w-7xl space-y-10 px-4 py-8 md:px-8">
-        <OnboardingChecklist />
         <section>
           <div className="mb-6 flex flex-wrap items-start justify-between gap-3">
             <div>
@@ -134,52 +122,8 @@ function Dashboard() {
                 Every admin sees and can use every account added here.
               </p>
             </div>
-            {accessQ.data?.accountAddApproved || accessQ.data?.isAdmin ? (
-              <AddAccountDialog onDone={() => qc.invalidateQueries({ queryKey: ["accounts"] })} />
-            ) : (
-              <RequestAccessButton
-                latest={accessQ.data?.latestRequest ?? null}
-                onRequest={async (message, requestedLimit) => {
-                  try {
-                    await requestFn({ data: { message, requestedLimit } });
-                    toast.success("Request sent to owner");
-                    qc.invalidateQueries({ queryKey: ["my-access"] });
-                  } catch (e) { toast.error((e as Error).message); }
-                }}
-                onCancel={async (id) => {
-                  try {
-                    await cancelReqFn({ data: { id } });
-                    toast.success("Request cancelled");
-                    qc.invalidateQueries({ queryKey: ["my-access"] });
-                  } catch (e) { toast.error((e as Error).message); }
-                }}
-              />
-            )}
+            <AddAccountDialog onDone={() => qc.invalidateQueries({ queryKey: ["accounts"] })} />
           </div>
-
-          {!accessQ.data?.accountAddApproved && !accessQ.data?.isAdmin && (
-            <div className="mb-4 rounded-lg border border-border bg-muted/30 p-3 text-sm">
-              <div className="flex flex-wrap items-center gap-2">
-                <Badge variant="secondary">Awaiting owner approval</Badge>
-                <span className="text-muted-foreground">
-                  You cannot add Telegram accounts until the owner approves your request.
-                </span>
-              </div>
-              {accessQ.data?.latestRequest && (
-                <div className="mt-1 text-xs text-muted-foreground">
-                  Latest request: <b>{accessQ.data.latestRequest.status}</b> ·{" "}
-                  {new Date(accessQ.data.latestRequest.created_at).toLocaleString()}
-                </div>
-              )}
-            </div>
-          )}
-
-          {accessQ.data?.accountAddApproved && !accessQ.data?.isAdmin && (
-            <div className="mb-4 text-xs text-muted-foreground">
-              Approved. You can add up to {accessQ.data.accountLimit} account
-              {accessQ.data.accountLimit === 1 ? "" : "s"} (using {accessQ.data.accountCount}).
-            </div>
-          )}
 
           {accountsQ.isLoading ? (
             <Loader size="sm" />
@@ -819,89 +763,3 @@ function AddAccountDialog({ onDone }: { onDone: () => void }) {
 }
 
 // NewTaskDialog moved to route /tasks/new
-
-function RequestAccessButton({
-  latest,
-  onRequest,
-  onCancel,
-}: {
-  latest: { id: string; status: string; created_at: string } | null;
-  onRequest: (message: string, requestedLimit: number) => Promise<void>;
-  onCancel: (id: string) => Promise<void>;
-}) {
-  const [open, setOpen] = useState(false);
-  const [message, setMessage] = useState("");
-  const [limit, setLimit] = useState("1");
-  const [busy, setBusy] = useState(false);
-  const isPending = latest?.status === "pending";
-  return (
-    <Dialog open={open} onOpenChange={setOpen}>
-      <DialogTrigger asChild>
-        <Button size="sm" variant={isPending ? "outline" : "default"}>
-          <Plus className="mr-1 h-4 w-4" />
-          {isPending ? "Request pending" : "Request access"}
-        </Button>
-      </DialogTrigger>
-      <DialogContent>
-        <DialogHeader>
-          <DialogTitle>Request account access</DialogTitle>
-        </DialogHeader>
-        {isPending && latest ? (
-          <div className="space-y-3 text-sm">
-            <p>Your request is pending owner review.</p>
-            <p className="text-xs text-muted-foreground">
-              Sent {new Date(latest.created_at).toLocaleString()}
-            </p>
-            <Button
-              variant="outline"
-              disabled={busy}
-              onClick={async () => {
-                setBusy(true);
-                await onCancel(latest.id);
-                setBusy(false);
-                setOpen(false);
-              }}
-            >
-              Cancel request
-            </Button>
-          </div>
-        ) : (
-          <form
-            className="space-y-3"
-            onSubmit={async (e) => {
-              e.preventDefault();
-              setBusy(true);
-              await onRequest(message, Number(limit) || 1);
-              setBusy(false);
-              setOpen(false);
-              setMessage("");
-            }}
-          >
-            <div>
-              <Label>How many accounts do you need?</Label>
-              <Input
-                type="number"
-                min={1}
-                max={50}
-                value={limit}
-                onChange={(e) => setLimit(e.target.value)}
-              />
-            </div>
-            <div>
-              <Label>Message to owner (optional)</Label>
-              <Textarea
-                rows={3}
-                value={message}
-                onChange={(e) => setMessage(e.target.value)}
-                placeholder="Why do you need account access?"
-              />
-            </div>
-            <Button type="submit" disabled={busy} className="w-full">
-              {busy ? "Sending…" : "Send request"}
-            </Button>
-          </form>
-        )}
-      </DialogContent>
-    </Dialog>
-  );
-}
