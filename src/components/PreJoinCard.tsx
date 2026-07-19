@@ -73,6 +73,7 @@ export function PreJoinCard({ accounts }: { accounts: Account[] }) {
   const [selectorOpen, setSelectorOpen] = useState(false);
   const [running, setRunning] = useState(false);
   const [publicInviteFallback, setPublicInviteFallback] = useState(true);
+  const [forceRejoin, setForceRejoin] = useState(false);
   const [logs, setLogs] = useState<PreJoinLog[]>([]);
   const [totals, setTotals] = useState<{ ok: number; fail: number } | null>(null);
   const [statuses, setStatuses] = useState<ChMap>({});
@@ -173,6 +174,7 @@ export function PreJoinCard({ accounts }: { accounts: Account[] }) {
             autoJoinRequired: false,
             preJoinChannels: channels,
             publicInviteFallback,
+            forceRejoin,
           },
         }),
         signal: ac.signal,
@@ -325,6 +327,17 @@ export function PreJoinCard({ accounts }: { accounts: Account[] }) {
                 onChange={(e) => setPublicInviteFallback(e.target.checked)}
               />
               Public invite fallback
+            </label>
+            <label
+              className="flex items-center gap-2 self-center text-xs text-muted-foreground"
+              title="Ignore the per-account join cache and re-attempt these channels even if they were joined/attempted before."
+            >
+              <input
+                type="checkbox"
+                checked={forceRejoin}
+                onChange={(e) => setForceRejoin(e.target.checked)}
+              />
+              Force re-join (ignore cache)
             </label>
             {totals && (
               <div className="ml-auto self-center text-sm text-muted-foreground">
