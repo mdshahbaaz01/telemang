@@ -73,6 +73,7 @@ export function MessageRow({
                     btn.kind === "url" ||
                     btn.kind === "urlAuth" ||
                     btn.kind === "webview" ||
+                    btn.kind === "requestPhone" ||
                     btn.kind === "reply";
                   const title =
                     btn.kind === "url" || btn.kind === "urlAuth"
@@ -81,6 +82,8 @@ export function MessageRow({
                         ? "Callback button"
                         : btn.kind === "webview"
                           ? "Opens a Telegram WebApp (limited)"
+                          : btn.kind === "requestPhone"
+                            ? "Shares this account profile/contact"
                           : btn.kind === "reply"
                             ? `Sends: ${btn.text}`
                           : `${btn.kind} button (not supported)`;

@@ -73,6 +73,7 @@ export type SerializedInlineButton =
   | { kind: "urlAuth"; text: string; url: string; buttonId?: number }
   | { kind: "switchInline"; text: string; query: string; samePeer: boolean }
   | { kind: "webview"; text: string; url?: string }
+  | { kind: "requestPhone"; text: string }
   | { kind: "game"; text: string }
   | { kind: "buy"; text: string }
   | { kind: "reply"; text: string }
@@ -88,6 +89,7 @@ function serializeButton(btn: any): SerializedInlineButton {
   if (cn === "KeyboardButtonUrl") return { kind: "url", text, url: String(btn?.url ?? "") };
   if (cn === "KeyboardButtonUrlAuth" || cn === "InputKeyboardButtonUrlAuth")
     return { kind: "urlAuth", text, url: String(btn?.url ?? ""), buttonId: btn?.buttonId };
+  if (cn === "KeyboardButtonRequestPhone") return { kind: "requestPhone", text };
   if (cn === "KeyboardButtonSwitchInline")
     return { kind: "switchInline", text, query: String(btn?.query ?? ""), samePeer: !!btn?.samePeer };
   if (cn === "KeyboardButtonWebView" || cn === "KeyboardButtonSimpleWebView")
@@ -301,6 +303,7 @@ export const sendMessageAs = createServerFn({ method: "POST" })
     peerKey: z.string().min(3),
     text: z.string().min(1).max(4096),
     replyToMsgId: z.number().int().positive().optional(),
+    shareContact: z.boolean().optional(),
   }).parse(d))
   .handler(async ({ data, context }) => {
     await assertAdmin(context.supabase);
@@ -319,10 +322,12 @@ export const sendMessageAs = createServerFn({ method: "POST" })
     try {
       const peer = await resolvePeerFromKey(client, Api, data.peerKey);
       try {
-        const sent: any = await client.sendMessage(peer, {
-          message: data.text,
-          replyTo: data.replyToMsgId,
-        });
+        const sent: any = data.shareContact
+          ? await sendOwnContact(client, Api, peer, data.replyToMsgId)
+          : await client.sendMessage(peer, {
+              message: data.text,
+              replyTo: data.replyToMsgId,
+            });
         return { id: Number(sent.id), date: sent.date ? Number(sent.date) * 1000 : Date.now() };
       } catch (e: any) {
         const msg = String(e?.errorMessage || e?.message || e);
@@ -341,6 +346,21 @@ export const sendMessageAs = createServerFn({ method: "POST" })
       await client.disconnect().catch(() => {});
     }
   });
+
+async function sendOwnContact(client: any, Api: any, peer: any, replyToMsgId?: number) {
+  const me: any = await client.getMe();
+  const phone = String(me?.phone ?? "");
+  if (!phone) throw new Error("This Telegram account has no phone number available to share.");
+  return await client.sendFile(peer, {
+    file: new Api.InputMediaContact({
+      phoneNumber: phone.startsWith("+") ? phone : `+${phone}`,
+      firstName: String(me?.firstName ?? ""),
+      lastName: String(me?.lastName ?? ""),
+      vcard: "",
+    }),
+    replyTo: replyToMsgId,
+  });
+}
 
 // ── markRead ────────────────────────────────────────────────────────────
 export const markRead = createServerFn({ method: "POST" })

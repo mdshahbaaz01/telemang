@@ -497,6 +497,7 @@ export const sendQuickReply = createServerFn({ method: "POST" })
         accountId: z.string().uuid(),
         message: z.string().min(1).max(4096),
         replyToMsgId: z.number().int().positive().optional(),
+        shareContact: z.boolean().optional(),
       })
       .parse(d),
   )
@@ -508,12 +509,29 @@ export const sendQuickReply = createServerFn({ method: "POST" })
     });
     try {
       const entity = await resolveTargetEntity(client, Api, data.target);
-      const sent: any = await client.sendMessage(entity, {
-        message: data.message,
-        replyTo: data.replyToMsgId,
-      });
+      const sent: any = data.shareContact
+        ? await sendOwnContact(client, Api, entity, data.replyToMsgId)
+        : await client.sendMessage(entity, {
+            message: data.message,
+            replyTo: data.replyToMsgId,
+          });
       return { ok: true, id: Number(sent?.id ?? 0) };
     } finally {
       await client.disconnect().catch(() => {});
     }
   });
+
+async function sendOwnContact(client: any, Api: any, entity: any, replyToMsgId?: number) {
+  const me: any = await client.getMe();
+  const phone = String(me?.phone ?? "");
+  if (!phone) throw new Error("This Telegram account has no phone number available to share.");
+  return await client.sendFile(entity, {
+    file: new Api.InputMediaContact({
+      phoneNumber: phone.startsWith("+") ? phone : `+${phone}`,
+      firstName: String(me?.firstName ?? ""),
+      lastName: String(me?.lastName ?? ""),
+      vcard: "",
+    }),
+    replyTo: replyToMsgId,
+  });
+}
