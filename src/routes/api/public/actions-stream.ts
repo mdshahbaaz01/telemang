@@ -95,6 +95,7 @@ const botFlowSchema = z.object({
   preJoinOnly: z.boolean().optional(),
   publicInviteFallback: z.boolean().optional(),
   forceRejoin: z.boolean().optional(),
+  parallel: z.boolean().optional(),
 });
 
 const editSchema = z.object({
@@ -1382,16 +1383,13 @@ export const Route = createFileRoute("/api/public/actions-stream")({
                         },
                       )
                      : body.op.kind === "botflow"
-                       // Bot flow (chat with bot): strictly sequential accounts
-                       // — parallel runs hit the same required invite at once
-                       // and trigger FloodWait after ~5 joins.
-                       //
-                       // Pre-join-only mode is different: each account joins
-                       // its OWN list independently and the per-(account,
-                       // channel) join lock already guarantees exactly one
-                       // request per pair. Safe to fan out in parallel to
-                       // save time.
-                       ? (body.op as any).preJoinOnly
+                       // Bot flow (chat with bot) is normally sequential —
+                       // parallel runs can hit the same required invite at
+                       // once and trigger FloodWait after ~5 joins. The user
+                       // can opt in with `parallel: true` (or pre-join-only,
+                       // where the per-(account, channel) join lock already
+                       // guarantees exactly one request per pair).
+                       ? ((body.op as any).preJoinOnly || (body.op as any).parallel)
                          ? await runWithConcurrency(body.accountIds, Math.max(body.concurrency, 1), (id) => runBotFlowForAccount(id, body.op as any))
                          : await runWithConcurrency(body.accountIds, 1, (id) => runBotFlowForAccount(id, body.op as any))
                       : await runWithConcurrency(body.accountIds, Math.max(body.concurrency, 1), (id) => runOne(id));

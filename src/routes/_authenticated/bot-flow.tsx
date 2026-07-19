@@ -98,6 +98,7 @@ function BotFlowPage() {
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [autoJoinRequired, setAutoJoinRequired] = useState(true);
   const [publicInviteFallback, setPublicInviteFallback] = useState(true);
+  const [runParallel, setRunParallel] = useState(false);
   const [logs, setLogs] = useState<LogEntry[]>([]);
   const [running, setRunning] = useState(false);
   const [totals, setTotals] = useState<{ ok: number; fail: number } | null>(null);
@@ -284,6 +285,7 @@ function BotFlowPage() {
           accountIds,
           minDelay: 1,
           maxDelay: 2,
+          concurrency: runParallel ? Math.max(1, accountIds.length) : 1,
           op: {
             kind: "botflow",
             bot: link,
@@ -294,6 +296,7 @@ function BotFlowPage() {
             autoJoinRequired,
             maxJoinRounds: 10,
             publicInviteFallback,
+            parallel: runParallel,
           },
         }),
         signal: ac.signal,
@@ -622,6 +625,17 @@ function BotFlowPage() {
                 onChange={(e) => setPublicInviteFallback(e.target.checked)}
               />
               Public invite auto-join fallback
+            </label>
+            <label
+              className="flex items-center gap-2 self-center text-xs text-muted-foreground"
+              title="Fire the /start + auto-join flow on every selected account at the same time. Faster but more likely to trigger FloodWait when many accounts try to join the same required channel at once."
+            >
+              <input
+                type="checkbox"
+                checked={runParallel}
+                onChange={(e) => setRunParallel(e.target.checked)}
+              />
+              Run all accounts in parallel
             </label>
             {totals && (
               <div className="ml-auto self-center whitespace-nowrap text-sm text-muted-foreground">
