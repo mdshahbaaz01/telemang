@@ -98,6 +98,7 @@ function BotFlowPage() {
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [autoJoinRequired, setAutoJoinRequired] = useState(true);
   const [publicInviteFallback, setPublicInviteFallback] = useState(true);
+  const [runParallel, setRunParallel] = useState(false);
   const [logs, setLogs] = useState<LogEntry[]>([]);
   const [running, setRunning] = useState(false);
   const [totals, setTotals] = useState<{ ok: number; fail: number } | null>(null);
