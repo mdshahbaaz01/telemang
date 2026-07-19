@@ -29,8 +29,6 @@ import {
   ShieldAlert,
   Gauge,
   Activity,
-  MessageSquare,
-  Lock,
 } from "lucide-react";
 import {
   DndContext,
