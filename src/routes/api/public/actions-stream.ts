@@ -572,10 +572,14 @@ export const Route = createFileRoute("/api/public/actions-stream")({
                     );
                     send("log", { accountId, level: "info", target: `${src.chat}/${src.msgId}`, message: "Viewed source post" });
                   } catch {}
+                  // Mark source chat as read before forwarding
+                  await markPeerRead(client, sourcePeer, src.msgId);
                   for (const t of op.targets) {
                     if (stopRequested) break;
                     try {
                       const dest = await resolveTarget(client, t);
+                      // Read destination chat first, then forward
+                      await markPeerRead(client, dest);
                       const { default: bigInt } = await import("big-integer");
                       await client.invoke(
                         new Api.messages.ForwardMessages({
