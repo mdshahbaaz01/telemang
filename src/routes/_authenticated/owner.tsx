@@ -366,8 +366,6 @@ function OwnerPanel() {
             </div>
           </OwnerCard>
         </div>
-
-        <OwnerAccessControl />
       </div>
     </main>
   );
