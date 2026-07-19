@@ -267,6 +267,7 @@ export type Database = {
           account_id: string
           bot_username: string
           captured_at: string
+          classification: string | null
           field_name: string
           id: string
           raw_text: string | null
@@ -279,6 +280,7 @@ export type Database = {
           account_id: string
           bot_username: string
           captured_at?: string
+          classification?: string | null
           field_name: string
           id?: string
           raw_text?: string | null
@@ -291,6 +293,7 @@ export type Database = {
           account_id?: string
           bot_username?: string
           captured_at?: string
+          classification?: string | null
           field_name?: string
           id?: string
           raw_text?: string | null
@@ -312,6 +315,7 @@ export type Database = {
       bot_parse_rules: {
         Row: {
           bot_username: string
+          classification: string | null
           created_at: string
           field_name: string
           id: string
@@ -323,6 +327,7 @@ export type Database = {
         }
         Insert: {
           bot_username: string
+          classification?: string | null
           created_at?: string
           field_name: string
           id?: string
@@ -334,6 +339,7 @@ export type Database = {
         }
         Update: {
           bot_username?: string
+          classification?: string | null
           created_at?: string
           field_name?: string
           id?: string

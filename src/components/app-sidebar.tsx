@@ -29,6 +29,7 @@ import {
   ShieldAlert,
   Gauge,
   Activity,
+  Trophy,
 } from "lucide-react";
 import {
   DndContext,
@@ -97,6 +98,7 @@ const items: Item[] = [
   { id: "workspace", title: "Workspace", to: "/workspace", icon: Columns },
   { id: "bulk-plus", title: "Bulk+", to: "/bulk-plus", icon: Rocket },
   { id: "bot-parser", title: "Bot Parser", to: "/bot-parser", icon: Cpu },
+  { id: "bot-success", title: "Bot Success", to: "/bot-success", icon: Trophy },
   { id: "referrals", title: "Referrals", to: "/referrals", icon: Users },
   { id: "analytics", title: "Analytics", to: "/analytics", icon: BarChart3 },
   { id: "recipes", title: "Recipes", to: "/recipes", icon: ChefHat },
