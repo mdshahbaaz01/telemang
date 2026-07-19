@@ -95,6 +95,7 @@ const botFlowSchema = z.object({
   preJoinOnly: z.boolean().optional(),
   publicInviteFallback: z.boolean().optional(),
   forceRejoin: z.boolean().optional(),
+  parallel: z.boolean().optional(),
 });
 
 const editSchema = z.object({
