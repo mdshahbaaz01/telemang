@@ -1331,7 +1331,24 @@ function BulkVerifyRunner({
   const [rows, setRows] = useState<BulkRow[]>([]);
   const [runNonce, setRunNonce] = useState(0);
   const [openLogs, setOpenLogs] = useState<Record<string, boolean>>({});
+  const [stableDevice, setStableDevice] = useState(true);
   const iframeRefs = useRef<Record<string, HTMLIFrameElement | null>>({});
+
+  // Stable fingerprint per account: same seed every run for the same account,
+  // so the target site sees a consistent device instead of a brand-new one.
+  const stableSeedFor = (accountId: string) => `acc-${accountId}`;
+
+  // Patterns that indicate the site refused the request because of device /
+  // account fingerprint checks — do not fake success, mark for manual review.
+  const MANUAL_PATTERNS = [
+    /same device/i,
+    /device.*(blocked|banned|not allowed|already)/i,
+    /already (verified|claimed|used)/i,
+    /multi(ple)?[- ]?accounts?/i,
+    /suspicious/i,
+    /fraud/i,
+    /vpn|proxy detected/i,
+  ];
 
   const appendLog = useCallback((id: string, entry: BulkRowLog, statusPatch?: BulkRowStatus) => {
     setRows((prev) =>
