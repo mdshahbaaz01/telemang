@@ -182,6 +182,7 @@ export const runParseScan = createServerFn({ method: "POST" })
                   value_numeric: Number.isFinite(num) ? num : null,
                   value_text: String(raw).slice(0, 200),
                   captured_at: m?.date ? new Date(Number(m.date) * 1000).toISOString() : new Date().toISOString(),
+                  classification: (rule as any).classification ?? null,
                 });
                 captured++;
                 break; // one rule match per message
@@ -203,4 +204,197 @@ export const runParseScan = createServerFn({ method: "POST" })
       }
     }
     return { scanned, captured, errors };
+  });
+
+// ---------------------------------------------------------------------------
+// #15 Bot response parser — curated presets
+//
+// Common outcomes almost every referral / airdrop bot emits. Each preset is
+// classified so downstream dashboards (#13) can bucket results without more
+// user config. Regexes are conservative (word-anchored, no backtracking traps)
+// and pass assertSafeRegex.
+// ---------------------------------------------------------------------------
+const PRESETS: Array<{
+  name: string;
+  field_name: string;
+  regex: string;
+  classification: "success" | "warning" | "error" | "info";
+  unit?: string | null;
+}> = [
+  { name: "Success",              field_name: "outcome_success",   regex: "\\b(success(ful)?|completed|done|verified|claimed|approved|granted)\\b", classification: "success" },
+  { name: "Already registered",   field_name: "outcome_already",   regex: "\\b(already (registered|joined|claimed|verified|done|participated))\\b", classification: "info" },
+  { name: "Banned",               field_name: "outcome_banned",    regex: "\\b(banned|blocked|suspended|blacklisted|permanently restricted)\\b", classification: "error" },
+  { name: "Rate limited",         field_name: "outcome_ratelimit", regex: "\\b(too many requests|rate ?limit|slow down|try again later|flood ?wait)\\b", classification: "warning" },
+  { name: "Insufficient balance", field_name: "outcome_lowbal",    regex: "\\b(insufficient (balance|funds)|not enough (balance|coins|points))\\b", classification: "warning" },
+  { name: "Missing subscription", field_name: "outcome_notjoined", regex: "\\b(you (must|need to) (join|subscribe)|please join|not (a )?member)\\b", classification: "warning" },
+  { name: "Referral counted",     field_name: "outcome_referral",  regex: "\\b(referral (counted|added|approved)|new referral|invited (a )?friend)\\b", classification: "success" },
+  { name: "Balance",              field_name: "balance",           regex: "(?:balance|coins?|points?|earned|wallet)\\s*[:=]?\\s*([0-9]+(?:\\.[0-9]+)?)", classification: null as any, unit: null },
+];
+
+export const seedBotParsePresets = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((d: unknown) =>
+    z.object({ botUsername: z.string().min(1).max(64) }).parse(d),
+  )
+  .handler(async ({ data, context }) => {
+    const bot = data.botUsername.replace(/^@/, "").toLowerCase();
+    // Fetch existing rule names for this bot so we can be idempotent.
+    const { data: existing } = await context.supabase
+      .from("bot_parse_rules")
+      .select("name")
+      .eq("user_id", context.userId)
+      .eq("bot_username", bot);
+    const have = new Set((existing ?? []).map((r: any) => String(r.name)));
+    const toInsert = PRESETS
+      .filter((p) => !have.has(p.name))
+      .map((p) => ({
+        user_id: context.userId,
+        name: p.name,
+        bot_username: bot,
+        regex: p.regex,
+        field_name: p.field_name,
+        classification: p.classification,
+        unit: p.unit ?? null,
+      }));
+    if (!toInsert.length) return { inserted: 0, skipped: PRESETS.length };
+    const { error } = await context.supabase.from("bot_parse_rules").insert(toInsert);
+    if (error) throw error;
+    return { inserted: toInsert.length, skipped: PRESETS.length - toInsert.length };
+  });
+
+// ---------------------------------------------------------------------------
+// #13 Bot success rate tracker
+//
+// Rolls three signals into one per-bot row:
+//  1) referral_joins — deterministic joined/error/pending per (bot, account)
+//  2) bot_parse_results — classification counts (success/warning/error/info)
+//  3) action_runs kind='botflow' — total runs + avg completion duration
+// ---------------------------------------------------------------------------
+export const botSuccessDashboard = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((d: unknown) =>
+    z.object({ days: z.number().int().min(1).max(90).default(30) }).parse(d ?? {}),
+  )
+  .handler(async ({ data, context }) => {
+    const since = new Date(Date.now() - data.days * 86_400_000).toISOString();
+
+    const [linksQ, joinsQ, parseQ, runsQ] = await Promise.all([
+      context.supabase
+        .from("referral_links")
+        .select("id, bot_username")
+        .eq("user_id", context.userId),
+      context.supabase
+        .from("referral_joins")
+        .select("referral_link_id, status, joined_at, last_error, created_at")
+        .eq("user_id", context.userId)
+        .gte("created_at", since),
+      context.supabase
+        .from("bot_parse_results")
+        .select("bot_username, classification, captured_at")
+        .eq("user_id", context.userId)
+        .gte("captured_at", since),
+      context.supabase
+        .from("action_runs")
+        .select("id, status, params, created_at, updated_at")
+        .eq("user_id", context.userId)
+        .eq("kind", "botflow")
+        .gte("created_at", since)
+        .order("created_at", { ascending: false }),
+    ]);
+
+    if (linksQ.error) throw linksQ.error;
+    if (joinsQ.error) throw joinsQ.error;
+    if (parseQ.error) throw parseQ.error;
+    if (runsQ.error) throw runsQ.error;
+
+    // link_id -> bot_username
+    const linkBot = new Map<string, string>();
+    for (const l of linksQ.data ?? []) {
+      linkBot.set(l.id as string, String(l.bot_username ?? "").toLowerCase().replace(/^@/, ""));
+    }
+
+    type Row = {
+      bot: string;
+      joined: number;
+      errors: number;
+      pending: number;
+      joinPct: number;
+      lastError: string | null;
+      lastRunAt: string | null;
+      runs: number;
+      avgSec: number | null;
+      class_success: number;
+      class_warning: number;
+      class_error: number;
+      class_info: number;
+    };
+    const map = new Map<string, Row>();
+    const ensure = (b: string): Row => {
+      const key = (b || "unknown").toLowerCase().replace(/^@/, "");
+      let r = map.get(key);
+      if (!r) {
+        r = {
+          bot: key, joined: 0, errors: 0, pending: 0, joinPct: 0,
+          lastError: null, lastRunAt: null, runs: 0, avgSec: null,
+          class_success: 0, class_warning: 0, class_error: 0, class_info: 0,
+        };
+        map.set(key, r);
+      }
+      return r;
+    };
+    for (const b of linkBot.values()) ensure(b);
+
+    // Referral join outcomes
+    for (const j of joinsQ.data ?? []) {
+      const bot = linkBot.get(j.referral_link_id as string);
+      if (!bot) continue;
+      const r = ensure(bot);
+      const st = String(j.status ?? "pending");
+      if (st === "joined") r.joined += 1;
+      else if (st === "error") { r.errors += 1; if (!r.lastError && j.last_error) r.lastError = String(j.last_error).slice(0, 240); }
+      else r.pending += 1;
+    }
+
+    // Parse classifications
+    for (const p of parseQ.data ?? []) {
+      const r = ensure(String(p.bot_username ?? ""));
+      const c = String(p.classification ?? "");
+      if (c === "success") r.class_success += 1;
+      else if (c === "warning") r.class_warning += 1;
+      else if (c === "error") r.class_error += 1;
+      else if (c === "info") r.class_info += 1;
+    }
+
+    // Bot flow runs (bot username lives in params.op.bot)
+    const durationsByBot = new Map<string, number[]>();
+    for (const run of runsQ.data ?? []) {
+      const bot = String((run as any)?.params?.op?.bot ?? "").toLowerCase().replace(/^@/, "");
+      if (!bot) continue;
+      const r = ensure(bot);
+      r.runs += 1;
+      if (!r.lastRunAt) r.lastRunAt = run.created_at as string;
+      if (run.status === "completed" && run.updated_at && run.created_at) {
+        const secs = (new Date(run.updated_at as string).getTime() - new Date(run.created_at as string).getTime()) / 1000;
+        if (Number.isFinite(secs) && secs >= 0 && secs < 24 * 3600) {
+          const arr = durationsByBot.get(bot) ?? [];
+          arr.push(secs);
+          durationsByBot.set(bot, arr);
+        }
+      }
+    }
+    for (const [bot, arr] of durationsByBot) {
+      if (!arr.length) continue;
+      const r = ensure(bot);
+      r.avgSec = Math.round(arr.reduce((a, b) => a + b, 0) / arr.length);
+    }
+
+    for (const r of map.values()) {
+      const denom = r.joined + r.errors + r.pending;
+      r.joinPct = denom > 0 ? Math.round((r.joined / denom) * 100) : 0;
+    }
+
+    return {
+      days: data.days,
+      rows: [...map.values()].sort((a, b) => b.joined - a.joined || b.runs - a.runs),
+    };
   });
