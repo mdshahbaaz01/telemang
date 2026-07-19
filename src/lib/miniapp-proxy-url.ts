@@ -5,7 +5,11 @@ import { mintMiniAppProxyToken } from "@/lib/miniapp-token.functions";
 
 // Hook: mint (and auto-refresh) a proxy token and return the proxified URL.
 // Returns null until the token is ready. Token TTL is 1h; we refresh 5m early.
-export function useMiniAppProxyUrl(url: string | null | undefined, accountId: string, opts?: { captcha?: boolean }) {
+export function useMiniAppProxyUrl(
+  url: string | null | undefined,
+  accountId: string,
+  opts?: { captcha?: boolean; fpSeed?: string | number },
+) {
   const mint = useServerFn(mintMiniAppProxyToken);
   const globalCaptcha = useCaptchaAutoDetect();
   const tokenQuery = useQuery({
@@ -17,7 +21,9 @@ export function useMiniAppProxyUrl(url: string | null | undefined, accountId: st
   });
   const token = tokenQuery.data?.token ?? "";
   const cap = opts?.captcha ?? globalCaptcha;
-  const proxied = url && token ? proxifyMiniAppUrl(url, accountId, token, { captcha: cap }) : null;
+  const proxied = url && token
+    ? proxifyMiniAppUrl(url, accountId, token, { captcha: cap, fpSeed: opts?.fpSeed })
+    : null;
   return { url: proxied, loading: tokenQuery.isPending, error: tokenQuery.error };
 }
 
@@ -56,7 +62,7 @@ export function proxifyMiniAppUrl(
   url: string,
   accountId: string,
   token: string,
-  opts?: { captcha?: boolean },
+  opts?: { captcha?: boolean; fpSeed?: string | number },
 ): string {
   try {
     if (!/^https?:\/\//i.test(url)) return url;
@@ -66,9 +72,12 @@ export function proxifyMiniAppUrl(
     const hash = hashIdx === -1 ? "" : url.slice(hashIdx);
     const base = proxyOriginForCurrentHost();
     const cap = opts?.captcha ? "&cap=1" : "";
+    const fp = opts?.fpSeed != null && opts.fpSeed !== ""
+      ? `&fp=${encodeURIComponent(String(opts.fpSeed))}`
+      : "";
     return `${base}/api/public/miniapp-proxy/${encodeURIComponent(bare)}?a=${encodeURIComponent(
       accountId,
-    )}&t=${encodeURIComponent(token)}${cap}${hash}`;
+    )}&t=${encodeURIComponent(token)}${cap}${fp}${hash}`;
   } catch {
     return "";
   }

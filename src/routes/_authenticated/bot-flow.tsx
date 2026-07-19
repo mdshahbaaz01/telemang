@@ -1142,6 +1142,14 @@ function BotFlowPage() {
         <CollapsibleSection storageKey="botflow.logs" title="Live logs">
           <LiveLogsPanel logs={logs} accountList={accountList} onClear={() => setLogs([])} />
         </CollapsibleSection>
+
+        <CollapsibleSection
+          storageKey="botflow.verifybulk"
+          title="Bulk verification link runner"
+          defaultOpen={false}
+        >
+          <BulkVerifyRunner accountList={accountList} />
+        </CollapsibleSection>
       </div>
     </main>
   );
@@ -1257,6 +1265,210 @@ function VerifyFrame({ url, accountId }: { url: string; accountId: string }) {
     <iframe
       src={proxied ?? "about:blank"}
       title="Verification runner"
+      className="h-full w-full flex-1 border-0"
+      allow="clipboard-read; clipboard-write; camera; microphone; geolocation; payment"
+      sandbox="allow-scripts allow-same-origin allow-forms allow-modals allow-storage-access-by-user-activation"
+      referrerPolicy="no-referrer"
+    />
+  );
+}
+
+// ─── Bulk verification link runner ──────────────────────────────────
+// Paste many verification URLs, assign an account per link (round-robin
+// by default) and open them all at once. Each iframe gets a unique
+// fingerprint seed so the derived UA / screen / timezone / canvas / TZ
+// differ per run — even for the same account. If the server has
+// MINIAPP_PROXY_URL_TEMPLATE set, each upstream fetch also rotates its
+// outbound IP via the configured proxy service.
+type BulkRow = { id: string; url: string; accountId: string; fpSeed: string };
+
+function BulkVerifyRunner({
+  accountList,
+}: {
+  accountList: Array<{ id: string; first_name?: string | null; username?: string | null; phone?: string | null }>;
+}) {
+  const [text, setText] = useState("");
+  const [selected, setSelected] = useState<string[]>([]);
+  const [rows, setRows] = useState<BulkRow[]>([]);
+  const [runNonce, setRunNonce] = useState(0);
+
+  const parsedLinks = useMemo(() => {
+    return text
+      .split(/\r?\n/)
+      .map((l) => l.trim())
+      .filter(Boolean)
+      .map((l) => (/^https?:\/\//i.test(l) ? l : `https://${l}`))
+      .filter((l) => {
+        try { new URL(l); return true; } catch { return false; }
+      });
+  }, [text]);
+
+  const toggleAcc = (id: string) =>
+    setSelected((prev) => (prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]));
+  const selectAll = () => setSelected(accountList.map((a) => a.id));
+  const selectNone = () => setSelected([]);
+
+  const buildRows = () => {
+    if (!parsedLinks.length) return toast.error("Paste at least one verification link");
+    const accs = selected.length ? selected : accountList.map((a) => a.id);
+    if (!accs.length) return toast.error("Select at least one account");
+    const salt = Date.now().toString(36);
+    const built: BulkRow[] = parsedLinks.map((url, i) => ({
+      id: `${salt}-${i}`,
+      url,
+      accountId: accs[i % accs.length],
+      // Unique per-row seed → distinct browser fingerprint per iframe.
+      fpSeed: `${salt}-${i}-${Math.random().toString(36).slice(2, 8)}`,
+    }));
+    setRows(built);
+    setRunNonce((n) => n + 1);
+  };
+
+  const rerollAll = () => {
+    const salt = Date.now().toString(36);
+    setRows((prev) =>
+      prev.map((r, i) => ({ ...r, fpSeed: `${salt}-${i}-${Math.random().toString(36).slice(2, 8)}` })),
+    );
+    setRunNonce((n) => n + 1);
+  };
+
+  const rerollOne = (id: string) => {
+    setRows((prev) =>
+      prev.map((r) =>
+        r.id === id ? { ...r, fpSeed: `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}` } : r,
+      ),
+    );
+  };
+
+  const removeOne = (id: string) => setRows((prev) => prev.filter((r) => r.id !== id));
+  const clearAll = () => setRows([]);
+
+  return (
+    <div className="space-y-4">
+      <p className="text-xs text-muted-foreground">
+        Paste many verification URLs (one per line). Each is opened in its own iframe with a unique
+        device fingerprint (UA, screen, timezone, canvas, languages). Accounts are round-robin
+        assigned from your selection. Use “Reroll” to force fresh fingerprints on the next run.
+        Outbound IP rotation is applied automatically when the server proxy template is configured
+        (secret <code>MINIAPP_PROXY_URL_TEMPLATE</code>).
+      </p>
+
+      <div className="grid gap-3 md:grid-cols-[1fr_260px]">
+        <div>
+          <Label>Verification URLs (one per line)</Label>
+          <textarea
+            value={text}
+            onChange={(e) => setText(e.target.value)}
+            rows={6}
+            className="mt-1 w-full rounded-md border border-input bg-background p-2 font-mono text-xs"
+            placeholder={"https://bots.example.com/verify/xyz#tgWebAppData=...\nhttps://bots.example.com/verify/abc#tgWebAppData=..."}
+          />
+          <div className="mt-1 text-[11px] text-muted-foreground">
+            {parsedLinks.length} valid link(s) parsed.
+          </div>
+        </div>
+        <div>
+          <div className="flex items-center justify-between">
+            <Label>Accounts (round-robin)</Label>
+            <div className="flex gap-1">
+              <button type="button" className="text-[11px] underline" onClick={selectAll}>All</button>
+              <button type="button" className="text-[11px] underline" onClick={selectNone}>None</button>
+            </div>
+          </div>
+          <div className="mt-1 max-h-40 space-y-1 overflow-auto rounded border border-input p-2">
+            {accountList.length === 0 && (
+              <div className="text-[11px] text-muted-foreground">No accounts</div>
+            )}
+            {accountList.map((a) => {
+              const label = a.first_name || a.username || a.phone || a.id.slice(0, 8);
+              return (
+                <label key={a.id} className="flex cursor-pointer items-center gap-2 text-xs">
+                  <input
+                    type="checkbox"
+                    checked={selected.includes(a.id)}
+                    onChange={() => toggleAcc(a.id)}
+                  />
+                  <span className="truncate">{label}</span>
+                </label>
+              );
+            })}
+          </div>
+          <div className="mt-1 text-[11px] text-muted-foreground">
+            {selected.length || accountList.length} account(s) will rotate
+          </div>
+        </div>
+      </div>
+
+      <div className="flex flex-wrap gap-2">
+        <Button onClick={buildRows} disabled={parsedLinks.length === 0}>
+          <Play className="mr-1 h-4 w-4" /> Run all
+        </Button>
+        {rows.length > 0 && (
+          <>
+            <Button variant="outline" onClick={rerollAll}>
+              <RefreshCw className="mr-1 h-4 w-4" /> Reroll fingerprints
+            </Button>
+            <Button variant="outline" onClick={clearAll}>
+              <X className="mr-1 h-4 w-4" /> Close all
+            </Button>
+          </>
+        )}
+      </div>
+
+      {rows.length > 0 && (
+        <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+          {rows.map((r) => {
+            const acc = accountList.find((a) => a.id === r.accountId);
+            const who = acc?.first_name || acc?.username || acc?.phone || r.accountId.slice(0, 8);
+            let host = r.url;
+            try { host = new URL(r.url).host; } catch {}
+            return (
+              <div key={r.id} className="flex h-[520px] flex-col overflow-hidden rounded-md border border-border bg-background">
+                <div className="flex items-center gap-2 border-b px-2 py-1.5 text-xs">
+                  <div className="min-w-0 flex-1">
+                    <div className="truncate font-semibold">{who}</div>
+                    <div className="truncate text-[10px] text-muted-foreground">
+                      {host} · fp:{r.fpSeed.slice(0, 10)}
+                    </div>
+                  </div>
+                  <button
+                    type="button"
+                    title="Reroll fingerprint (fresh device)"
+                    className="rounded p-1 hover:bg-muted"
+                    onClick={() => rerollOne(r.id)}
+                  >
+                    <RefreshCw className="h-3.5 w-3.5" />
+                  </button>
+                  <button
+                    type="button"
+                    title="Close"
+                    className="rounded p-1 hover:bg-muted"
+                    onClick={() => removeOne(r.id)}
+                  >
+                    <X className="h-3.5 w-3.5" />
+                  </button>
+                </div>
+                <BulkVerifyFrame
+                  key={`${r.id}:${r.fpSeed}:${runNonce}`}
+                  url={r.url}
+                  accountId={r.accountId}
+                  fpSeed={r.fpSeed}
+                />
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function BulkVerifyFrame({ url, accountId, fpSeed }: { url: string; accountId: string; fpSeed: string }) {
+  const { url: proxied } = useMiniAppProxyUrl(url, accountId, { fpSeed });
+  return (
+    <iframe
+      src={proxied ?? "about:blank"}
+      title="Bulk verification runner"
       className="h-full w-full flex-1 border-0"
       allow="clipboard-read; clipboard-write; camera; microphone; geolocation; payment"
       sandbox="allow-scripts allow-same-origin allow-forms allow-modals allow-storage-access-by-user-activation"
