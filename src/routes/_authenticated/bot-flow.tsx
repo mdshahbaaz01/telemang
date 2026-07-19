@@ -1567,6 +1567,11 @@ function BulkVerifyRunner({
                   </span>
                 );
               })}
+              <span>
+                manual: <span className="font-mono text-yellow-600 dark:text-yellow-400">
+                  {rows.filter((r) => r.status === "manual").length}
+                </span>
+              </span>
               <span>total: <span className="font-mono text-foreground">{rows.length}</span></span>
             </div>
           </div>
