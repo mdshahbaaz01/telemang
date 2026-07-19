@@ -488,9 +488,13 @@ export async function executeForward(
       try {
         const sourcePeer = await resolveSourcePeer(client, Api, input.source);
         const { default: bigInt } = await import("big-integer");
+        // Read source chat first, mimicking a real user opening it
+        await markPeerRead(client, sourcePeer, input.source.msgId);
         for (const t of input.targets) {
           try {
             const dest = await resolveTargetEntity(client, Api, t);
+            // Read the destination chat before forwarding into it
+            await markPeerRead(client, dest);
             await client.invoke(
               new Api.messages.ForwardMessages({
                 fromPeer: sourcePeer,
