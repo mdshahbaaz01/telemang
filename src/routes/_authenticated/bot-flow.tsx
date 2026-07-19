@@ -1292,6 +1292,60 @@ function BulkVerifyRunner({
   const [selected, setSelected] = useState<string[]>([]);
   const [rows, setRows] = useState<BulkRow[]>([]);
   const [runNonce, setRunNonce] = useState(0);
+  const [openLogs, setOpenLogs] = useState<Record<string, boolean>>({});
+  const iframeRefs = useRef<Record<string, HTMLIFrameElement | null>>({});
+
+  const appendLog = useCallback((id: string, entry: BulkRowLog, statusPatch?: BulkRowStatus) => {
+    setRows((prev) =>
+      prev.map((r) =>
+        r.id === id
+          ? {
+              ...r,
+              status: statusPatch ?? r.status,
+              logs: [...r.logs.slice(-199), entry],
+            }
+          : r,
+      ),
+    );
+  }, []);
+
+  useEffect(() => {
+    const findIdBySource = (src: unknown): string | null => {
+      for (const [id, el] of Object.entries(iframeRefs.current)) {
+        if (el && el.contentWindow === src) return id;
+      }
+      return null;
+    };
+    const onMsg = (ev: MessageEvent) => {
+      const id = findIdBySource(ev.source);
+      if (!id) return;
+      let payload: any = ev.data;
+      if (typeof payload === "string") {
+        try { payload = JSON.parse(payload); } catch { return; }
+      }
+      if (!payload || typeof payload !== "object") return;
+      const { eventType, eventData } = payload as { eventType?: string; eventData?: any };
+      if (!eventType) return;
+      const now = Date.now();
+      if (eventType === "captcha_log") {
+        const level = (eventData?.level as BulkRowLog["level"]) || "info";
+        const msg = String(eventData?.msg || "");
+        let status: BulkRowStatus | undefined;
+        if (/callback fired with token/i.test(msg)) status = "success";
+        else if (level === "error") status = "failed";
+        appendLog(id, { ts: now, level, msg }, status);
+      } else if (eventType === "captcha_detected") {
+        const n = Array.isArray(eventData?.items) ? eventData.items.length : 0;
+        appendLog(id, { ts: now, level: "info", msg: `captcha detected (${n})` });
+      } else if (eventType === "web_app_close") {
+        appendLog(id, { ts: now, level: "success", msg: "mini-app closed (likely verified)" }, "success");
+      } else if (eventType === "web_app_open_tg_link") {
+        appendLog(id, { ts: now, level: "info", msg: `open tg link: ${eventData?.url || ""}` });
+      }
+    };
+    window.addEventListener("message", onMsg);
+    return () => window.removeEventListener("message", onMsg);
+  }, [appendLog]);
 
   const parsedLinks = useMemo(() => {
     return text
@@ -1320,6 +1374,8 @@ function BulkVerifyRunner({
       accountId: accs[i % accs.length],
       // Unique per-row seed → distinct browser fingerprint per iframe.
       fpSeed: `${salt}-${i}-${Math.random().toString(36).slice(2, 8)}`,
+      status: "queued" as BulkRowStatus,
+      logs: [] as BulkRowLog[],
     }));
     setRows(built);
     setRunNonce((n) => n + 1);
@@ -1328,7 +1384,12 @@ function BulkVerifyRunner({
   const rerollAll = () => {
     const salt = Date.now().toString(36);
     setRows((prev) =>
-      prev.map((r, i) => ({ ...r, fpSeed: `${salt}-${i}-${Math.random().toString(36).slice(2, 8)}` })),
+      prev.map((r, i) => ({
+        ...r,
+        fpSeed: `${salt}-${i}-${Math.random().toString(36).slice(2, 8)}`,
+        status: "queued",
+        logs: [],
+      })),
     );
     setRunNonce((n) => n + 1);
   };
