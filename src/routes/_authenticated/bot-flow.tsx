@@ -694,7 +694,7 @@ function BotFlowPage() {
                   disabled={fetchingBotChannels || accountList.length === 0}
                   onClick={async () => {
                     if (!parsed?.username) return;
-                    const accId = (selectedIds[0] || allIds[0]);
+                    const accId = fetchBotAccountId || selectedIds[0] || allIds[0];
                     if (!accId) return toast.error("No account selected");
                     setFetchingBotChannels(true);
                     try {
@@ -737,6 +737,21 @@ function BotFlowPage() {
                   {fetchingBotChannels ? <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" /> : <RefreshCw className="mr-1 h-3.5 w-3.5" />}
                   Fetch from bot chat
                 </Button>
+                <Select
+                  value={fetchBotAccountId || selectedIds[0] || allIds[0] || ""}
+                  onValueChange={setFetchBotAccountId}
+                >
+                  <SelectTrigger className="h-8 w-[180px] text-xs" title="Account used to fetch bot chat">
+                    <SelectValue placeholder="Select account" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {accountList.map((a) => (
+                      <SelectItem key={a.id} value={a.id} className="text-xs">
+                        {(a as any).label || (a as any).name || (a as any).phone || a.id}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
                 <Button
                   size="sm"
                   variant="ghost"
