@@ -260,8 +260,16 @@ export async function executeBroadcast(
             try {
               const runSend = async () => {
                 const dest = await resolveTarget(client, t);
-                // Mark chat as read before sending (behave like a real user)
-                await markPeerRead(client, dest);
+                // Mark chat as read before sending (behave like a real user).
+                // Emit a visible per-account status so the UI shows pending/read/failed.
+                await markPeerRead(client, dest, 0, (phase) => {
+                  if (phase === "pending")
+                    push({ accountId, target: t, level: "info", message: "Marking as read…" });
+                  else if (phase === "read")
+                    push({ accountId, target: t, level: "info", message: "✓ Marked as read" });
+                  else if (phase === "failed")
+                    push({ accountId, target: t, level: "warn", message: "⚠ Mark-read failed (continuing)" });
+                });
               const vars = varsFromEntity(dest, tIdx, am.name);
               if (attDatas.length > 1) {
                 const formatted = formatMessage(row.message, row.format, { vars, signature: am.signature });
