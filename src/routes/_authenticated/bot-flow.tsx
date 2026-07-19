@@ -652,7 +652,7 @@ function BotFlowPage() {
                 <Button
                   size="sm"
                   variant="ghost"
-                  onClick={() => setBotChannels(new Set())}
+                  onClick={() => clearCurrentBotChannels()}
                   title="Clear collected list"
                 >
                   Clear
