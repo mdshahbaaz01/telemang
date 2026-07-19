@@ -392,7 +392,11 @@ export async function executeReply(
           push({ accountId, target: targetLabel, level: "info", message: "Viewed post" });
         } catch {}
         // Mark source chat as read before replying/commenting
-        await markPeerRead(client, sourcePeer, input.source.msgId);
+        await markPeerRead(client, sourcePeer, input.source.msgId, (phase) => {
+          if (phase === "pending") push({ accountId, target: targetLabel, level: "info", message: "Marking source as read…" });
+          else if (phase === "read") push({ accountId, target: targetLabel, level: "info", message: "✓ Source marked as read" });
+          else if (phase === "failed") push({ accountId, target: targetLabel, level: "warn", message: "⚠ Source mark-read failed" });
+        });
         let replyPeer: any = sourcePeer;
         let replyToId = input.source.msgId;
         let topMsgId: number | undefined;
@@ -406,7 +410,11 @@ export async function executeReply(
           replyToId = dt.msgId;
           topMsgId = dt.msgId;
           await ensureJoined(client, Api, replyPeer);
-          await markPeerRead(client, replyPeer, replyToId);
+          await markPeerRead(client, replyPeer, replyToId, (phase) => {
+            if (phase === "pending") push({ accountId, target: targetLabel, level: "info", message: "Marking discussion as read…" });
+            else if (phase === "read") push({ accountId, target: targetLabel, level: "info", message: "✓ Discussion marked as read" });
+            else if (phase === "failed") push({ accountId, target: targetLabel, level: "warn", message: "⚠ Discussion mark-read failed" });
+          });
         }
         const am = meta.get(accountId) ?? { signature: null, name: "" };
         let idx = 0;
