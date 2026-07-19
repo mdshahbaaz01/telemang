@@ -195,6 +195,67 @@ export function MiniAppDrawer({
             />
           )}
         </div>
+
+        <div className="border-t bg-muted/30 text-xs">
+          <button
+            type="button"
+            className="flex w-full items-center justify-between px-3 py-1.5 hover:bg-muted/60"
+            onClick={() => setCapOpen((v) => !v)}
+          >
+            <span className="font-medium">
+              Captcha log
+              <span className="ml-2 text-muted-foreground">
+                ({capLogs.length}
+                {capLogs.some((l) => l.level === "error") ? " · errors" : ""}
+                {capLogs.some((l) => l.level === "warn") ? " · warnings" : ""})
+              </span>
+            </span>
+            <span className="flex items-center gap-1">
+              {capLogs.length > 0 && capOpen && (
+                <Trash2
+                  className="h-3.5 w-3.5 text-muted-foreground hover:text-destructive"
+                  onClick={(e) => { e.stopPropagation(); setCapLogs([]); }}
+                />
+              )}
+              {capOpen ? <ChevronDown className="h-3.5 w-3.5" /> : <ChevronUp className="h-3.5 w-3.5" />}
+            </span>
+          </button>
+          {capOpen && (
+            <div className="max-h-56 overflow-auto border-t bg-background px-2 py-1 font-mono text-[10px] leading-tight">
+              {capLogs.length === 0 ? (
+                <div className="p-2 text-muted-foreground">
+                  No captcha events yet. Events appear here as widgets are detected, reset, or solved.
+                </div>
+              ) : (
+                capLogs.map((l, i) => (
+                  <div
+                    key={i}
+                    className={
+                      "border-b border-border/40 py-1 " +
+                      (l.level === "error"
+                        ? "text-destructive"
+                        : l.level === "warn"
+                        ? "text-amber-500"
+                        : "text-foreground")
+                    }
+                  >
+                    <div>
+                      <span className="text-muted-foreground">
+                        {new Date(l.ts).toLocaleTimeString()} [{l.source}/{l.level}]
+                      </span>{" "}
+                      {l.msg}
+                    </div>
+                    {l.extra != null && (
+                      <div className="whitespace-pre-wrap break-all pl-4 text-muted-foreground">
+                        {(() => { try { return JSON.stringify(l.extra); } catch { return String(l.extra); } })()}
+                      </div>
+                    )}
+                  </div>
+                ))
+              )}
+            </div>
+          )}
+        </div>
       </div>
     </div>
   );
