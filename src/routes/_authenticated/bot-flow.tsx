@@ -102,24 +102,30 @@ function BotFlowPage() {
   const [running, setRunning] = useState(false);
   const [totals, setTotals] = useState<{ ok: number; fail: number } | null>(null);
   const [joinState, setJoinState] = useState<Record<string, JoinState>>({});
-  const BOT_CHANNELS_KEY = "botflow.channels.v1";
-  const [botChannels, setBotChannels] = useState<Set<string>>(() => {
-    if (typeof window === "undefined") return new Set();
+  const BOT_CHANNELS_KEY = "botflow.channels.byBot.v1";
+  const BOT_CHANNELS_LAST_KEY = "botflow.channels.lastBot.v1";
+  const [botChannelsMap, setBotChannelsMap] = useState<Record<string, string[]>>(() => {
+    if (typeof window === "undefined") return {};
     try {
       const raw = window.localStorage.getItem(BOT_CHANNELS_KEY);
-      if (!raw) return new Set();
-      const arr = JSON.parse(raw) as string[];
-      return new Set(Array.isArray(arr) ? arr : []);
+      if (!raw) return {};
+      const obj = JSON.parse(raw);
+      return obj && typeof obj === "object" ? obj : {};
     } catch {
-      return new Set();
+      return {};
     }
+  });
+  const [lastBotKey, setLastBotKey] = useState<string>(() => {
+    if (typeof window === "undefined") return "";
+    try { return window.localStorage.getItem(BOT_CHANNELS_LAST_KEY) ?? ""; } catch { return ""; }
   });
   const [showBotChannels, setShowBotChannels] = useState(false);
   useEffect(() => {
-    try {
-      window.localStorage.setItem(BOT_CHANNELS_KEY, JSON.stringify(Array.from(botChannels)));
-    } catch {}
-  }, [botChannels]);
+    try { window.localStorage.setItem(BOT_CHANNELS_KEY, JSON.stringify(botChannelsMap)); } catch {}
+  }, [botChannelsMap]);
+  useEffect(() => {
+    try { if (lastBotKey) window.localStorage.setItem(BOT_CHANNELS_LAST_KEY, lastBotKey); } catch {}
+  }, [lastBotKey]);
   const abortRef = useRef<AbortController | null>(null);
 
   const accountList = accountsQ.data ?? [];
@@ -146,6 +152,31 @@ function BotFlowPage() {
       return { username: raw, startParam: "" };
     }
   }, [referLink]);
+
+  const runningBotKeyRef = useRef<string>("");
+  const currentBotKey = (parsed?.username || lastBotKey || "").toLowerCase();
+  const botChannels = useMemo(
+    () => new Set<string>(currentBotKey ? botChannelsMap[currentBotKey] ?? [] : []),
+    [botChannelsMap, currentBotKey],
+  );
+  const addChannelsToCurrentBot = (chans: string[]) => {
+    const key = (runningBotKeyRef.current || currentBotKey).toLowerCase();
+    if (!key || !chans.length) return;
+    setBotChannelsMap((prev) => {
+      const existing = new Set(prev[key] ?? []);
+      for (const c of chans) if (c) existing.add(c);
+      return { ...prev, [key]: Array.from(existing) };
+    });
+  };
+  const clearCurrentBotChannels = () => {
+    const key = currentBotKey;
+    if (!key) return;
+    setBotChannelsMap((prev) => {
+      const next = { ...prev };
+      delete next[key];
+      return next;
+    });
+  };
 
   const addLog = (l: Omit<LogEntry, "ts">) =>
     setLogs((prev) => [{ ...l, ts: Date.now() }, ...prev].slice(0, 500));
@@ -182,22 +213,14 @@ function BotFlowPage() {
           const msg: string = data.message ?? "";
           const m = msg.match(/(@[A-Za-z0-9_]{4,}|\+[A-Za-z0-9_-]{6,}|t\.me\/[A-Za-z0-9_+/-]+)/gi);
           if (m && /Joined|Verified|Pre-join|pending|Skip |already/i.test(msg)) {
-            setBotChannels((prev) => {
-              const next = new Set(prev);
-              for (const c of m) next.add(c.replace(/^t\.me\//i, ""));
-              return next;
-            });
+            addChannelsToCurrentBot(m.map((c) => c.replace(/^t\.me\//i, "")));
           }
           addLog({ accountId: data.accountId, level: data.level ?? "info", target: data.target, message: msg });
         }
         else if (event === "done") addLog({ accountId: data.accountId, level: data.fail ? "warn" : "info", message: `Account done — ok ${data.ok}, fail ${data.fail}` });
         else if (event === "joinProgress") {
           if (Array.isArray(data.remainingList) && data.remainingList.length) {
-            setBotChannels((prev) => {
-              const next = new Set(prev);
-              for (const c of data.remainingList as string[]) if (c) next.add(c);
-              return next;
-            });
+            addChannelsToCurrentBot(data.remainingList as string[]);
           }
           setJoinState((prev) => ({
             ...prev,
@@ -248,6 +271,9 @@ function BotFlowPage() {
     setTotals(null);
     setJoinState({});
     setRunning(true);
+    const botKey = (parsed?.username || "").toLowerCase();
+    runningBotKeyRef.current = botKey;
+    if (botKey) setLastBotKey(botKey);
     const ac = new AbortController();
     abortRef.current = ac;
     try {
@@ -629,7 +655,7 @@ function BotFlowPage() {
                 <Button
                   size="sm"
                   variant="ghost"
-                  onClick={() => setBotChannels(new Set())}
+                  onClick={() => clearCurrentBotChannels()}
                   title="Clear collected list"
                 >
                   Clear
