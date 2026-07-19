@@ -32,7 +32,13 @@ function captchaSubscribe(cb: () => void) {
 }
 function captchaGet(): boolean {
   if (typeof window === "undefined") return false;
-  try { return window.localStorage.getItem(CAPTCHA_KEY) === "1"; } catch { return false; }
+  try {
+    const v = window.localStorage.getItem(CAPTCHA_KEY);
+    // Default ON — the auto-detect + auto-solve bridge is what makes
+    // Cloudflare Turnstile / reCAPTCHA / hCaptcha widgets pass without
+    // the user tapping anything. Only "0" opts out.
+    return v !== "0";
+  } catch { return true; }
 }
 export function setCaptchaAutoDetect(on: boolean) {
   if (typeof window === "undefined") return;
