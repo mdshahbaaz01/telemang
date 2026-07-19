@@ -481,6 +481,8 @@ export const Route = createFileRoute("/api/public/actions-stream")({
                       );
                       send("log", { accountId, level: "info", target: `${src.chat}/${src.msgId}`, message: "Viewed post" });
                     } catch {}
+                    // Mark chat as read like a real user would before reacting
+                    await markPeerRead(client, sourcePeer, src.msgId);
                     // Always clear any previous reaction so a re-run is idempotent.
                     try {
                       await client.invoke(
