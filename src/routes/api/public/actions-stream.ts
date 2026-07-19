@@ -15,6 +15,24 @@ import {
 import { adaptivePacing } from "@/lib/telegram/executor.server";
 import { markPeerRead } from "@/lib/telegram-read-helper.server";
 
+// Wraps markPeerRead and emits per-account visible status via `send("log", …)`
+// so the UI shows pending → read | failed for every interaction.
+function readEmitter(
+  send: (event: string, data: any) => void,
+  accountId: string,
+  target: string | null,
+  label: string,
+) {
+  return (phase: "pending" | "read" | "failed" | "skipped") => {
+    if (phase === "pending")
+      send("log", { accountId, level: "info", target, message: `Marking ${label} as read…` });
+    else if (phase === "read")
+      send("log", { accountId, level: "info", target, message: `✓ ${label} marked as read` });
+    else if (phase === "failed")
+      send("log", { accountId, level: "warn", target, message: `⚠ ${label} mark-read failed (continuing)` });
+  };
+}
+
 // A single Telegram message reference: `t.me/<user>/<id>` or `t.me/c/<internalId>/<id>`
 const msgRefSchema = z.object({
   chat: z.string().min(1), // username, `c/<id>` for private, or invite peer key
