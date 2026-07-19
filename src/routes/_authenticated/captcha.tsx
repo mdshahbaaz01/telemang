@@ -627,7 +627,8 @@ function LogTab() {
   const { data: rows = [], isLoading } = useQuery({
     queryKey: ["captcha-log"],
     queryFn: () => list(),
-    refetchInterval: 5000,
+    refetchInterval: 15000,
+    refetchIntervalInBackground: false,
   });
   const [methodFilter, setMethodFilter] = useState<"all" | "ai" | "provider">("all");
 

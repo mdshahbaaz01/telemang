@@ -44,7 +44,9 @@ function GroupRunner() {
   const logsQ = useQuery({
     queryKey: ["group-logs", id],
     queryFn: () => logsFn({ data: { groupId: id } }),
-    refetchInterval: 3000,
+    refetchInterval: 8000,
+    refetchIntervalInBackground: false,
+    staleTime: 5000,
   });
 
   const [allRunning, setAllRunning] = useState(false);

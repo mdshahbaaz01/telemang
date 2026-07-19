@@ -487,12 +487,15 @@ function ActionsPageInner() {
     queryKey: ["schedule-report", reportId],
     queryFn: () => reportSchedFn({ data: { id: reportId! } }),
     enabled: !!reportId && reportOpen,
-    refetchInterval: reportOpen ? 3000 : false,
+    refetchInterval: reportOpen ? 6000 : false,
+    refetchIntervalInBackground: false,
   });
   const schedulesQ = useQuery({
     queryKey: ["scheduled-broadcasts"],
     queryFn: () => listSchedFn(),
-    refetchInterval: 15_000,
+    refetchInterval: 30_000,
+    refetchIntervalInBackground: false,
+    staleTime: 15_000,
   });
 
   const uploadAttachment = async (file: File, isVoice = false) => {

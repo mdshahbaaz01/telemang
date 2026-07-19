@@ -35,7 +35,7 @@ function AlertsPage() {
 
   const statsQ = useQuery({ queryKey: ["referral-stats"], queryFn: () => getStats() });
   const settingsQ = useQuery({ queryKey: ["notification-settings"], queryFn: () => getSettings() });
-  const logsQ = useQuery({ queryKey: ["notification-logs"], queryFn: () => listLogs(), refetchInterval: 15_000 });
+  const logsQ = useQuery({ queryKey: ["notification-logs"], queryFn: () => listLogs(), refetchInterval: 30_000, refetchIntervalInBackground: false, staleTime: 15_000 });
 
   const [form, setForm] = useState({
     emailEnabled: false,

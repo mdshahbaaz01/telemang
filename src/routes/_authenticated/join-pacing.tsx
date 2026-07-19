@@ -42,12 +42,14 @@ function JoinPacingPage() {
   const { data: attempts } = useQuery({
     queryKey: ["join-attempts"],
     queryFn: () => listAttempts({ data: { limit: 150 } }),
-    refetchInterval: 5000,
+    refetchInterval: 15000,
+    refetchIntervalInBackground: false,
   });
   const { data: cache } = useQuery({
     queryKey: ["join-cache"],
     queryFn: () => listCache({ data: { limit: 200 } }),
-    refetchInterval: 10000,
+    refetchInterval: 30000,
+    refetchIntervalInBackground: false,
   });
 
   const [form, setForm] = useState({

@@ -59,7 +59,9 @@ function Dashboard() {
   const groupsQ = useQuery({
     queryKey: ["task-groups"],
     queryFn: () => listGroupsFn(),
-    refetchInterval: 5000,
+    refetchInterval: 15000,
+    refetchIntervalInBackground: false,
+    staleTime: 10_000,
   });
 
   const del = useMutation({

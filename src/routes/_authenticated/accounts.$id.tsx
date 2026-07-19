@@ -93,8 +93,9 @@ function AccountViewerPage() {
       }
       return res;
     },
-    refetchInterval: 20_000,
-    staleTime: 15_000,
+    refetchInterval: 45_000,
+    refetchIntervalInBackground: false,
+    staleTime: 30_000,
     placeholderData: (prev) => prev,
   });
 
@@ -102,8 +103,9 @@ function AccountViewerPage() {
     queryKey: ["tg-history", accountId, activePeer],
     queryFn: () => getHistoryFn({ data: { accountId, peerKey: activePeer!, limit: 50 } }),
     enabled: !!activePeer,
-    refetchInterval: activePeer ? 3_000 : false,
-    staleTime: 1_000,
+    refetchInterval: activePeer ? 6_000 : false,
+    refetchIntervalInBackground: false,
+    staleTime: 3_000,
     placeholderData: (prev) => prev,
   });
 

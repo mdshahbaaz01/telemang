@@ -47,7 +47,9 @@ function HealthPage() {
   const { data, isLoading, isFetching, refetch } = useQuery<HealthMetrics>({
     queryKey: ["health-metrics", windowMinutes],
     queryFn: () => fetchMetrics({ data: { windowMinutes } }),
-    refetchInterval: 15_000,
+    refetchInterval: 30_000,
+    refetchIntervalInBackground: false,
+    staleTime: 15_000,
   });
 
   return (
