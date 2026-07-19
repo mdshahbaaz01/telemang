@@ -221,7 +221,8 @@ export function PreJoinCard({ accounts }: { accounts: Account[] }) {
           else if (event === "log") {
             addLog({ accountId: data.accountId, level: data.level ?? "info", target: data.target, message: data.message ?? "" });
             if (data.target && data.accountId) {
-              updateStatus(data.target, data.accountId, classify(data.level ?? "info", data.message ?? ""), data.message);
+              const s = classify(data.level ?? "info", data.message ?? "");
+              if (s) updateStatus(data.target, data.accountId, s, data.message);
             }
           }
           else if (event === "done") {
@@ -382,7 +383,7 @@ export function PreJoinCard({ accounts }: { accounts: Account[] }) {
                       }
                     }
                     return Array.from(perAcct.entries()).map(([aid, list]) => {
-                      const counts: Record<ChStatus, number> = { pending: 0, running: 0, joined: 0, skipped: 0, failed: 0 };
+                      const counts: Record<ChStatus, number> = { queued: 0, attempting: 0, requested: 0, succeeded: 0, skipped: 0, failed: 0 };
                       let latest = 0;
                       for (const c of list) { counts[c.status]++; if (c.ts > latest) latest = c.ts; }
                       return (
@@ -390,7 +391,7 @@ export function PreJoinCard({ accounts }: { accounts: Account[] }) {
                           <div className="mb-2 flex flex-wrap items-center gap-2 border-b border-border/50 pb-2">
                             <span className="text-sm font-semibold">{nameOf(aid)}</span>
                             <span className="text-muted-foreground">· {list.length} ch</span>
-                            {(["joined","skipped","running","failed","pending"] as ChStatus[]).map((s) => counts[s] ? (
+                            {(["succeeded","requested","attempting","skipped","failed","queued"] as ChStatus[]).map((s) => counts[s] ? (
                               <span key={s} className={`rounded px-1.5 py-0.5 text-[11px] ${STATUS_STYLES[s]}`}>{s} {counts[s]}</span>
                             ) : null)}
                             <span className="ml-auto text-muted-foreground">{latest ? new Date(latest).toLocaleTimeString() : ""}</span>
