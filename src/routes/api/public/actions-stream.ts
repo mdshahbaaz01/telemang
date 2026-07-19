@@ -7,6 +7,7 @@ import {
   loadCacheForAccount,
   tryAcquireJoinLock,
   finalizeJoinLock,
+  releaseJoinLock,
   logJoinAttempt,
   jitteredDelayMs,
   normalizeTargetKey,
@@ -936,13 +937,23 @@ export const Route = createFileRoute("/api/public/actions-stream")({
                       if (!op.forceRejoin && (status === "joined" || status === "requested")) alreadyJoined.add(k);
                    }
                  } catch { /* dedupe is best-effort */ }
-                const smartJoin = async (rawTarget: string): Promise<"ok" | "requested" | "stop" | "flood" | "skip"> => {
+                const smartJoin = async (rawTarget: string): Promise<"ok" | "requested" | "stop" | "flood" | "skip" | "fail"> => {
                   if (stopRequested) return "stop";
                   const target = extractHandle(rawTarget);
-                  if (!target) return "skip";
+                  const joinLogTarget = rawTarget;
+                  if (!target) {
+                    send("log", { accountId, level: "error", target: joinLogTarget, message: `Invalid Telegram channel link: ${rawTarget}` });
+                    return "fail";
+                  }
                   const key = target.toLowerCase();
-                  if (alreadyJoined.has(key)) return "skip";
-                  if (key === parsed.username.toLowerCase()) return "skip";
+                  if (alreadyJoined.has(key)) {
+                    send("log", { accountId, level: "info", target: joinLogTarget, message: `Skip ${target} — already handled in this run` });
+                    return "skip";
+                  }
+                  if (key === parsed.username.toLowerCase()) {
+                    send("log", { accountId, level: "info", target: joinLogTarget, message: `Skip ${target} — this is the bot itself` });
+                    return "skip";
+                  }
                    attemptedThisRun.add(key);
                     if (op.forceRejoin) {
                       // Wipe any prior cache row so tryAcquireJoinLock doesn't
@@ -958,17 +969,17 @@ export const Route = createFileRoute("/api/public/actions-stream")({
                    // Acquire per-(account, channel) lock — atomic across all workers.
                    const lock = await tryAcquireJoinLock(supabase, {
                      userId, accountId, target: rawTarget,
-                     source: "bot_flow",
+                      source: op.preJoinOnly ? "bot_flow_prejoin" : "bot_flow_required",
                      lockTtlSeconds: pacing.lock_ttl_seconds,
                    });
                    if (lock.outcome !== "acquired") {
                      alreadyJoined.add(key);
                      await logJoinAttempt(supabase, {
-                       userId, accountId, target: rawTarget, source: "bot_flow",
+                        userId, accountId, target: rawTarget, source: op.preJoinOnly ? "bot_flow_prejoin" : "bot_flow_required",
                        result: lock.outcome === "skipped_cached" ? "skipped_cached" : "skipped_locked",
                        metadata: { reason: lock.status ?? null },
                      });
-                     send("log", { accountId, level: "info", target: botLabel, message: `Skip ${target} — ${lock.outcome === "skipped_cached" ? "already cached" : "in-flight elsewhere"}` });
+                      send("log", { accountId, level: "info", target: joinLogTarget, message: `Skip ${target} — ${lock.outcome === "skipped_cached" ? "already cached" : "in-flight elsewhere"}` });
                      return "skip";
                    }
                    const t0 = Date.now();
@@ -983,52 +994,74 @@ export const Route = createFileRoute("/api/public/actions-stream")({
                       /TIMEOUT|TIMED?OUT|NETWORK|ECONNRESET|ECONNREFUSED|EAI_AGAIN|EPIPE|fetch failed|socket hang up|INTERNAL|503|502|504|Server closed the connection|TransportError|MTProtoError|No workers running|workers running|JOIN_NOT_VERIFIED/i.test(em);
                     const reconnectForRetry = async (reason: string) => {
                       try {
-                        send("log", { accountId, level: "info", target: botLabel, message: `Reconnecting Telegram session after retryable error: ${reason}` });
+                        send("log", { accountId, level: "info", target: joinLogTarget, message: `Reconnecting Telegram session after retryable error: ${reason}` });
                         await client?.disconnect?.().catch(() => {});
                         client = await openClientForAccount(supabase, accountId);
                         return true;
                       } catch (error) {
-                        send("log", { accountId, level: "warn", target: botLabel, message: `Reconnect failed: ${errorText(error)}` });
+                        send("log", { accountId, level: "warn", target: joinLogTarget, message: `Reconnect failed: ${errorText(error)}` });
                         return false;
                       }
                     };
-                    const attempt = async (): Promise<"ok" | "requested" | "flood" | "skip" | "transient"> => {
+                    const withTimeout = async <T,>(promise: Promise<T>, ms: number): Promise<T> => {
+                      let timer: ReturnType<typeof setTimeout> | undefined;
+                      try {
+                        return await Promise.race([
+                          promise,
+                          new Promise<T>((_, reject) => {
+                            timer = setTimeout(() => reject(new Error(`JOIN_TIMEOUT_${Math.round(ms / 1000)}S`)), ms);
+                          }),
+                        ]);
+                      } finally {
+                        if (timer) clearTimeout(timer);
+                      }
+                    };
+                    const attempt = async (): Promise<"ok" | "requested" | "flood" | "skip" | "transient" | "fail"> => {
                     try {
-                       const result = await joinTelegramTargetVerified({
+                       send("log", { accountId, level: "info", target: joinLogTarget, message: `Attempting join ${target}…` });
+                       const result = await withTimeout(joinTelegramTargetVerified({
                          client,
                          Api,
                          target,
                          publicInviteFallback: op.publicInviteFallback !== false,
-                         log: (level, message) => send("log", { accountId, level, target: botLabel, message }),
-                       });
+                          log: (level, message) => send("log", { accountId, level, target: joinLogTarget, message }),
+                        }), 45_000);
                        joinPath = result.path;
                        joinErrorCode = result.errorCode;
-                       send("log", { accountId, level: result.status === "requested" ? "info" : "success", target: botLabel, message: `${result.message}${result.verified ? " · membership verified" : ""}` });
+                        send("log", { accountId, level: result.status === "requested" ? "info" : "success", target: joinLogTarget, message: `${result.message}${result.verified ? " · membership verified" : ""}` });
                        return result.status === "requested" ? "requested" : "ok";
                     } catch (e) {
                       const em = errorText(e);
                        joinErrorCode = joinErrorCode ?? extractErrCode(em);
-                      if (/USER_ALREADY_PARTICIPANT|INVITE_HASH_EXPIRED|CHANNELS_TOO_MUCH|INVITE_REQUEST_SENT/i.test(em)) {
-                        send("log", { accountId, level: "info", target: botLabel, message: `${target}: ${em}` });
-                        return "skip";
+                       if (/USER_ALREADY_PARTICIPANT/i.test(em)) {
+                         send("log", { accountId, level: "success", target: joinLogTarget, message: `${target}: already a member` });
+                         return "ok";
+                       }
+                       if (/INVITE_REQUEST_SENT|INVITE_REQUEST_ALREADY_SENT|REQUEST_SENT/i.test(em)) {
+                         send("log", { accountId, level: "info", target: joinLogTarget, message: `${target}: join request sent, waiting for approval` });
+                         return "requested";
+                       }
+                       if (/INVITE_HASH_EXPIRED|INVITE_HASH_INVALID|CHANNELS_TOO_MUCH|USER_BANNED_IN_CHANNEL|USER_RESTRICTED|CHANNEL_PRIVATE|USERNAME_NOT_OCCUPIED|USERNAME_INVALID|PEER_ID_INVALID/i.test(em)) {
+                         send("log", { accountId, level: "error", target: joinLogTarget, message: `Failed ${target}: ${em}` });
+                         return "fail";
                       }
                       const secs = floodWaitSeconds(em);
                       if (secs !== null) {
                         if (secs <= 30) {
-                          send("log", { accountId, level: "info", target: botLabel, message: `Rate-limited, waiting ${secs}s…` });
+                           send("log", { accountId, level: "info", target: joinLogTarget, message: `Rate-limited, waiting ${secs}s…` });
                           await new Promise((r) => setTimeout(r, (secs + 1) * 1000));
                           return "flood"; // caller decides whether to retry
                         }
                         const p = await pauseAccountOnFlood(accountId, em);
-                        send("log", { accountId, level: "warn", target: botLabel, message: `FloodWait ${p ?? secs}s — account paused` });
+                         send("log", { accountId, level: "warn", target: joinLogTarget, message: `FloodWait ${p ?? secs}s — account paused` });
                         return "flood";
                       }
                         if (isTransient(em)) {
-                          send("log", { accountId, level: "info", target: botLabel, message: `Retryable join issue (${target}): ${em}` });
+                           send("log", { accountId, level: "info", target: joinLogTarget, message: `Retryable join issue (${target}): ${em}` });
                           return "transient";
                         }
-                       send("log", { accountId, level: "warn", target: botLabel, message: `Join ${target} (path=${joinPath}, code=${joinErrorCode ?? "?"}): ${em}` });
-                      return "skip";
+                        send("log", { accountId, level: "error", target: joinLogTarget, message: `Failed ${target} (path=${joinPath}, code=${joinErrorCode ?? "?"}): ${em}` });
+                       return "fail";
                     }
                   };
                    let out = await attempt();
@@ -1038,7 +1071,7 @@ export const Route = createFileRoute("/api/public/actions-stream")({
                     if (out === "transient") {
                       for (let i = 0; i < 3 && !stopRequested; i++) {
                         const backoff = Math.round((1000 * Math.pow(2, i)) * (0.85 + Math.random() * 0.3));
-                        send("log", { accountId, level: "info", target: botLabel, message: `Retry ${i + 1}/3 in ${Math.round(backoff / 1000)}s…` });
+                        send("log", { accountId, level: "info", target: joinLogTarget, message: `Retry ${i + 1}/3 in ${Math.round(backoff / 1000)}s…` });
                         await reconnectForRetry(target);
                         await new Promise((r) => setTimeout(r, backoff));
                         if (stopRequested) return "stop";
@@ -1046,8 +1079,8 @@ export const Route = createFileRoute("/api/public/actions-stream")({
                         if (out !== "transient") break;
                       }
                       if (out === "transient") {
-                        send("log", { accountId, level: "warn", target: botLabel, message: `Skip ${target} — Telegram session stayed disconnected after retries` });
-                        out = "skip";
+                        send("log", { accountId, level: "error", target: joinLogTarget, message: `Failed ${target} — Telegram session stayed disconnected after retries` });
+                        out = "fail";
                       }
                     }
                    // Strict single-attempt policy: one (account, channel) →
@@ -1057,24 +1090,24 @@ export const Route = createFileRoute("/api/public/actions-stream")({
                    // account in the same run. The join_cache + lock guarantees
                    // it also never re-runs across future runs.
                    if (out === "flood" && op.preJoinOnly) {
-                     send("log", { accountId, level: "info", target: botLabel, message: `Skip retry (strict 1-req/channel policy)` });
+                      send("log", { accountId, level: "warn", target: joinLogTarget, message: `Failed ${target} — FloodWait stopped retry for this account` });
                    } else if (out === "flood") {
                      out = await attempt();
-                      if (out === "transient") out = "skip";
+                       if (out === "transient") out = "fail";
                    }
                    const waitMs = Date.now() - t0;
                    const errLike = out === "flood" ? "FLOOD_WAIT" : null;
                    const fw = errLike ? floodWaitSeconds(errLike) : null;
                    const finalStatus: "joined" | "requested" | "failed" | "skipped" =
-                     out === "flood" ? "failed" : out === "requested" ? "requested" : out === "ok" ? "joined" : "skipped";
+                      out === "flood" || out === "fail" ? "failed" : out === "requested" ? "requested" : out === "ok" ? "joined" : "skipped";
                    await finalizeJoinLock(supabase, {
                      accountId, target: rawTarget, status: finalStatus,
                      cacheTtlHours: pacing.cache_ttl_hours,
-                     error: out === "flood" ? "FLOOD_WAIT" : null,
+                      error: out === "flood" ? "FLOOD_WAIT" : out === "fail" ? (joinErrorCode ?? "JOIN_FAILED") : null,
                    });
                    await logJoinAttempt(supabase, {
-                     userId, accountId, target: rawTarget, source: "bot_flow",
-                     result: out === "flood" ? "flood" : out === "requested" ? "requested" : out === "ok" ? "joined" : "skipped",
+                      userId, accountId, target: rawTarget, source: op.preJoinOnly ? "bot_flow_prejoin" : "bot_flow_required",
+                      result: out === "flood" ? "flood" : out === "fail" ? "failed" : out === "requested" ? "requested" : out === "ok" ? "joined" : "skipped",
                      waitMs, floodWaitSeconds: fw,
                       metadata: {
                         normalized: normalizeTargetKey(rawTarget),
@@ -1086,7 +1119,7 @@ export const Route = createFileRoute("/api/public/actions-stream")({
                    // Only mark as permanently handled if we actually joined
                    // or the target is unreachable/already-participant. Leave
                    // transient failures retryable in later rounds.
-                   if (out === "ok" || out === "requested" || out === "skip") alreadyJoined.add(key);
+                    if (out === "ok" || out === "requested" || out === "skip") alreadyJoined.add(key);
                    // Human-like pacing between joins from configured pacing.
                    await new Promise((r) => setTimeout(r, jitteredDelayMs(pacing)));
                   return out;
