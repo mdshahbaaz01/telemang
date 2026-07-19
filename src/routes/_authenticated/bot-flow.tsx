@@ -102,24 +102,30 @@ function BotFlowPage() {
   const [running, setRunning] = useState(false);
   const [totals, setTotals] = useState<{ ok: number; fail: number } | null>(null);
   const [joinState, setJoinState] = useState<Record<string, JoinState>>({});
-  const BOT_CHANNELS_KEY = "botflow.channels.v1";
-  const [botChannels, setBotChannels] = useState<Set<string>>(() => {
-    if (typeof window === "undefined") return new Set();
+  const BOT_CHANNELS_KEY = "botflow.channels.byBot.v1";
+  const BOT_CHANNELS_LAST_KEY = "botflow.channels.lastBot.v1";
+  const [botChannelsMap, setBotChannelsMap] = useState<Record<string, string[]>>(() => {
+    if (typeof window === "undefined") return {};
     try {
       const raw = window.localStorage.getItem(BOT_CHANNELS_KEY);
-      if (!raw) return new Set();
-      const arr = JSON.parse(raw) as string[];
-      return new Set(Array.isArray(arr) ? arr : []);
+      if (!raw) return {};
+      const obj = JSON.parse(raw);
+      return obj && typeof obj === "object" ? obj : {};
     } catch {
-      return new Set();
+      return {};
     }
+  });
+  const [lastBotKey, setLastBotKey] = useState<string>(() => {
+    if (typeof window === "undefined") return "";
+    try { return window.localStorage.getItem(BOT_CHANNELS_LAST_KEY) ?? ""; } catch { return ""; }
   });
   const [showBotChannels, setShowBotChannels] = useState(false);
   useEffect(() => {
-    try {
-      window.localStorage.setItem(BOT_CHANNELS_KEY, JSON.stringify(Array.from(botChannels)));
-    } catch {}
-  }, [botChannels]);
+    try { window.localStorage.setItem(BOT_CHANNELS_KEY, JSON.stringify(botChannelsMap)); } catch {}
+  }, [botChannelsMap]);
+  useEffect(() => {
+    try { if (lastBotKey) window.localStorage.setItem(BOT_CHANNELS_LAST_KEY, lastBotKey); } catch {}
+  }, [lastBotKey]);
   const abortRef = useRef<AbortController | null>(null);
 
   const accountList = accountsQ.data ?? [];
