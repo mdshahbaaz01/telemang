@@ -775,6 +775,8 @@ export const Route = createFileRoute("/api/public/actions-stream")({
                   );
                   send("log", { accountId, level: "info", target: `${src.chat}/${src.msgId}`, message: "Viewed post" });
                 } catch {}
+                // Mark source as read before replying/commenting
+                await markPeerRead(client, sourcePeer, src.msgId);
                 let replyPeer: any = sourcePeer;
                 let replyToId = src.msgId;
                 let topMsgId: number | undefined;
@@ -793,6 +795,8 @@ export const Route = createFileRoute("/api/public/actions-stream")({
                   topMsgId = discussionTarget.msgId;
                   // Also join the linked discussion group so comments can be posted.
                   await ensureJoined(client, replyPeer, `${src.chat} (discussion)`, accountId);
+                  // Mark the discussion group as read too before commenting
+                  await markPeerRead(client, replyPeer, replyToId);
                 }
                 const rowAtts = ((row as any).attachments && (row as any).attachments.length > 0
                   ? (row as any).attachments
