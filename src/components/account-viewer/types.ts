@@ -40,6 +40,7 @@ export type InlineButton =
   | { kind: "urlAuth"; text: string; url: string; buttonId?: number }
   | { kind: "switchInline"; text: string; query: string; samePeer: boolean }
   | { kind: "webview"; text: string; url?: string }
+  | { kind: "requestPhone"; text: string }
   | { kind: "game"; text: string }
   | { kind: "buy"; text: string }
   | { kind: "reply"; text: string }

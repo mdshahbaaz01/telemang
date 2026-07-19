@@ -296,6 +296,20 @@ function AccountViewerPage() {
       }
       return;
     }
+    if (btn.kind === "requestPhone") {
+      setPressingKey(key);
+      try {
+        await sendMessageFn({ data: { accountId, peerKey: activePeer, text: btn.text, shareContact: true } });
+        toast.success("Profile shared");
+        qc.invalidateQueries({ queryKey: ["tg-history", accountId, activePeer] });
+        qc.invalidateQueries({ queryKey: ["tg-dialogs", accountId] });
+      } catch (e) {
+        toast.error((e as Error).message);
+      } finally {
+        setPressingKey(null);
+      }
+      return;
+    }
     if (btn.kind !== "callback") {
       toast.info("This button type isn't supported from a user account");
       return;
@@ -546,7 +560,7 @@ function AccountViewerPage() {
                               className="inline-flex flex-1 items-center justify-center gap-1 rounded-md border border-primary/40 bg-primary/10 px-2 py-1.5 text-xs hover:bg-primary/20 disabled:opacity-60"
                             >
                               {busy && <Loader2 className="h-3 w-3 animate-spin" />}
-                              <span className="truncate">{btn.text}</span>
+                              <span className="truncate">{btn.kind === "requestPhone" ? "🔐 " : ""}{btn.text}</span>
                             </button>
                           );
                         })}

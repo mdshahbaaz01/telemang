@@ -161,6 +161,16 @@ function ChatViewerInner({ target, accountId }: { target: string; accountId: str
         previewQ.refetch();
         return;
       }
+      if (btn.kind === "requestPhone") {
+        setPressingKey(key);
+        await replyFn({ data: { target, accountId: activeAccountId, message: btn.text, shareContact: true } });
+        recordClickFn({
+          data: { ...commonLog, buttonKind: "requestPhone", resultStatus: "ok", resultMessage: "profile shared" },
+        }).catch(() => {});
+        toast.success("Profile shared");
+        previewQ.refetch();
+        return;
+      }
       if (btn.kind === "callback") {
         if (!peerKey) { toast.error("Chat not fully loaded yet"); return; }
         setPressingKey(key);
@@ -646,11 +656,12 @@ function MessageBubble({ m, onReply, onPressButton, pressingKey }: { m: any; onR
                 {row.map((btn, ci) => {
                   const key = `${m.id}:${ri}:${ci}`;
                   const busy = pressingKey === key;
-                  const clickable = ["callback","url","urlAuth","webview","reply"].includes(btn.kind);
+                  const clickable = ["callback","url","urlAuth","webview","reply","requestPhone"].includes(btn.kind);
                   const title = btn.kind === "url" || btn.kind === "urlAuth"
                     ? `Opens: ${btn.url}`
                     : btn.kind === "callback" ? "Callback"
                     : btn.kind === "webview" ? "WebApp"
+                    : btn.kind === "requestPhone" ? "Shares this account profile/contact"
                     : btn.kind === "reply" ? `Sends: ${btn.text}`
                     : `${btn.kind} (not supported)`;
                   return (
@@ -664,7 +675,7 @@ function MessageBubble({ m, onReply, onPressButton, pressingKey }: { m: any; onR
                     >
                       {busy && <Loader2 className="h-3 w-3 animate-spin" />}
                       {(btn.kind === "url" || btn.kind === "urlAuth") && <ExternalLink className="h-3 w-3" />}
-                      <span className="max-w-[16rem] truncate">{btn.text}</span>
+                      <span className="max-w-[16rem] truncate">{btn.kind === "requestPhone" ? "🔐 " : ""}{btn.text}</span>
                     </button>
                   );
                 })}
