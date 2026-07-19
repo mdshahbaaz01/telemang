@@ -646,7 +646,7 @@ export const Route = createFileRoute("/api/public/actions-stream")({
 
             const runBroadcastRowsForAccount = async (accountId: string, rows: Array<{ accountId: string; message: string; targets: string[]; attachment?: { path: string; filename: string; mimeType?: string; isVoice?: boolean }; format?: "plain" | "mono" | "quote" | "html" }>) => {
               send("log", { accountId, level: "info", message: "Connecting…" });
-              let client;
+              let client: any;
               try {
                 client = await openClientForAccount(supabase, accountId);
               } catch (e) {
