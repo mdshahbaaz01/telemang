@@ -483,6 +483,7 @@ function ActionsPageInner() {
   const [reportOpen, setReportOpen] = useState(false);
   const [reportId, setReportId] = useState<string | null>(null);
   const [reuseSchedule, setReuseSchedule] = useState<ReuseScheduleRow | null>(null);
+  const [editSchedule, setEditSchedule] = useState<ReuseScheduleRow | null>(null);
   const reportQ = useQuery({
     queryKey: ["schedule-report", reportId],
     queryFn: () => reportSchedFn({ data: { id: reportId! } }),
