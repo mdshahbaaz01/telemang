@@ -1386,7 +1386,8 @@ function BulkVerifyRunner({
         const level = (eventData?.level as BulkRowLog["level"]) || "info";
         const msg = String(eventData?.msg || "");
         let status: BulkRowStatus | undefined;
-        if (/callback fired with token/i.test(msg)) status = "success";
+        if (MANUAL_PATTERNS.some((re) => re.test(msg))) status = "manual";
+        else if (/callback fired with token/i.test(msg)) status = "success";
         else if (level === "error") status = "failed";
         appendLog(id, { ts: now, level, msg }, status);
       } else if (eventType === "captcha_detected") {
