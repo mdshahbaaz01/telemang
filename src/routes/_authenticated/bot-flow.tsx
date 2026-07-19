@@ -154,6 +154,31 @@ function BotFlowPage() {
     }
   }, [referLink]);
 
+  const runningBotKeyRef = useRef<string>("");
+  const currentBotKey = (parsed?.username || lastBotKey || "").toLowerCase();
+  const botChannels = useMemo(
+    () => new Set<string>(currentBotKey ? botChannelsMap[currentBotKey] ?? [] : []),
+    [botChannelsMap, currentBotKey],
+  );
+  const addChannelsToCurrentBot = (chans: string[]) => {
+    const key = (runningBotKeyRef.current || currentBotKey).toLowerCase();
+    if (!key || !chans.length) return;
+    setBotChannelsMap((prev) => {
+      const existing = new Set(prev[key] ?? []);
+      for (const c of chans) if (c) existing.add(c);
+      return { ...prev, [key]: Array.from(existing) };
+    });
+  };
+  const clearCurrentBotChannels = () => {
+    const key = currentBotKey;
+    if (!key) return;
+    setBotChannelsMap((prev) => {
+      const next = { ...prev };
+      delete next[key];
+      return next;
+    });
+  };
+
   const addLog = (l: Omit<LogEntry, "ts">) =>
     setLogs((prev) => [{ ...l, ts: Date.now() }, ...prev].slice(0, 500));
 
