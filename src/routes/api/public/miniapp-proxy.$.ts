@@ -33,6 +33,10 @@ function buildOverrideScript(accountId: string, upstreamUrl: string, token: stri
     const ORIGIN = location.origin;
     const CAPTCHA_STATE = { announced: {}, retries: {} };
     const seenKey = (o) => (o.type || '') + '|' + (o.sitekey || '');
+    const capLog = (level, msg, extra) => {
+      try { hostPost('captcha_log', { level: level || 'info', msg: String(msg), extra: extra || null, ts: Date.now() }); } catch {}
+      try { console.log('[captcha]', level, msg, extra || ''); } catch {}
+    };
     const detectAndAnnounce = () => {
       const found = [];
       document.querySelectorAll('[data-sitekey]').forEach((el) => {
@@ -47,7 +51,10 @@ function buildOverrideScript(accountId: string, upstreamUrl: string, token: stri
       // Only announce items we haven't already asked the host to solve.
       const fresh = found.filter((it) => !CAPTCHA_STATE.announced[seenKey(it)]);
       fresh.forEach((it) => { CAPTCHA_STATE.announced[seenKey(it)] = Date.now(); });
-      if (fresh.length) hostPost('captcha_detected', { items: fresh });
+      if (fresh.length) {
+        capLog('info', 'detected ' + fresh.length + ' new captcha widget(s)', { items: fresh, totalOnPage: found.length });
+        hostPost('captcha_detected', { items: fresh });
+      }
     };
     // ---- Turnstile watchdog: auto-reset the widget on failure ------------
     // Cloudflare frequently shows "Verification failed" for embedded/iframed
@@ -57,9 +64,11 @@ function buildOverrideScript(accountId: string, upstreamUrl: string, token: stri
       try {
         if (window.turnstile && typeof window.turnstile.reset === 'function') {
           window.turnstile.reset();
+          capLog('warn', 'turnstile.reset() invoked');
           return true;
         }
       } catch {}
+      capLog('error', 'turnstile.reset() unavailable');
       return false;
     };
     const looksFailed = (el) => {
@@ -76,7 +85,10 @@ function buildOverrideScript(accountId: string, upstreamUrl: string, token: stri
         const n = CAPTCHA_STATE.retries[key] || 0;
         if (looksFailed(el) && n < 4) {
           CAPTCHA_STATE.retries[key] = n + 1;
+          capLog('warn', 'turnstile widget shows failure, scheduling reset', { attempt: n + 1, max: 4, sitekey: el.getAttribute('data-sitekey') });
           setTimeout(() => { turnstileReset(); }, 400 + n * 800);
+        } else if (looksFailed(el)) {
+          capLog('error', 'turnstile widget still failing after max resets', { attempts: n, sitekey: el.getAttribute('data-sitekey') });
         }
       });
     };
@@ -88,18 +100,29 @@ function buildOverrideScript(accountId: string, upstreamUrl: string, token: stri
         if (!window.turnstile || window.__lovableTurnstileHooked) return;
         window.__lovableTurnstileHooked = true;
         const orig = window.turnstile.render.bind(window.turnstile);
+        capLog('info', 'turnstile.render hook installed');
         window.turnstile.render = function(container, params) {
           try {
             const cb = params && params.callback;
             const wrapped = Object.assign({}, params, {
               callback: (token) => {
+                capLog('info', 'turnstile callback fired with token', { tokenLen: token ? String(token).length : 0 });
                 try { cb && cb(token); } catch {}
                 document.querySelectorAll('input[name="cf-turnstile-response"]').forEach((el) => { el.value = token; });
+              },
+              'error-callback': (err) => {
+                capLog('error', 'turnstile error-callback', { err: String(err) });
+                try { params && params['error-callback'] && params['error-callback'](err); } catch {}
+              },
+              'expired-callback': () => {
+                capLog('warn', 'turnstile token expired');
+                try { params && params['expired-callback'] && params['expired-callback'](); } catch {}
               },
             });
             const id = orig(container, wrapped);
             window.__lovableTurnstileWidgetId = id;
             window.__lovableTurnstileCallback = wrapped.callback;
+            capLog('info', 'turnstile widget rendered', { widgetId: String(id), sitekey: params && params.sitekey });
             return id;
           } catch { return orig(container, params); }
         };
@@ -110,15 +133,17 @@ function buildOverrideScript(accountId: string, upstreamUrl: string, token: stri
     } catch {}
     window.__lovableInjectCaptcha = (kind, token) => {
       try {
+        const tokenLen = token ? String(token).length : 0;
+        let injected = 0;
         if (kind === 'recaptchaV2' || kind === 'recaptchaV3') {
           document.querySelectorAll('textarea[name="g-recaptcha-response"], #g-recaptcha-response')
-            .forEach((el) => { el.value = token; el.innerHTML = token; });
+            .forEach((el) => { el.value = token; el.innerHTML = token; injected++; });
           if (window.___grecaptcha_cfg && window.___grecaptcha_cfg.clients) {
             Object.values(window.___grecaptcha_cfg.clients).forEach((client) => {
               const walk = (o) => { if (!o || typeof o !== 'object') return;
                 for (const k of Object.keys(o)) {
                   const v = o[k]; if (v && typeof v === 'object' && typeof v.callback === 'function') {
-                    try { v.callback(token); } catch {}
+                    try { v.callback(token); injected++; } catch {}
                   } else walk(v);
                 }
               };
@@ -127,20 +152,22 @@ function buildOverrideScript(accountId: string, upstreamUrl: string, token: stri
           }
         } else if (kind === 'hcaptcha') {
           document.querySelectorAll('textarea[name="h-captcha-response"], textarea[name="g-recaptcha-response"]')
-            .forEach((el) => { el.value = token; });
+            .forEach((el) => { el.value = token; injected++; });
         } else if (kind === 'turnstile') {
           document.querySelectorAll('input[name="cf-turnstile-response"]')
-            .forEach((el) => { el.value = token; });
+            .forEach((el) => { el.value = token; injected++; });
           try {
-            if (window.__lovableTurnstileCallback) window.__lovableTurnstileCallback(token);
+            if (window.__lovableTurnstileCallback) { window.__lovableTurnstileCallback(token); injected++; }
           } catch {}
         }
+        capLog(injected > 0 ? 'info' : 'warn', 'inject token result', { kind, tokenLen, injectedTargets: injected });
         return true;
-      } catch (e) { return false; }
+      } catch (e) { capLog('error', 'inject token threw', { kind, err: String(e) }); return false; }
     };
     window.addEventListener('message', (ev) => {
       const d = typeof ev.data === 'string' ? (() => { try { return JSON.parse(ev.data); } catch { return null; } })() : ev.data;
       if (d && d.__lovableCaptchaSolved) {
+        capLog('info', 'received solved token from host', { kind: d.kind, tokenLen: d.token ? String(d.token).length : 0 });
         window.__lovableInjectCaptcha(d.kind, d.token);
       }
     });
@@ -152,6 +179,7 @@ function buildOverrideScript(accountId: string, upstreamUrl: string, token: stri
       mo = new MutationObserver(() => { clearTimeout(mo._t); mo._t = setTimeout(detectAndAnnounce, 1200); });
       mo.observe(document.documentElement, { childList: true, subtree: true });
     } catch {}
+    capLog('info', 'captcha bridge armed', { upstream: UPSTREAM });
   } catch (err) { console.warn('[captcha bridge failed]', err); }
 ` : '';
   return `(() => {
