@@ -1478,6 +1478,80 @@ function BulkVerifyRunner({
       </div>
 
       {rows.length > 0 && (
+        <div className="rounded-md border border-border bg-muted/30 p-3">
+          <div className="mb-2 flex items-center justify-between">
+            <div className="text-xs font-semibold">Progress</div>
+            <div className="flex gap-2 text-[11px] text-muted-foreground">
+              {(["queued", "running", "success", "failed"] as BulkRowStatus[]).map((s) => {
+                const n = rows.filter((r) => r.status === s).length;
+                return (
+                  <span key={s} className="capitalize">
+                    {s}: <span className="font-mono text-foreground">{n}</span>
+                  </span>
+                );
+              })}
+              <span>total: <span className="font-mono text-foreground">{rows.length}</span></span>
+            </div>
+          </div>
+          <div className="max-h-64 space-y-1 overflow-auto">
+            {rows.map((r) => {
+              const acc = accountList.find((a) => a.id === r.accountId);
+              const who = acc?.first_name || acc?.username || acc?.phone || r.accountId.slice(0, 8);
+              let host = r.url;
+              try { host = new URL(r.url).host; } catch {}
+              const isOpen = !!openLogs[r.id];
+              const color =
+                r.status === "success" ? "bg-green-500/15 text-green-600 dark:text-green-400"
+                : r.status === "failed" ? "bg-destructive/15 text-destructive"
+                : r.status === "running" ? "bg-blue-500/15 text-blue-600 dark:text-blue-400"
+                : "bg-muted text-muted-foreground";
+              return (
+                <div key={r.id} className="rounded border border-border bg-background">
+                  <button
+                    type="button"
+                    className="flex w-full items-center gap-2 px-2 py-1.5 text-left text-xs hover:bg-muted/40"
+                    onClick={() => setOpenLogs((o) => ({ ...o, [r.id]: !o[r.id] }))}
+                  >
+                    <span className={`rounded px-1.5 py-0.5 text-[10px] font-semibold uppercase ${color}`}>
+                      {r.status}
+                    </span>
+                    <span className="min-w-0 flex-1 truncate">
+                      <span className="font-medium">{who}</span>
+                      <span className="text-muted-foreground"> · {host}</span>
+                    </span>
+                    <span className="text-[10px] text-muted-foreground">{r.logs.length} log(s)</span>
+                    <span className="text-[10px] text-muted-foreground">{isOpen ? "▾" : "▸"}</span>
+                  </button>
+                  {isOpen && (
+                    <div className="max-h-40 overflow-auto border-t bg-muted/20 p-2 font-mono text-[10px]">
+                      {r.logs.length === 0 ? (
+                        <div className="text-muted-foreground">No events yet.</div>
+                      ) : (
+                        r.logs.map((l, i) => (
+                          <div
+                            key={i}
+                            className={
+                              l.level === "error" ? "text-destructive"
+                              : l.level === "warn" ? "text-yellow-600 dark:text-yellow-400"
+                              : l.level === "success" ? "text-green-600 dark:text-green-400"
+                              : "text-foreground"
+                            }
+                          >
+                            <span className="text-muted-foreground">{new Date(l.ts).toLocaleTimeString()} </span>
+                            [{l.level}] {l.msg}
+                          </div>
+                        ))
+                      )}
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
+      {rows.length > 0 && (
         <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
           {rows.map((r) => {
             const acc = accountList.find((a) => a.id === r.accountId);
@@ -1515,6 +1589,10 @@ function BulkVerifyRunner({
                   url={r.url}
                   accountId={r.accountId}
                   fpSeed={r.fpSeed}
+                  iframeRef={(el) => { iframeRefs.current[r.id] = el; }}
+                  onLoaded={() =>
+                    appendLog(r.id, { ts: Date.now(), level: "info", msg: "iframe loaded" }, "running")
+                  }
                 />
               </div>
             );
@@ -1525,16 +1603,30 @@ function BulkVerifyRunner({
   );
 }
 
-function BulkVerifyFrame({ url, accountId, fpSeed }: { url: string; accountId: string; fpSeed: string }) {
+function BulkVerifyFrame({
+  url,
+  accountId,
+  fpSeed,
+  iframeRef,
+  onLoaded,
+}: {
+  url: string;
+  accountId: string;
+  fpSeed: string;
+  iframeRef?: (el: HTMLIFrameElement | null) => void;
+  onLoaded?: () => void;
+}) {
   const { url: proxied } = useMiniAppProxyUrl(url, accountId, { fpSeed });
   return (
     <iframe
+      ref={iframeRef}
       src={proxied ?? "about:blank"}
       title="Bulk verification runner"
       className="h-full w-full flex-1 border-0"
       allow="clipboard-read; clipboard-write; camera; microphone; geolocation; payment"
       sandbox="allow-scripts allow-same-origin allow-forms allow-modals allow-storage-access-by-user-activation"
       referrerPolicy="no-referrer"
+      onLoad={onLoaded}
     />
   );
 }
