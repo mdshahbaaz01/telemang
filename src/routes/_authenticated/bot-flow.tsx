@@ -1428,8 +1428,11 @@ function BulkVerifyRunner({
       id: `${salt}-${i}`,
       url,
       accountId: accs[i % accs.length],
-      // Unique per-row seed → distinct browser fingerprint per iframe.
-      fpSeed: `${salt}-${i}-${Math.random().toString(36).slice(2, 8)}`,
+      // Stable per-account seed by default → same device is presented every
+      // time for that account. Turn off "Stable device" to use a fresh one.
+      fpSeed: stableDevice
+        ? stableSeedFor(accs[i % accs.length])
+        : `${salt}-${i}-${Math.random().toString(36).slice(2, 8)}`,
       status: "queued" as BulkRowStatus,
       logs: [] as BulkRowLog[],
     }));
@@ -1442,7 +1445,9 @@ function BulkVerifyRunner({
     setRows((prev) =>
       prev.map((r, i) => ({
         ...r,
-        fpSeed: `${salt}-${i}-${Math.random().toString(36).slice(2, 8)}`,
+        fpSeed: stableDevice
+          ? stableSeedFor(r.accountId)
+          : `${salt}-${i}-${Math.random().toString(36).slice(2, 8)}`,
         status: "queued",
         logs: [],
       })),
