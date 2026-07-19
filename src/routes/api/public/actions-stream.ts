@@ -15,6 +15,24 @@ import {
 import { adaptivePacing } from "@/lib/telegram/executor.server";
 import { markPeerRead } from "@/lib/telegram-read-helper.server";
 
+// Wraps markPeerRead and emits per-account visible status via `send("log", …)`
+// so the UI shows pending → read | failed for every interaction.
+function readEmitter(
+  send: (event: string, data: any) => void,
+  accountId: string,
+  target: string | null,
+  label: string,
+) {
+  return (phase: "pending" | "read" | "failed" | "skipped") => {
+    if (phase === "pending")
+      send("log", { accountId, level: "info", target, message: `Marking ${label} as read…` });
+    else if (phase === "read")
+      send("log", { accountId, level: "info", target, message: `✓ ${label} marked as read` });
+    else if (phase === "failed")
+      send("log", { accountId, level: "warn", target, message: `⚠ ${label} mark-read failed (continuing)` });
+  };
+}
+
 // A single Telegram message reference: `t.me/<user>/<id>` or `t.me/c/<internalId>/<id>`
 const msgRefSchema = z.object({
   chat: z.string().min(1), // username, `c/<id>` for private, or invite peer key
@@ -482,7 +500,8 @@ export const Route = createFileRoute("/api/public/actions-stream")({
                       send("log", { accountId, level: "info", target: `${src.chat}/${src.msgId}`, message: "Viewed post" });
                     } catch {}
                     // Mark chat as read like a real user would before reacting
-                    await markPeerRead(client, sourcePeer, src.msgId);
+                    await markPeerRead(client, sourcePeer, src.msgId,
+                      readEmitter(send, accountId, `${src.chat}/${src.msgId}`, "source"));
                     // Always clear any previous reaction so a re-run is idempotent.
                     try {
                       await client.invoke(
@@ -573,13 +592,15 @@ export const Route = createFileRoute("/api/public/actions-stream")({
                     send("log", { accountId, level: "info", target: `${src.chat}/${src.msgId}`, message: "Viewed source post" });
                   } catch {}
                   // Mark source chat as read before forwarding
-                  await markPeerRead(client, sourcePeer, src.msgId);
+                  await markPeerRead(client, sourcePeer, src.msgId,
+                    readEmitter(send, accountId, `${src.chat}/${src.msgId}`, "source"));
                   for (const t of op.targets) {
                     if (stopRequested) break;
                     try {
                       const dest = await resolveTarget(client, t);
                       // Read destination chat first, then forward
-                      await markPeerRead(client, dest);
+                      await markPeerRead(client, dest, 0,
+                        readEmitter(send, accountId, t, "destination"));
                       const { default: bigInt } = await import("big-integer");
                       await client.invoke(
                         new Api.messages.ForwardMessages({
@@ -690,7 +711,8 @@ export const Route = createFileRoute("/api/public/actions-stream")({
                     try {
                       const dest = await resolveTarget(client, t);
                       // Mark destination as read before broadcasting
-                      await markPeerRead(client, dest);
+                      await markPeerRead(client, dest, 0,
+                        readEmitter(send, accountId, t, "destination"));
                       if (attDatas.length > 1) {
                         const formatted = formatMessage(row.message, row.format);
                         await client.sendFile(dest, {
@@ -776,7 +798,8 @@ export const Route = createFileRoute("/api/public/actions-stream")({
                   send("log", { accountId, level: "info", target: `${src.chat}/${src.msgId}`, message: "Viewed post" });
                 } catch {}
                 // Mark source as read before replying/commenting
-                await markPeerRead(client, sourcePeer, src.msgId);
+                await markPeerRead(client, sourcePeer, src.msgId,
+                  readEmitter(send, accountId, `${src.chat}/${src.msgId}`, "source"));
                 let replyPeer: any = sourcePeer;
                 let replyToId = src.msgId;
                 let topMsgId: number | undefined;
@@ -796,7 +819,8 @@ export const Route = createFileRoute("/api/public/actions-stream")({
                   // Also join the linked discussion group so comments can be posted.
                   await ensureJoined(client, replyPeer, `${src.chat} (discussion)`, accountId);
                   // Mark the discussion group as read too before commenting
-                  await markPeerRead(client, replyPeer, replyToId);
+                  await markPeerRead(client, replyPeer, replyToId,
+                    readEmitter(send, accountId, `${src.chat} (discussion)`, "discussion"));
                 }
                 const rowAtts = ((row as any).attachments && (row as any).attachments.length > 0
                   ? (row as any).attachments
@@ -1377,7 +1401,8 @@ export const Route = createFileRoute("/api/public/actions-stream")({
                       await new Promise((r) => setTimeout(r, secs * 1000));
                     } else if (cmd === "text" || cmd === "send") {
                       if (!arg) throw new Error("empty text");
-                      await markPeerRead(client, botPeer);
+                      await markPeerRead(client, botPeer, 0,
+                        readEmitter(send, accountId, botLabel, "bot chat"));
                       await client.sendMessage(botPeer, { message: arg });
                       ok++;
                       send("log", { accountId, level: "success", target: botLabel, message: `Sent: ${arg.slice(0, 80)}` });
@@ -1394,7 +1419,8 @@ export const Route = createFileRoute("/api/public/actions-stream")({
                     } else if (cmd === "click" || cmd === "tap" || cmd === "button") {
                       // Find latest bot message with an inline/reply keyboard button matching arg.
                       const wanted = arg.toLowerCase();
-                      await markPeerRead(client, botPeer);
+                      await markPeerRead(client, botPeer, 0,
+                        readEmitter(send, accountId, botLabel, "bot chat"));
                       const recent = await client.getMessages(botPeer, { limit: 10 });
                       let clicked = false;
                       for (const m of recent as any[]) {

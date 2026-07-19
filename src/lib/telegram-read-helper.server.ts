@@ -1,53 +1,63 @@
-// Marks a peer's history as read before performing an interaction (send/reply/
-// forward/react/comment). Best-effort: any failure is swallowed so the caller
-// action still proceeds.
+// Marks a peer's history as read before performing an interaction.
+// Returns a status so callers can surface a visible per-account indicator
+// (pending → read | failed | skipped).
 import { Api } from "telegram";
+
+export type ReadStatus = "read" | "failed" | "skipped";
+
+export type ReadEmit = (phase: "pending" | ReadStatus) => void;
 
 export async function markPeerRead(
   client: any,
   peer: any,
   maxId: number = 0,
-): Promise<void> {
-  if (!client || !peer) return;
-  // channels.ReadHistory requires a channel input; messages.ReadHistory works
-  // for users and small chats. Try the channel variant first when the peer
-  // looks like a channel, otherwise fall back to the generic call.
+  emit?: ReadEmit,
+): Promise<ReadStatus> {
+  if (!client || !peer) {
+    emit?.("skipped");
+    return "skipped";
+  }
+  emit?.("pending");
   const isChannel =
     peer?.className === "InputPeerChannel" ||
     peer?.className === "InputPeerChannelFromMessage" ||
     typeof peer?.channelId !== "undefined";
-  try {
-    if (isChannel) {
+  if (isChannel) {
+    try {
       await client.invoke(
         new Api.channels.ReadHistory({ channel: peer, maxId } as any),
       );
-      return;
+      emit?.("read");
+      return "read";
+    } catch {
+      /* fall through */
     }
-  } catch {
-    /* fall through */
   }
   try {
     await client.invoke(
       new Api.messages.ReadHistory({ peer, maxId } as any),
     );
+    emit?.("read");
+    return "read";
   } catch {
-    // last-resort: try the other variant
     try {
       await client.invoke(
         new Api.channels.ReadHistory({ channel: peer, maxId } as any),
       );
+      emit?.("read");
+      return "read";
     } catch {
-      /* ignore — read is best-effort */
+      emit?.("failed");
+      return "failed";
     }
   }
 }
 
-// Convenience: resolve a target string/entity then mark read.
-export async function markEntityRead(client: any, entity: any): Promise<void> {
+export async function markEntityRead(client: any, entity: any): Promise<ReadStatus> {
   try {
     const peer = await client.getInputEntity(entity);
-    await markPeerRead(client, peer);
+    return await markPeerRead(client, peer);
   } catch {
-    /* ignore */
+    return "failed";
   }
 }

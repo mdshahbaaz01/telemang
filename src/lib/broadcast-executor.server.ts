@@ -260,8 +260,16 @@ export async function executeBroadcast(
             try {
               const runSend = async () => {
                 const dest = await resolveTarget(client, t);
-                // Mark chat as read before sending (behave like a real user)
-                await markPeerRead(client, dest);
+                // Mark chat as read before sending (behave like a real user).
+                // Emit a visible per-account status so the UI shows pending/read/failed.
+                await markPeerRead(client, dest, 0, (phase) => {
+                  if (phase === "pending")
+                    push({ accountId, target: t, level: "info", message: "Marking as read…" });
+                  else if (phase === "read")
+                    push({ accountId, target: t, level: "info", message: "✓ Marked as read" });
+                  else if (phase === "failed")
+                    push({ accountId, target: t, level: "warn", message: "⚠ Mark-read failed (continuing)" });
+                });
               const vars = varsFromEntity(dest, tIdx, am.name);
               if (attDatas.length > 1) {
                 const formatted = formatMessage(row.message, row.format, { vars, signature: am.signature });
@@ -384,7 +392,11 @@ export async function executeReply(
           push({ accountId, target: targetLabel, level: "info", message: "Viewed post" });
         } catch {}
         // Mark source chat as read before replying/commenting
-        await markPeerRead(client, sourcePeer, input.source.msgId);
+        await markPeerRead(client, sourcePeer, input.source.msgId, (phase) => {
+          if (phase === "pending") push({ accountId, target: targetLabel, level: "info", message: "Marking source as read…" });
+          else if (phase === "read") push({ accountId, target: targetLabel, level: "info", message: "✓ Source marked as read" });
+          else if (phase === "failed") push({ accountId, target: targetLabel, level: "warn", message: "⚠ Source mark-read failed" });
+        });
         let replyPeer: any = sourcePeer;
         let replyToId = input.source.msgId;
         let topMsgId: number | undefined;
@@ -398,7 +410,11 @@ export async function executeReply(
           replyToId = dt.msgId;
           topMsgId = dt.msgId;
           await ensureJoined(client, Api, replyPeer);
-          await markPeerRead(client, replyPeer, replyToId);
+          await markPeerRead(client, replyPeer, replyToId, (phase) => {
+            if (phase === "pending") push({ accountId, target: targetLabel, level: "info", message: "Marking discussion as read…" });
+            else if (phase === "read") push({ accountId, target: targetLabel, level: "info", message: "✓ Discussion marked as read" });
+            else if (phase === "failed") push({ accountId, target: targetLabel, level: "warn", message: "⚠ Discussion mark-read failed" });
+          });
         }
         const am = meta.get(accountId) ?? { signature: null, name: "" };
         let idx = 0;
@@ -489,12 +505,20 @@ export async function executeForward(
         const sourcePeer = await resolveSourcePeer(client, Api, input.source);
         const { default: bigInt } = await import("big-integer");
         // Read source chat first, mimicking a real user opening it
-        await markPeerRead(client, sourcePeer, input.source.msgId);
+        await markPeerRead(client, sourcePeer, input.source.msgId, (phase) => {
+          if (phase === "pending") push({ accountId, target: null, level: "info", message: "Marking source as read…" });
+          else if (phase === "read") push({ accountId, target: null, level: "info", message: "✓ Source marked as read" });
+          else if (phase === "failed") push({ accountId, target: null, level: "warn", message: "⚠ Source mark-read failed" });
+        });
         for (const t of input.targets) {
           try {
             const dest = await resolveTargetEntity(client, Api, t);
             // Read the destination chat before forwarding into it
-            await markPeerRead(client, dest);
+            await markPeerRead(client, dest, 0, (phase) => {
+              if (phase === "pending") push({ accountId, target: t, level: "info", message: "Marking destination as read…" });
+              else if (phase === "read") push({ accountId, target: t, level: "info", message: "✓ Destination marked as read" });
+              else if (phase === "failed") push({ accountId, target: t, level: "warn", message: "⚠ Destination mark-read failed" });
+            });
             await client.invoke(
               new Api.messages.ForwardMessages({
                 fromPeer: sourcePeer,
