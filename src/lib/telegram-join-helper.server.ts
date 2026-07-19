@@ -71,6 +71,15 @@ async function verifyMembership(client: any, Api: any, channel: any): Promise<bo
   }
 }
 
+async function waitForMembership(client: any, Api: any, channel: any): Promise<boolean> {
+  const waits = [0, 500, 1200, 2200];
+  for (const wait of waits) {
+    if (wait) await new Promise((resolve) => setTimeout(resolve, wait));
+    if (await verifyMembership(client, Api, channel)) return true;
+  }
+  return false;
+}
+
 function idOf(entity: any): string | null {
   const raw = entity?.id ?? entity?.channelId ?? entity?.chatId;
   if (raw === null || raw === undefined) return null;
@@ -113,6 +122,7 @@ async function joinEntityVerified(
   path: SmartTelegramJoinResult["path"],
   log?: Logger,
 ): Promise<SmartTelegramJoinResult> {
+  let verifiedEntity = entity;
   try {
     await client.invoke(new Api.channels.JoinChannel({ channel: entity }));
   } catch (error) {
@@ -132,9 +142,15 @@ async function joinEntityVerified(
     }
     if (!/USER_ALREADY_PARTICIPANT/i.test(msg)) throw error;
   }
-  const verified = await verifyMembership(client, Api, entity);
+  let verified = await waitForMembership(client, Api, verifiedEntity);
+  if (!verified && typeof label === "string" && label.startsWith("@")) {
+    try {
+      verifiedEntity = await client.getEntity(label.slice(1));
+      verified = await waitForMembership(client, Api, verifiedEntity);
+    } catch {}
+  }
   if (!verified) throw new Error(`JOIN_NOT_VERIFIED: ${label}`);
-  const canonicalChannelId = await verifyCanonicalMatch(client, Api, entity, label, log);
+  const canonicalChannelId = await verifyCanonicalMatch(client, Api, verifiedEntity, label, log);
   log?.("success", `Verified joined ${label} (path=${path}, channelId=${canonicalChannelId})`);
   return {
     status: "joined",
@@ -203,7 +219,7 @@ export async function joinTelegramTargetVerified(args: {
       const cn = classNameOf(peekInfo);
 
       if (cn === "ChatInviteAlready" && chat) {
-        const verified = await verifyMembership(client, Api, chat);
+      const verified = await waitForMembership(client, Api, chat);
         if (!verified) throw new Error(`JOIN_NOT_VERIFIED: already ${chat?.username ? "@" + chat.username : chat?.title ?? inviteHash}`);
         const canonicalChannelId = await verifyCanonicalMatch(
           client,
@@ -255,7 +271,7 @@ export async function joinTelegramTargetVerified(args: {
       return joinEntityVerified(client, Api, entity, `@${importedChat.username}`, "import_username", log);
     }
     if (importedChat) {
-      const verified = await verifyMembership(client, Api, importedChat);
+      const verified = await waitForMembership(client, Api, importedChat);
       if (!verified) throw new Error(`JOIN_NOT_VERIFIED: +${inviteHash.slice(0, 8)}…`);
       const canonicalChannelId = await verifyCanonicalMatch(
         client,
