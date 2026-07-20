@@ -1587,7 +1587,13 @@ type BulkRow = {
 function BulkVerifyRunner({
   accountList,
 }: {
-  accountList: Array<{ id: string; first_name?: string | null; username?: string | null; phone?: string | null }>;
+  accountList: Array<{
+    id: string;
+    first_name?: string | null;
+    username?: string | null;
+    phone?: string | null;
+    telegram_user_id?: string | number | null;
+  }>;
 }) {
   type LinkEntry = { id: string; url: string; accountOverride?: string | null };
   const mkEntry = (url = ""): LinkEntry => ({
