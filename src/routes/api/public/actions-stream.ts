@@ -1021,7 +1021,8 @@ export const Route = createFileRoute("/api/public/actions-stream")({
                        result: lock.outcome === "skipped_cached" ? "skipped_cached" : "skipped_locked",
                        metadata: { reason: lock.status ?? null },
                      });
-                      send("log", { accountId, level: "info", target: joinLogTarget, message: `Skip ${target} — ${lock.outcome === "skipped_cached" ? "already cached" : "in-flight elsewhere"}` });
+                      const skipReason = lock.outcome === "skipped_cached" ? "Skipped — already joined in a prior run" : "Skipped — another worker is joining this channel";
+                      send("log", { accountId, level: "info", target: joinLogTarget, message: `Skip ${target} — ${lock.outcome === "skipped_cached" ? "already cached" : "in-flight elsewhere"}`, reason: skipReason, terminal: "skipped" });
                      return "skip";
                    }
                    const t0 = Date.now();
