@@ -7,7 +7,6 @@ import {
   finalizeJoinLock,
   logJoinAttempt,
   jitteredDelayMs,
-  loadCacheForAccount,
 } from "./join-cache.server";
 import { parseFloodWait } from "./telegram/errors";
 
