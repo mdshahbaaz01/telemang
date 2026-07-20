@@ -527,16 +527,26 @@ function BotFlowPage() {
   // ─── Per-account inline chat boxes for the refer bot ──────────────
   const [chatOpen, setChatOpen] = useState<string[]>([]);
   const [chatVisibleCount, setChatVisibleCount] = useState(1);
+  // Cap concurrent iframes to avoid 30+ parallel Telegram client boots
+  // (each iframe loads the full app and opens its own MTProto session).
+  const CHAT_BATCH_DESKTOP = 4;
+  const CHAT_BATCH_MOBILE = 1;
   const openChats = () => {
     if (!parsed?.username) return toast.error("Paste a bot referral link first");
     const ids = selectedIds.length ? selectedIds : allIds;
     if (!ids.length) return toast.error("Select at least one account");
     const isMobile = typeof window !== "undefined" && window.matchMedia("(max-width: 767px)").matches;
-    setChatVisibleCount(isMobile ? 1 : ids.length);
+    const batch = isMobile ? CHAT_BATCH_MOBILE : CHAT_BATCH_DESKTOP;
+    setChatVisibleCount(Math.min(ids.length, batch));
     setChatOpen(ids);
   };
-  const closeChat = (id: string) =>
-    setChatOpen((prev) => prev.filter((x) => x !== id));
+  const closeChat = (id: string) => {
+    setChatOpen((prev) => {
+      const next = prev.filter((x) => x !== id);
+      // Keep the batch size steady so a queued account slides into the freed slot.
+      return next;
+    });
+  };
   const clearChats = () => {
     setChatOpen([]);
     setChatVisibleCount(1);
