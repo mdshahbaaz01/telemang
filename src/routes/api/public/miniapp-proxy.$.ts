@@ -1367,14 +1367,8 @@ async function handle(request: Request, params: { _splat?: string }) {
     "set-cookie",
     `miniapp_proxy_t=${encodeURIComponent(token!)}; Path=/api/public/miniapp-proxy/; Max-Age=3600; HttpOnly; Secure; SameSite=None`,
   );
-  outHeaders.append(
-    "set-cookie",
-    `${COOKIE_JAR_NAME}=${encodeURIComponent(serializeCookieJar(cookieJar))}; Path=/api/public/miniapp-proxy/; Max-Age=3600; HttpOnly; Secure; SameSite=None`,
-  );
-  outHeaders.append(
-    "set-cookie",
-    `${cookieJarName}=${encodeURIComponent(serializeCookieJar(cookieJar))}; Path=/api/public/miniapp-proxy/; Max-Age=3600; HttpOnly; Secure; SameSite=None`,
-  );
+  appendCookieJarCookies(outHeaders, COOKIE_JAR_NAME, cookieJar);
+  appendCookieJarCookies(outHeaders, cookieJarName, cookieJar);
 
   const ctype = upstream.headers.get("content-type") || "";
   if (ctype.includes("text/html")) {
