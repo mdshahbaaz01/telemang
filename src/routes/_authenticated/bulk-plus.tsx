@@ -13,7 +13,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { toast } from "sonner";
 import { Loader } from "@/components/ui/loader";
 import {
-  Users, UserPlus, MessagesSquare, Pencil, Copy, Mic, ListChecks, CheckCheck, Square, Play, Rocket,
+  Users, UserPlus, MessagesSquare, Pencil, Copy, Mic, ListChecks, CheckCheck, Square, Play, Rocket, Vote,
 } from "lucide-react";
 import { requireAdminBeforeLoad } from "@/lib/access-guard";
 
@@ -23,7 +23,7 @@ export const Route = createFileRoute("/_authenticated/bulk-plus")({
   component: BulkPlusPage,
 });
 
-type Kind = "createChat" | "inviteToChat" | "dmBlast" | "editSent" | "copyClean" | "voiceNote" | "pollCreate" | "readAll";
+type Kind = "createChat" | "inviteToChat" | "dmBlast" | "editSent" | "copyClean" | "voiceNote" | "pollCreate" | "pollVote" | "readAll";
 type LogEntry = { ts: number; accountId?: string; level: "info"|"success"|"warn"|"error"; target?: string; message: string };
 
 const KINDS: { key: Kind; label: string; desc: string; icon: any }[] = [
@@ -34,6 +34,7 @@ const KINDS: { key: Kind; label: string; desc: string; icon: any }[] = [
   { key: "copyClean",    label: "Copy-Clean Forward",desc: "Copy a post without \"forwarded from\" tag",       icon: Copy },
   { key: "voiceNote",    label: "Voice / Video Note",desc: "Send a voice bubble or round video note",          icon: Mic },
   { key: "pollCreate",   label: "Poll / Quiz",       desc: "Create polls or quizzes in bulk",                  icon: ListChecks },
+  { key: "pollVote",     label: "Poll Vote",         desc: "Vote on an existing poll from every account",      icon: Vote },
   { key: "readAll",      label: "Read-All / Unread", desc: "Mark all dialogs as read or unread",               icon: CheckCheck },
 ];
 
@@ -94,6 +95,11 @@ function BulkPlusInner() {
   const [pollQuiz, setPollQuiz] = useState(false);
   const [pollCorrect, setPollCorrect] = useState(0);
   const [pollExplain, setPollExplain] = useState("");
+
+  // Poll Vote state
+  const [voteLink, setVoteLink] = useState("");
+  const [voteIdx, setVoteIdx] = useState("0");
+  const [voteRetract, setVoteRetract] = useState(false);
 
   const [readScope, setReadScope] = useState<"all"|"targets">("all");
   const [readTargets, setReadTargets] = useState<string[]>([]);

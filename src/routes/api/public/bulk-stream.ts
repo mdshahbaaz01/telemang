@@ -702,6 +702,7 @@ export const Route = createFileRoute("/api/public/bulk-stream")({
                     case "copyClean": return await execCopyClean(accountId);
                     case "voiceNote": return await execVoiceNote(accountId);
                     case "pollCreate": return await execPollCreate(accountId);
+                    case "pollVote": return await execPollVote(accountId);
                     case "readAll": return await execReadAll(accountId);
                   }
                 } catch (e) {
