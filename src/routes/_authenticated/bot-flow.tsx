@@ -5,7 +5,13 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useTelegramWebviewBridge } from "@/lib/telegram-webview-bridge";
 import { supabase } from "@/integrations/supabase/client";
 import { listAccounts } from "@/lib/accounts.functions";
-import { openStartAppLink, joinFromLink, extractVerifyLink } from "@/lib/tg-viewer.functions";
+import {
+  openStartAppLink,
+  joinFromLink,
+  extractVerifyLink,
+  pressInlineButtonAs,
+  sendMessageAs,
+} from "@/lib/tg-viewer.functions";
 import { previewChat } from "@/lib/chat-viewer.functions";
 import { useMiniAppProxyUrl } from "@/lib/miniapp-proxy-url";
 import { AdminGate } from "@/components/AdminGate";
