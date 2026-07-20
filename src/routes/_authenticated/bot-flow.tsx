@@ -1149,9 +1149,10 @@ function BotFlowPage() {
                   {visibleChatIds.map((id) => {
                     const a = accountList.find((x) => x.id === id);
                     const who = a?.first_name || a?.username || a?.phone || id.slice(0, 8);
-                    const src = `/accounts/${id}?peer=${encodeURIComponent(`@${parsed.username}`)}&solo=1`;
+                    const nonce = chatReload[id] ?? 0;
+                    const src = `/accounts/${id}?peer=${encodeURIComponent(`@${parsed.username}`)}&solo=1${nonce ? `&r=${nonce}` : ""}`;
                     return (
-                      <div key={id} className="flex h-[560px] flex-col overflow-hidden rounded-md border border-border bg-background">
+                      <div key={`${id}:${nonce}`} className="flex h-[560px] flex-col overflow-hidden rounded-md border border-border bg-background">
                         <div className="flex items-center gap-2 border-b px-2 py-1.5">
                           <div className="min-w-0 flex-1 text-xs">
                             <div className="truncate font-semibold">{who}</div>
@@ -1159,6 +1160,14 @@ function BotFlowPage() {
                               @{parsed.username}
                             </div>
                           </div>
+                          <button
+                            type="button"
+                            className="rounded px-1.5 py-0.5 text-[10px] font-medium hover:bg-muted border border-border"
+                            title="Re-run just this account from the start"
+                            onClick={() => rerunChat(id)}
+                          >
+                            Re-run
+                          </button>
                           <button
                             type="button"
                             className="rounded p-1 hover:bg-muted"
