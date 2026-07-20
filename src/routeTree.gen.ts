@@ -21,20 +21,16 @@ import { Route as AuthenticatedReferralsRouteImport } from './routes/_authentica
 import { Route as AuthenticatedRecipesRouteImport } from './routes/_authenticated/recipes'
 import { Route as AuthenticatedProfileUpdaterRouteImport } from './routes/_authenticated/profile-updater'
 import { Route as AuthenticatedOwnerRouteImport } from './routes/_authenticated/owner'
-import { Route as AuthenticatedMediaRouteImport } from './routes/_authenticated/media'
 import { Route as AuthenticatedJoinPacingRouteImport } from './routes/_authenticated/join-pacing'
 import { Route as AuthenticatedHealthRouteImport } from './routes/_authenticated/health'
 import { Route as AuthenticatedDashboardRouteImport } from './routes/_authenticated/dashboard'
 import { Route as AuthenticatedCleanupRouteImport } from './routes/_authenticated/cleanup'
 import { Route as AuthenticatedCaptchaRouteImport } from './routes/_authenticated/captcha'
-import { Route as AuthenticatedButtonsRouteImport } from './routes/_authenticated/buttons'
 import { Route as AuthenticatedBulkPlusRouteImport } from './routes/_authenticated/bulk-plus'
 import { Route as AuthenticatedBulkMixRouteImport } from './routes/_authenticated/bulk-mix'
 import { Route as AuthenticatedBotSuccessRouteImport } from './routes/_authenticated/bot-success'
-import { Route as AuthenticatedBotParserRouteImport } from './routes/_authenticated/bot-parser'
 import { Route as AuthenticatedBotFlowRouteImport } from './routes/_authenticated/bot-flow'
 import { Route as AuthenticatedAnalyticsRouteImport } from './routes/_authenticated/analytics'
-import { Route as AuthenticatedAlertsRouteImport } from './routes/_authenticated/alerts'
 import { Route as AuthenticatedActionsRouteImport } from './routes/_authenticated/actions'
 import { Route as ApiPublicCleanupStreamRouteImport } from './routes/api/public/cleanup-stream'
 import { Route as ApiPublicBulkStreamRouteImport } from './routes/api/public/bulk-stream'
@@ -110,11 +106,6 @@ const AuthenticatedOwnerRoute = AuthenticatedOwnerRouteImport.update({
   path: '/owner',
   getParentRoute: () => AuthenticatedRouteRoute,
 } as any)
-const AuthenticatedMediaRoute = AuthenticatedMediaRouteImport.update({
-  id: '/media',
-  path: '/media',
-  getParentRoute: () => AuthenticatedRouteRoute,
-} as any)
 const AuthenticatedJoinPacingRoute = AuthenticatedJoinPacingRouteImport.update({
   id: '/join-pacing',
   path: '/join-pacing',
@@ -140,11 +131,6 @@ const AuthenticatedCaptchaRoute = AuthenticatedCaptchaRouteImport.update({
   path: '/captcha',
   getParentRoute: () => AuthenticatedRouteRoute,
 } as any)
-const AuthenticatedButtonsRoute = AuthenticatedButtonsRouteImport.update({
-  id: '/buttons',
-  path: '/buttons',
-  getParentRoute: () => AuthenticatedRouteRoute,
-} as any)
 const AuthenticatedBulkPlusRoute = AuthenticatedBulkPlusRouteImport.update({
   id: '/bulk-plus',
   path: '/bulk-plus',
@@ -160,11 +146,6 @@ const AuthenticatedBotSuccessRoute = AuthenticatedBotSuccessRouteImport.update({
   path: '/bot-success',
   getParentRoute: () => AuthenticatedRouteRoute,
 } as any)
-const AuthenticatedBotParserRoute = AuthenticatedBotParserRouteImport.update({
-  id: '/bot-parser',
-  path: '/bot-parser',
-  getParentRoute: () => AuthenticatedRouteRoute,
-} as any)
 const AuthenticatedBotFlowRoute = AuthenticatedBotFlowRouteImport.update({
   id: '/bot-flow',
   path: '/bot-flow',
@@ -173,11 +154,6 @@ const AuthenticatedBotFlowRoute = AuthenticatedBotFlowRouteImport.update({
 const AuthenticatedAnalyticsRoute = AuthenticatedAnalyticsRouteImport.update({
   id: '/analytics',
   path: '/analytics',
-  getParentRoute: () => AuthenticatedRouteRoute,
-} as any)
-const AuthenticatedAlertsRoute = AuthenticatedAlertsRouteImport.update({
-  id: '/alerts',
-  path: '/alerts',
   getParentRoute: () => AuthenticatedRouteRoute,
 } as any)
 const AuthenticatedActionsRoute = AuthenticatedActionsRouteImport.update({
@@ -260,20 +236,16 @@ export interface FileRoutesByFullPath {
   '/auth': typeof AuthRoute
   '/reset-password': typeof ResetPasswordRoute
   '/actions': typeof AuthenticatedActionsRoute
-  '/alerts': typeof AuthenticatedAlertsRoute
   '/analytics': typeof AuthenticatedAnalyticsRoute
   '/bot-flow': typeof AuthenticatedBotFlowRoute
-  '/bot-parser': typeof AuthenticatedBotParserRoute
   '/bot-success': typeof AuthenticatedBotSuccessRoute
   '/bulk-mix': typeof AuthenticatedBulkMixRoute
   '/bulk-plus': typeof AuthenticatedBulkPlusRoute
-  '/buttons': typeof AuthenticatedButtonsRoute
   '/captcha': typeof AuthenticatedCaptchaRoute
   '/cleanup': typeof AuthenticatedCleanupRoute
   '/dashboard': typeof AuthenticatedDashboardRoute
   '/health': typeof AuthenticatedHealthRoute
   '/join-pacing': typeof AuthenticatedJoinPacingRoute
-  '/media': typeof AuthenticatedMediaRoute
   '/owner': typeof AuthenticatedOwnerRoute
   '/profile-updater': typeof AuthenticatedProfileUpdaterRoute
   '/recipes': typeof AuthenticatedRecipesRoute
@@ -301,20 +273,16 @@ export interface FileRoutesByTo {
   '/auth': typeof AuthRoute
   '/reset-password': typeof ResetPasswordRoute
   '/actions': typeof AuthenticatedActionsRoute
-  '/alerts': typeof AuthenticatedAlertsRoute
   '/analytics': typeof AuthenticatedAnalyticsRoute
   '/bot-flow': typeof AuthenticatedBotFlowRoute
-  '/bot-parser': typeof AuthenticatedBotParserRoute
   '/bot-success': typeof AuthenticatedBotSuccessRoute
   '/bulk-mix': typeof AuthenticatedBulkMixRoute
   '/bulk-plus': typeof AuthenticatedBulkPlusRoute
-  '/buttons': typeof AuthenticatedButtonsRoute
   '/captcha': typeof AuthenticatedCaptchaRoute
   '/cleanup': typeof AuthenticatedCleanupRoute
   '/dashboard': typeof AuthenticatedDashboardRoute
   '/health': typeof AuthenticatedHealthRoute
   '/join-pacing': typeof AuthenticatedJoinPacingRoute
-  '/media': typeof AuthenticatedMediaRoute
   '/owner': typeof AuthenticatedOwnerRoute
   '/profile-updater': typeof AuthenticatedProfileUpdaterRoute
   '/recipes': typeof AuthenticatedRecipesRoute
@@ -344,20 +312,16 @@ export interface FileRoutesById {
   '/auth': typeof AuthRoute
   '/reset-password': typeof ResetPasswordRoute
   '/_authenticated/actions': typeof AuthenticatedActionsRoute
-  '/_authenticated/alerts': typeof AuthenticatedAlertsRoute
   '/_authenticated/analytics': typeof AuthenticatedAnalyticsRoute
   '/_authenticated/bot-flow': typeof AuthenticatedBotFlowRoute
-  '/_authenticated/bot-parser': typeof AuthenticatedBotParserRoute
   '/_authenticated/bot-success': typeof AuthenticatedBotSuccessRoute
   '/_authenticated/bulk-mix': typeof AuthenticatedBulkMixRoute
   '/_authenticated/bulk-plus': typeof AuthenticatedBulkPlusRoute
-  '/_authenticated/buttons': typeof AuthenticatedButtonsRoute
   '/_authenticated/captcha': typeof AuthenticatedCaptchaRoute
   '/_authenticated/cleanup': typeof AuthenticatedCleanupRoute
   '/_authenticated/dashboard': typeof AuthenticatedDashboardRoute
   '/_authenticated/health': typeof AuthenticatedHealthRoute
   '/_authenticated/join-pacing': typeof AuthenticatedJoinPacingRoute
-  '/_authenticated/media': typeof AuthenticatedMediaRoute
   '/_authenticated/owner': typeof AuthenticatedOwnerRoute
   '/_authenticated/profile-updater': typeof AuthenticatedProfileUpdaterRoute
   '/_authenticated/recipes': typeof AuthenticatedRecipesRoute
@@ -387,20 +351,16 @@ export interface FileRouteTypes {
     | '/auth'
     | '/reset-password'
     | '/actions'
-    | '/alerts'
     | '/analytics'
     | '/bot-flow'
-    | '/bot-parser'
     | '/bot-success'
     | '/bulk-mix'
     | '/bulk-plus'
-    | '/buttons'
     | '/captcha'
     | '/cleanup'
     | '/dashboard'
     | '/health'
     | '/join-pacing'
-    | '/media'
     | '/owner'
     | '/profile-updater'
     | '/recipes'
@@ -428,20 +388,16 @@ export interface FileRouteTypes {
     | '/auth'
     | '/reset-password'
     | '/actions'
-    | '/alerts'
     | '/analytics'
     | '/bot-flow'
-    | '/bot-parser'
     | '/bot-success'
     | '/bulk-mix'
     | '/bulk-plus'
-    | '/buttons'
     | '/captcha'
     | '/cleanup'
     | '/dashboard'
     | '/health'
     | '/join-pacing'
-    | '/media'
     | '/owner'
     | '/profile-updater'
     | '/recipes'
@@ -470,20 +426,16 @@ export interface FileRouteTypes {
     | '/auth'
     | '/reset-password'
     | '/_authenticated/actions'
-    | '/_authenticated/alerts'
     | '/_authenticated/analytics'
     | '/_authenticated/bot-flow'
-    | '/_authenticated/bot-parser'
     | '/_authenticated/bot-success'
     | '/_authenticated/bulk-mix'
     | '/_authenticated/bulk-plus'
-    | '/_authenticated/buttons'
     | '/_authenticated/captcha'
     | '/_authenticated/cleanup'
     | '/_authenticated/dashboard'
     | '/_authenticated/health'
     | '/_authenticated/join-pacing'
-    | '/_authenticated/media'
     | '/_authenticated/owner'
     | '/_authenticated/profile-updater'
     | '/_authenticated/recipes'
@@ -609,13 +561,6 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedOwnerRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
-    '/_authenticated/media': {
-      id: '/_authenticated/media'
-      path: '/media'
-      fullPath: '/media'
-      preLoaderRoute: typeof AuthenticatedMediaRouteImport
-      parentRoute: typeof AuthenticatedRouteRoute
-    }
     '/_authenticated/join-pacing': {
       id: '/_authenticated/join-pacing'
       path: '/join-pacing'
@@ -651,13 +596,6 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedCaptchaRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
-    '/_authenticated/buttons': {
-      id: '/_authenticated/buttons'
-      path: '/buttons'
-      fullPath: '/buttons'
-      preLoaderRoute: typeof AuthenticatedButtonsRouteImport
-      parentRoute: typeof AuthenticatedRouteRoute
-    }
     '/_authenticated/bulk-plus': {
       id: '/_authenticated/bulk-plus'
       path: '/bulk-plus'
@@ -679,13 +617,6 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedBotSuccessRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
-    '/_authenticated/bot-parser': {
-      id: '/_authenticated/bot-parser'
-      path: '/bot-parser'
-      fullPath: '/bot-parser'
-      preLoaderRoute: typeof AuthenticatedBotParserRouteImport
-      parentRoute: typeof AuthenticatedRouteRoute
-    }
     '/_authenticated/bot-flow': {
       id: '/_authenticated/bot-flow'
       path: '/bot-flow'
@@ -698,13 +629,6 @@ declare module '@tanstack/react-router' {
       path: '/analytics'
       fullPath: '/analytics'
       preLoaderRoute: typeof AuthenticatedAnalyticsRouteImport
-      parentRoute: typeof AuthenticatedRouteRoute
-    }
-    '/_authenticated/alerts': {
-      id: '/_authenticated/alerts'
-      path: '/alerts'
-      fullPath: '/alerts'
-      preLoaderRoute: typeof AuthenticatedAlertsRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
     '/_authenticated/actions': {
@@ -810,20 +734,16 @@ declare module '@tanstack/react-router' {
 
 interface AuthenticatedRouteRouteChildren {
   AuthenticatedActionsRoute: typeof AuthenticatedActionsRoute
-  AuthenticatedAlertsRoute: typeof AuthenticatedAlertsRoute
   AuthenticatedAnalyticsRoute: typeof AuthenticatedAnalyticsRoute
   AuthenticatedBotFlowRoute: typeof AuthenticatedBotFlowRoute
-  AuthenticatedBotParserRoute: typeof AuthenticatedBotParserRoute
   AuthenticatedBotSuccessRoute: typeof AuthenticatedBotSuccessRoute
   AuthenticatedBulkMixRoute: typeof AuthenticatedBulkMixRoute
   AuthenticatedBulkPlusRoute: typeof AuthenticatedBulkPlusRoute
-  AuthenticatedButtonsRoute: typeof AuthenticatedButtonsRoute
   AuthenticatedCaptchaRoute: typeof AuthenticatedCaptchaRoute
   AuthenticatedCleanupRoute: typeof AuthenticatedCleanupRoute
   AuthenticatedDashboardRoute: typeof AuthenticatedDashboardRoute
   AuthenticatedHealthRoute: typeof AuthenticatedHealthRoute
   AuthenticatedJoinPacingRoute: typeof AuthenticatedJoinPacingRoute
-  AuthenticatedMediaRoute: typeof AuthenticatedMediaRoute
   AuthenticatedOwnerRoute: typeof AuthenticatedOwnerRoute
   AuthenticatedProfileUpdaterRoute: typeof AuthenticatedProfileUpdaterRoute
   AuthenticatedRecipesRoute: typeof AuthenticatedRecipesRoute
@@ -840,20 +760,16 @@ interface AuthenticatedRouteRouteChildren {
 
 const AuthenticatedRouteRouteChildren: AuthenticatedRouteRouteChildren = {
   AuthenticatedActionsRoute: AuthenticatedActionsRoute,
-  AuthenticatedAlertsRoute: AuthenticatedAlertsRoute,
   AuthenticatedAnalyticsRoute: AuthenticatedAnalyticsRoute,
   AuthenticatedBotFlowRoute: AuthenticatedBotFlowRoute,
-  AuthenticatedBotParserRoute: AuthenticatedBotParserRoute,
   AuthenticatedBotSuccessRoute: AuthenticatedBotSuccessRoute,
   AuthenticatedBulkMixRoute: AuthenticatedBulkMixRoute,
   AuthenticatedBulkPlusRoute: AuthenticatedBulkPlusRoute,
-  AuthenticatedButtonsRoute: AuthenticatedButtonsRoute,
   AuthenticatedCaptchaRoute: AuthenticatedCaptchaRoute,
   AuthenticatedCleanupRoute: AuthenticatedCleanupRoute,
   AuthenticatedDashboardRoute: AuthenticatedDashboardRoute,
   AuthenticatedHealthRoute: AuthenticatedHealthRoute,
   AuthenticatedJoinPacingRoute: AuthenticatedJoinPacingRoute,
-  AuthenticatedMediaRoute: AuthenticatedMediaRoute,
   AuthenticatedOwnerRoute: AuthenticatedOwnerRoute,
   AuthenticatedProfileUpdaterRoute: AuthenticatedProfileUpdaterRoute,
   AuthenticatedRecipesRoute: AuthenticatedRecipesRoute,
