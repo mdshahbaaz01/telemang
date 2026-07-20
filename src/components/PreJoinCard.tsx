@@ -395,7 +395,7 @@ export function PreJoinCard({ accounts }: { accounts: Account[] }) {
                 <div className="max-h-80 overflow-auto grid grid-cols-1 sm:grid-cols-2 gap-3">
                   {(() => {
                     // Invert: group by account id, each account gets a box with its channel chips.
-                    const perAcct = new Map<string, Array<{ channel: string; status: ChStatus; ts: number; message?: string }>>();
+                    const perAcct = new Map<string, Array<{ channel: string; status: ChStatus; ts: number; message?: string; reason?: string; attempts?: number }>>();
                     for (const [ch, row] of Object.entries(statuses)) {
                       for (const [aid, cell] of Object.entries(row)) {
                         if (!perAcct.has(aid)) perAcct.set(aid, []);
