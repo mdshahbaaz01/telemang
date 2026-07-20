@@ -1080,6 +1080,67 @@ function BotFlowPage() {
                       </>
                     )}
                   </div>
+                  <div className="rounded-md border border-border bg-background/60 p-2 text-xs space-y-2">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <span className="font-medium">Broadcast a bot button</span>
+                      <span className="text-muted-foreground">
+                        · press once, fires on all {chatOpen.length} open account(s)
+                      </span>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        className="ml-auto"
+                        onClick={refreshBotButtons}
+                        disabled={botBtnState.loading}
+                      >
+                        {botBtnState.loading ? "Loading…" : botBtnState.labels.length ? "Refresh buttons" : "Load bot buttons"}
+                      </Button>
+                    </div>
+                    {botBtnState.labels.length > 0 && (
+                      <>
+                        <div className="flex flex-wrap gap-1.5">
+                          {botBtnState.labels.map((b) => {
+                            const supported =
+                              b.kinds.includes("callback") || b.kinds.includes("reply");
+                            const cover = Object.values(botBtnState.perAccount).filter((v) =>
+                              v.buttons.some((x) => x.label === b.label),
+                            ).length;
+                            const total = Object.keys(botBtnState.perAccount).length;
+                            const busy = pressingLabel === b.label;
+                            return (
+                              <button
+                                key={b.label}
+                                type="button"
+                                disabled={!supported || busy}
+                                onClick={() => broadcastPress(b.label)}
+                                title={
+                                  supported
+                                    ? `Press "${b.label}" on ${cover}/${total} accounts`
+                                    : `Not broadcastable (${b.kinds.join(", ")})`
+                                }
+                                className={
+                                  "inline-flex items-center gap-1 rounded-md border px-2 py-1 text-[11px] " +
+                                  (supported
+                                    ? "border-primary/40 bg-primary/10 hover:bg-primary/20"
+                                    : "border-border bg-muted text-muted-foreground opacity-70") +
+                                  (busy ? " animate-pulse" : "")
+                                }
+                              >
+                                <span className="max-w-[220px] truncate">{b.label || "(unnamed)"}</span>
+                                <span className="rounded bg-background/70 px-1 text-[10px] font-mono">
+                                  {cover}/{total}
+                                </span>
+                              </button>
+                            );
+                          })}
+                        </div>
+                        <div className="text-[10px] text-muted-foreground">
+                          Callback + reply-text buttons broadcast automatically. URL / WebApp
+                          buttons stay per-account (open them inside each chat).
+                        </div>
+                      </>
+                    )}
+                  </div>
                   <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3">
                   {visibleChatIds.map((id) => {
                     const a = accountList.find((x) => x.id === id);
