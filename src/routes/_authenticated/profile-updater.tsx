@@ -1,10 +1,10 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
 import { toast } from "sonner";
 import { listAccounts } from "@/lib/accounts.functions";
-import { updateProfileBulk } from "@/lib/profile.functions";
+import { updateProfileBulk, getAccountProfile } from "@/lib/profile.functions";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -12,7 +12,9 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Loader2, UserCog } from "lucide-react";
+import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Loader2, UserCog, RefreshCw } from "lucide-react";
 import { requireAdminBeforeLoad } from "@/lib/access-guard";
 
 export const Route = createFileRoute("/_authenticated/profile-updater")({
@@ -29,6 +31,7 @@ export const Route = createFileRoute("/_authenticated/profile-updater")({
 function ProfileUpdater() {
   const listFn = useServerFn(listAccounts);
   const runFn = useServerFn(updateProfileBulk);
+  const getProfileFn = useServerFn(getAccountProfile);
   const accountsQ = useQuery({ queryKey: ["accounts"], queryFn: () => listFn() });
   const accounts = accountsQ.data ?? [];
 
@@ -101,11 +104,22 @@ function ProfileUpdater() {
         <UserCog className="h-5 w-5" />
         <h1 className="text-xl font-semibold">Profile Updater</h1>
       </div>
-      <p className="text-sm text-muted-foreground">
-        Bulk-update first/last name, bio, username, and avatar across selected accounts. Leave a field empty to skip it.
-      </p>
 
-      <div className="grid gap-4 md:grid-cols-2">
+      <Tabs defaultValue="single" className="space-y-4">
+        <TabsList>
+          <TabsTrigger value="single">Single account (edit)</TabsTrigger>
+          <TabsTrigger value="bulk">Bulk update</TabsTrigger>
+        </TabsList>
+
+        <TabsContent value="single">
+          <SingleEditor accounts={accounts} getProfileFn={getProfileFn} runFn={runFn} />
+        </TabsContent>
+
+        <TabsContent value="bulk" className="space-y-4">
+          <p className="text-sm text-muted-foreground">
+            Bulk-update first/last name, bio, username, and avatar across selected accounts. Leave a field empty to skip it.
+          </p>
+          <div className="grid gap-4 md:grid-cols-2">
         <Card>
           <CardHeader><CardTitle className="text-base">Fields</CardTitle></CardHeader>
           <CardContent className="space-y-3">
@@ -147,7 +161,7 @@ function ProfileUpdater() {
             ))}
           </CardContent>
         </Card>
-      </div>
+          </div>
 
       <div className="flex items-center gap-2">
         <Button onClick={run} disabled={!canRun || busy}>
@@ -173,6 +187,178 @@ function ProfileUpdater() {
           </CardContent>
         </Card>
       )}
+        </TabsContent>
+      </Tabs>
     </div>
+  );
+}
+
+type AccountLite = { id: string; first_name?: string | null; phone?: string | null; username?: string | null; status?: string | null };
+
+function SingleEditor({
+  accounts,
+  getProfileFn,
+  runFn,
+}: {
+  accounts: AccountLite[];
+  getProfileFn: (args: { data: { accountId: string } }) => Promise<{ firstName: string; lastName: string; username: string; bio: string; avatarDataUrl: string | null }>;
+  runFn: (args: { data: { accountIds: string[]; fields: Record<string, unknown> } }) => Promise<{ results: Array<{ accountId: string; ok: boolean; message: string }> }>;
+}) {
+  const [accountId, setAccountId] = useState<string>("");
+  const [firstName, setFirst] = useState("");
+  const [lastName, setLast] = useState("");
+  const [bio, setBio] = useState("");
+  const [username, setUsername] = useState("");
+  const [avatarFile, setAvatarFile] = useState<File | null>(null);
+  const [currentAvatar, setCurrentAvatar] = useState<string | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [result, setResult] = useState<{ ok: boolean; message: string } | null>(null);
+  const fileRef = useRef<HTMLInputElement>(null);
+
+  const loadProfile = async (id: string) => {
+    if (!id) return;
+    setLoading(true);
+    setResult(null);
+    try {
+      const p = await getProfileFn({ data: { accountId: id } });
+      setFirst(p.firstName);
+      setLast(p.lastName);
+      setUsername(p.username);
+      setBio(p.bio);
+      setCurrentAvatar(p.avatarDataUrl);
+      setAvatarFile(null);
+      if (fileRef.current) fileRef.current.value = "";
+    } catch (e) {
+      toast.error(`Load failed: ${(e as Error).message}`);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    if (accountId) loadProfile(accountId);
+     
+  }, [accountId]);
+
+  const selected = accounts.find((a) => a.id === accountId);
+
+  const save = async () => {
+    if (!accountId) return;
+    setSaving(true);
+    setResult(null);
+    try {
+      let avatarPath: string | undefined;
+      if (avatarFile) {
+        const { data: userRes } = await supabase.auth.getUser();
+        const uid = userRes.user?.id;
+        if (!uid) throw new Error("Not signed in");
+        const key = `${uid}/avatar-${Date.now()}-${avatarFile.name.replace(/[^a-zA-Z0-9._-]/g, "_")}`;
+        const { error } = await supabase.storage.from("action-attachments").upload(key, avatarFile, {
+          contentType: avatarFile.type || "image/jpeg",
+          upsert: false,
+        });
+        if (error) throw new Error(`Avatar upload failed: ${error.message}`);
+        avatarPath = key;
+      }
+      const out = await runFn({
+        data: {
+          accountIds: [accountId],
+          fields: {
+            firstName,
+            lastName,
+            bio,
+            username,
+            ...(avatarPath ? { avatarPath } : {}),
+          },
+        },
+      });
+      const r = out.results[0];
+      setResult(r);
+      if (r?.ok) {
+        toast.success("Profile updated");
+        loadProfile(accountId);
+      } else {
+        toast.error(r?.message ?? "Update failed");
+      }
+    } catch (e) {
+      toast.error((e as Error).message);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle className="text-base">Edit a single account</CardTitle>
+      </CardHeader>
+      <CardContent className="space-y-4">
+        <div className="flex items-end gap-2">
+          <div className="flex-1">
+            <Label>Account</Label>
+            <Select value={accountId} onValueChange={setAccountId}>
+              <SelectTrigger><SelectValue placeholder="Select an account…" /></SelectTrigger>
+              <SelectContent>
+                {accounts.map((a) => (
+                  <SelectItem key={a.id} value={a.id}>
+                    {a.first_name ?? a.phone} {a.username ? `@${a.username}` : ""}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+          <Button variant="outline" size="icon" disabled={!accountId || loading} onClick={() => loadProfile(accountId)} title="Reload current values">
+            {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
+          </Button>
+        </div>
+
+        {accountId && (
+          <>
+            <div className="flex items-center gap-3">
+              <div className="h-16 w-16 overflow-hidden rounded-full border bg-muted">
+                {currentAvatar ? (
+                  <img src={currentAvatar} alt="avatar" className="h-full w-full object-cover" />
+                ) : (
+                  <div className="flex h-full w-full items-center justify-center text-xs text-muted-foreground">No photo</div>
+                )}
+              </div>
+              <div className="text-xs text-muted-foreground">
+                {selected?.phone ? `Phone: ${selected.phone}` : null}
+                {loading ? " • Loading current values…" : ""}
+              </div>
+            </div>
+
+            <div className="grid grid-cols-2 gap-3">
+              <div><Label>First name</Label><Input value={firstName} onChange={(e) => setFirst(e.target.value)} maxLength={64} /></div>
+              <div><Label>Last name</Label><Input value={lastName} onChange={(e) => setLast(e.target.value)} maxLength={64} /></div>
+            </div>
+            <div>
+              <Label>Bio (max 70)</Label>
+              <Textarea value={bio} onChange={(e) => setBio(e.target.value)} maxLength={70} rows={2} />
+            </div>
+            <div>
+              <Label>Username</Label>
+              <Input value={username} onChange={(e) => setUsername(e.target.value.replace(/^@/, ""))} placeholder="myhandle" />
+              <p className="mt-1 text-xs text-muted-foreground">4–32 chars, must start with a letter. Leave empty to clear the username.</p>
+            </div>
+            <div>
+              <Label>New avatar (optional)</Label>
+              <Input ref={fileRef} type="file" accept="image/*" onChange={(e) => setAvatarFile(e.target.files?.[0] ?? null)} />
+            </div>
+
+            <div className="flex items-center gap-2">
+              <Button onClick={save} disabled={saving || loading}>
+                {saving ? <Loader2 className="mr-1 h-4 w-4 animate-spin" /> : <UserCog className="mr-1 h-4 w-4" />}
+                Save changes
+              </Button>
+              {result && (
+                <span className={`text-sm ${result.ok ? "text-green-600" : "text-red-600"}`}>{result.message}</span>
+              )}
+            </div>
+          </>
+        )}
+      </CardContent>
+    </Card>
   );
 }
