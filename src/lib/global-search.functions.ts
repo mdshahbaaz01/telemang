@@ -61,7 +61,7 @@ export const globalSearch = createServerFn({ method: "POST" })
         query: z.string().min(1).max(200),
         accountIds: z.array(z.string().uuid()).min(1).max(50),
         scope: z.enum(["chats", "messages", "users"]).default("chats"),
-        concurrency: z.number().int().min(1).max(20).default(5),
+        concurrency: z.coerce.number().int().min(1).max(20).catch(20).default(5),
       })
       .parse(d),
   )

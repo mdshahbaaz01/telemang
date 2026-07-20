@@ -117,7 +117,7 @@ export const runParseScan = createServerFn({ method: "POST" })
       accountIds: z.array(z.string().uuid()).min(1).max(50),
       ruleIds: z.array(z.string().uuid()).min(1).max(20),
       messagesPerBot: z.number().int().min(1).max(200).default(30),
-      concurrency: z.number().int().min(1).max(10).default(4),
+      concurrency: z.coerce.number().int().min(1).max(10).catch(10).default(4),
     }).parse(d),
   )
   .handler(async ({ data, context }) => {

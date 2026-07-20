@@ -310,7 +310,7 @@ function BotFlowPage() {
           accountIds,
           minDelay: 1,
           maxDelay: 2,
-          concurrency: runParallel ? Math.max(1, accountIds.length) : 1,
+          concurrency: runParallel ? Math.max(1, Math.min(20, accountIds.length)) : 1,
           op: {
             kind: "botflow",
             bot: link,

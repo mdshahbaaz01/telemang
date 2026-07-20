@@ -21,7 +21,7 @@ const stepSchema = z.object({
   // Extra pause after this step completes (in seconds).
   waitAfter: z.number().int().min(0).max(3600).default(0),
   accountIds: z.array(z.string().uuid()).max(200).default([]),
-  concurrency: z.number().int().min(1).max(20).default(5),
+  concurrency: z.coerce.number().int().min(1).max(20).catch(20).default(5),
   note: z.string().max(200).default(""),
 });
 
