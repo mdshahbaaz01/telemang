@@ -804,6 +804,10 @@ function buildOverrideScript(accountId: string, upstreamUrl: string, token: stri
         // Resolve against upstream base so /foo → upstream/foo, not our origin.
         const abs = new URL(s, UPSTREAM);
         if (abs.protocol !== 'http:' && abs.protocol !== 'https:') return s;
+        const explicitRemote = /^https?:\/\//i.test(s) || /^\/\//.test(s);
+        if (explicitRemote && upstreamOrigin && abs.origin !== upstreamOrigin && abs.origin !== location.origin) {
+          return abs.toString();
+        }
         if (${JSON.stringify(DIRECT_SECURITY_HOSTS)}.some((allowed) => {
           const host = abs.hostname.toLowerCase().replace(/^www\./, '');
           const normalized = String(allowed).toLowerCase().replace(/^www\./, '');
@@ -1206,6 +1210,8 @@ function rewriteHtmlUrls(
       const parsed = new URL(raw, base);
       const absolute = parsed.toString();
       if (!/^https?:\/\//i.test(absolute)) return raw;
+      const explicitRemote = /^https?:\/\//i.test(raw) || /^\/\//.test(raw);
+      if (explicitRemote && parsed.origin !== base.origin) return absolute;
       if (isDirectSecurityHost(parsed.hostname)) return absolute;
       return proxyUrl(absolute, accountId, token, proxyOrigin, { ...opts, referrer: baseUrl });
     } catch {
@@ -1243,6 +1249,8 @@ function rewriteCssUrls(
     if (!value || value.startsWith("data:") || value.startsWith("blob:")) return `url(${quote}${value}${quote})`;
     try {
       const parsed = new URL(value, base);
+      const explicitRemote = /^https?:\/\//i.test(value) || /^\/\//.test(value);
+      if (explicitRemote && parsed.origin !== base.origin) return `url(${quote}${parsed.toString()}${quote})`;
       if (isDirectSecurityHost(parsed.hostname)) return `url(${quote}${parsed.toString()}${quote})`;
       return `url(${quote}${proxyUrl(parsed.toString(), accountId, token, proxyOrigin, { ...opts, referrer: baseUrl })}${quote})`;
     } catch {
