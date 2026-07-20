@@ -1845,16 +1845,97 @@ function BulkVerifyRunner({
 
       <div className="grid gap-3 md:grid-cols-[1fr_260px]">
         <div>
-          <Label>Verification URLs (one per line)</Label>
-          <textarea
-            value={text}
-            onChange={(e) => setText(e.target.value)}
-            rows={6}
-            className="mt-1 w-full rounded-md border border-input bg-background p-2 font-mono text-xs"
-            placeholder={"https://bots.example.com/verify/xyz#tgWebAppData=...\nhttps://bots.example.com/verify/abc#tgWebAppData=..."}
-          />
+          <div className="flex items-center justify-between">
+            <Label>Verification links</Label>
+            {entries.some((e) => e.url.trim()) && (
+              <button
+                type="button"
+                className="text-[11px] underline text-muted-foreground"
+                onClick={clearEntries}
+              >
+                Clear all
+              </button>
+            )}
+          </div>
+          <div className="mt-1 space-y-2">
+            {entries.map((e, idx) => {
+              const normalized = normalizeUrl(e.url);
+              const auto = normalized ? entryAccountFor(normalized) : null;
+              const chosenId = e.accountOverride || auto || "";
+              const chosen = chosenId ? accountList.find((a) => a.id === chosenId) : null;
+              const chosenLabel = chosen
+                ? (chosen.first_name || chosen.username || chosen.phone || chosen.id.slice(0, 8))
+                : "";
+              const isLastEmpty = idx === entries.length - 1 && !e.url.trim();
+              return (
+                <div key={e.id} className="rounded-md border border-border bg-background p-2">
+                  <div className="flex items-start gap-2">
+                    <span className="mt-1.5 w-5 shrink-0 text-center text-[10px] text-muted-foreground">
+                      {idx + 1}
+                    </span>
+                    <div className="flex-1">
+                      <Input
+                        value={e.url}
+                        onChange={(ev) => updateEntry(e.id, { url: ev.target.value })}
+                        onPaste={(ev) => {
+                          const raw = ev.clipboardData.getData("text");
+                          if (pasteMany(raw, e.id)) ev.preventDefault();
+                        }}
+                        placeholder={
+                          idx === 0
+                            ? "https://bots.example.com/verify/xyz#tgWebAppData=..."
+                            : "Paste another link…"
+                        }
+                        className="font-mono text-xs"
+                      />
+                      {normalized && (
+                        <div className="mt-1 flex flex-wrap items-center gap-2 text-[10px] text-muted-foreground">
+                          {auto ? (
+                            <span className="rounded bg-green-500/15 px-1.5 py-0.5 text-green-600 dark:text-green-400">
+                              auto → {chosenLabel}
+                            </span>
+                          ) : (
+                            <span className="rounded bg-muted px-1.5 py-0.5">
+                              round-robin{chosenLabel ? ` → ${chosenLabel}` : ""}
+                            </span>
+                          )}
+                          <select
+                            className="rounded border border-input bg-background px-1 py-0.5 text-[10px]"
+                            value={e.accountOverride || ""}
+                            onChange={(ev) =>
+                              updateEntry(e.id, { accountOverride: ev.target.value || null })
+                            }
+                          >
+                            <option value="">
+                              {auto ? `keep auto (${chosenLabel})` : "auto / round-robin"}
+                            </option>
+                            {accountList.map((a) => (
+                              <option key={a.id} value={a.id}>
+                                {a.first_name || a.username || a.phone || a.id.slice(0, 8)}
+                              </option>
+                            ))}
+                          </select>
+                        </div>
+                      )}
+                    </div>
+                    {!isLastEmpty && (
+                      <button
+                        type="button"
+                        className="rounded p-1.5 text-muted-foreground hover:bg-muted"
+                        title="Remove"
+                        onClick={() => removeEntry(e.id)}
+                      >
+                        <X className="h-3.5 w-3.5" />
+                      </button>
+                    )}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
           <div className="mt-1 text-[11px] text-muted-foreground">
-            {parsedLinks.length} valid link(s) parsed.
+            {parsedLinks.length} valid link(s) ·{" "}
+            {parsedEntries.filter((e) => entryAccountFor(e.normalized)).length} auto-matched
           </div>
         </div>
         <div>
