@@ -53,6 +53,34 @@ const DROP_UPSTREAM_REQUEST_HEADERS = new Set([
   "x-real-ip",
 ]);
 
+// Security/captcha vendors must stay direct. Proxying these scripts/iframes
+// makes providers such as Cloudflare Turnstile see the proxy route instead of
+// their own browser challenge channel, which produces the recurring
+// “Connection Lost / unable to reach security servers” screen.
+const DIRECT_SECURITY_HOSTS = [
+  "challenges.cloudflare.com",
+  "static.cloudflareinsights.com",
+  "cloudflareinsights.com",
+  "hcaptcha.com",
+  "newassets.hcaptcha.com",
+  "js.hcaptcha.com",
+  "google.com",
+  "www.google.com",
+  "gstatic.com",
+  "www.gstatic.com",
+  "recaptcha.net",
+  "www.recaptcha.net",
+  "telegram.org",
+];
+
+function isDirectSecurityHost(hostname: string): boolean {
+  const host = hostname.toLowerCase().replace(/^www\./, "");
+  return DIRECT_SECURITY_HOSTS.some((allowed) => {
+    const normalized = allowed.toLowerCase().replace(/^www\./, "");
+    return host === normalized || host.endsWith(`.${normalized}`);
+  });
+}
+
 type StoredCookie = {
   value: string;
   domain: string;
@@ -776,6 +804,11 @@ function buildOverrideScript(accountId: string, upstreamUrl: string, token: stri
         // Resolve against upstream base so /foo → upstream/foo, not our origin.
         const abs = new URL(s, UPSTREAM);
         if (abs.protocol !== 'http:' && abs.protocol !== 'https:') return s;
+        if (${JSON.stringify(DIRECT_SECURITY_HOSTS)}.some((allowed) => {
+          const host = abs.hostname.toLowerCase().replace(/^www\./, '');
+          const normalized = String(allowed).toLowerCase().replace(/^www\./, '');
+          return host === normalized || host.endsWith('.' + normalized);
+        })) return abs.toString();
         // Already proxied? keep it proxied, but make sure the per-account
         // identity survives hardcoded JS URLs rewritten by the server.
         if (abs.origin === location.origin && abs.pathname.startsWith(PROXY_PREFIX)) {
@@ -1170,8 +1203,10 @@ function rewriteHtmlUrls(
       return raw;
     }
     try {
-      const absolute = new URL(raw, base).toString();
+      const parsed = new URL(raw, base);
+      const absolute = parsed.toString();
       if (!/^https?:\/\//i.test(absolute)) return raw;
+      if (isDirectSecurityHost(parsed.hostname)) return absolute;
       return proxyUrl(absolute, accountId, token, proxyOrigin, { ...opts, referrer: baseUrl });
     } catch {
       return raw;
@@ -1207,7 +1242,9 @@ function rewriteCssUrls(
   return css.replace(/url\((['"]?)(.*?)\1\)/gi, (_m, quote, value) => {
     if (!value || value.startsWith("data:") || value.startsWith("blob:")) return `url(${quote}${value}${quote})`;
     try {
-      return `url(${quote}${proxyUrl(new URL(value, base).toString(), accountId, token, proxyOrigin, { ...opts, referrer: baseUrl })}${quote})`;
+      const parsed = new URL(value, base);
+      if (isDirectSecurityHost(parsed.hostname)) return `url(${quote}${parsed.toString()}${quote})`;
+      return `url(${quote}${proxyUrl(parsed.toString(), accountId, token, proxyOrigin, { ...opts, referrer: baseUrl })}${quote})`;
     } catch {
       return `url(${quote}${value}${quote})`;
     }
