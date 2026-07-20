@@ -343,6 +343,43 @@ function BotFlowPage() {
   const [miniRuns, setMiniRuns] = useState<
     { accountId: string; status: "loading" | "ready" | "error"; url?: string; error?: string }[]
   >([]);
+  // Concurrency cap for mounted mini-app iframes. Each iframe boots a full
+  // Telegram WebView proxy + fingerprint bridge; mounting 10+ at once
+  // exhausts browser/network resources and produces black screens.
+  const [miniLimit, setMiniLimit] = useState<number>(() => {
+    if (typeof window === "undefined") return 3;
+    try {
+      const s = window.localStorage.getItem("botflow.miniLimit");
+      if (s) return Math.max(1, Math.min(12, parseInt(s, 10) || 3));
+    } catch {}
+    return window.matchMedia?.("(max-width: 768px)").matches ? 1 : 3;
+  });
+  useEffect(() => {
+    try { window.localStorage.setItem("botflow.miniLimit", String(miniLimit)); } catch {}
+  }, [miniLimit]);
+  const [miniMounted, setMiniMounted] = useState<Set<string>>(new Set());
+  const toggleMiniMount = (id: string) =>
+    setMiniMounted((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  // Auto-mount ready panels up to the concurrency cap, in list order.
+  useEffect(() => {
+    setMiniMounted((prev) => {
+      const ready = miniRuns.filter((r) => r.status === "ready" && r.url);
+      const kept = new Set<string>();
+      for (const r of ready) if (prev.has(r.accountId)) kept.add(r.accountId);
+      for (const r of ready) {
+        if (kept.size >= miniLimit) break;
+        kept.add(r.accountId);
+      }
+      // no-op if identical
+      if (kept.size === prev.size && [...kept].every((x) => prev.has(x))) return prev;
+      return kept;
+    });
+  }, [miniRuns, miniLimit]);
 
   const miniParsed = useMemo(() => {
     const raw = miniLink.trim();
@@ -1127,6 +1164,20 @@ function BotFlowPage() {
                 Close all
               </Button>
             )}
+            <div className="ml-auto flex items-center gap-2 text-xs">
+              <Label className="text-xs">Max live</Label>
+              <Input
+                type="number"
+                min={1}
+                max={12}
+                value={miniLimit}
+                onChange={(e) => setMiniLimit(Math.max(1, Math.min(12, parseInt(e.target.value, 10) || 1)))}
+                className="h-8 w-16"
+              />
+              <span className="text-muted-foreground">
+                {miniMounted.size} live · {miniRuns.filter((r) => r.status === "ready" && !miniMounted.has(r.accountId)).length} queued
+              </span>
+            </div>
           </div>
 
           {miniRuns.length > 0 && (
@@ -1159,6 +1210,17 @@ function BotFlowPage() {
                         <RefreshCw className={`h-3.5 w-3.5 ${r.status === "loading" ? "animate-spin" : ""}`} />
                         Refresh
                       </button>
+                      {r.status === "ready" && (
+                        <button
+                          type="button"
+                          className="inline-flex items-center gap-1 rounded border border-border px-2 py-1 text-[11px] hover:bg-muted"
+                          title={miniMounted.has(r.accountId) ? "Unload iframe (free resources)" : "Load this mini app"}
+                          onClick={() => toggleMiniMount(r.accountId)}
+                        >
+                          {miniMounted.has(r.accountId) ? <Square className="h-3.5 w-3.5" /> : <Play className="h-3.5 w-3.5" />}
+                          {miniMounted.has(r.accountId) ? "Unload" : "Load"}
+                        </button>
+                      )}
                       <button
                         type="button"
                         className="rounded p-1 hover:bg-muted"
@@ -1177,9 +1239,16 @@ function BotFlowPage() {
                       {r.status === "error" && (
                         <div className="p-3 text-xs text-destructive">{r.error}</div>
                       )}
-                       {r.status === "ready" && r.url && (
+                       {r.status === "ready" && r.url && (miniMounted.has(r.accountId) ? (
                          <MiniAppFrame url={r.url} title={who} accountId={r.accountId} botUsername={miniParsed?.username ?? ""} />
-                      )}
+                       ) : (
+                         <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 bg-muted/30 p-3 text-center text-xs text-muted-foreground">
+                           <div>Queued — mini-app not loaded to save resources.</div>
+                           <Button size="sm" variant="outline" onClick={() => toggleMiniMount(r.accountId)}>
+                             <Play className="mr-1 h-3.5 w-3.5" /> Load
+                           </Button>
+                         </div>
+                       ))}
                     </div>
                   </div>
                 );
