@@ -888,6 +888,21 @@ async function handle(request: Request, params: { _splat?: string }) {
     if (!STRIP_HEADERS.has(k.toLowerCase())) outHeaders.set(k, v);
   });
   outHeaders.set("access-control-allow-origin", "*");
+  // Debug headers so operators can see exactly what the upstream returned
+  // without stepping into server logs. Visible in DevTools → Network.
+  outHeaders.set("x-proxy-upstream-status", String(upstream.status));
+  outHeaders.set("x-proxy-upstream-ctype", upstream.headers.get("content-type") || "(none)");
+  outHeaders.set("x-proxy-upstream-url", upstream.url || target);
+  // Never let the browser cache proxy responses — the token, cookie, and
+  // upstream state all change per request.
+  outHeaders.set("cache-control", "no-store, no-cache, must-revalidate");
+  outHeaders.set("pragma", "no-cache");
+  console.log("[miniapp-proxy]", {
+    status: upstream.status,
+    ctype: upstream.headers.get("content-type"),
+    url: upstream.url || target,
+    accountId,
+  });
   // Backup cookie: subsequent sub-resource requests from the iframe carry
   // the token even if the URL rewriter missed an inline reference.
   outHeaders.append(
