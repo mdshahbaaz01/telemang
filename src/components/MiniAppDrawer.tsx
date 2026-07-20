@@ -34,6 +34,7 @@ export function MiniAppDrawer({
   const [reloadNonce, setReloadNonce] = useState(0);
   const [blocked, setBlocked] = useState<{ text?: string } | null>(null);
   const [directMode, setDirectMode] = useState(false);
+  const [slowFallback, setSlowFallback] = useState(false);
   const iframeRef = useRef<HTMLIFrameElement | null>(null);
   useTelegramWebviewBridge(iframeRef, { onBlocked: (details) => setBlocked({ text: details.text }) });
   const solve = useServerFn(solveCaptcha);
@@ -110,6 +111,7 @@ export function MiniAppDrawer({
       setError(null);
       setReloadNonce(0);
         setDirectMode(false);
+        setSlowFallback(false);
       setCapLogs([]);
       return;
     }
@@ -118,6 +120,7 @@ export function MiniAppDrawer({
     setError(null);
     setBlocked(null);
     setDirectMode(false);
+    setSlowFallback(false);
     resolver(request)
       .then((res) => {
         if (cancelled) return;
@@ -135,6 +138,13 @@ export function MiniAppDrawer({
       cancelled = true;
     };
   }, [open, request, resolver]);
+
+  useEffect(() => {
+    if (!iframeUrl || error) return;
+    setSlowFallback(false);
+    const t = window.setTimeout(() => setSlowFallback(true), directMode ? 6500 : 8500);
+    return () => window.clearTimeout(t);
+  }, [iframeUrl, reloadNonce, directMode, error]);
 
   if (!open) return null;
 
@@ -207,12 +217,29 @@ export function MiniAppDrawer({
                 allow="clipboard-read; clipboard-write; camera; microphone; geolocation; payment"
                 sandbox="allow-scripts allow-same-origin allow-forms allow-modals allow-popups allow-popups-to-escape-sandbox allow-storage-access-by-user-activation allow-top-navigation-by-user-activation"
                 referrerPolicy="no-referrer-when-downgrade"
+                onLoad={() => setSlowFallback(false)}
                 onError={() =>
                   setError(
                     "The mini app refused to load in the embedded viewer.",
                   )
                 }
               />
+              {slowFallback && resolvedUrl && !blocked && (
+                <div className="absolute inset-x-3 bottom-3 rounded-lg border border-yellow-500/40 bg-background/95 p-3 text-xs shadow-lg backdrop-blur">
+                  <div className="mb-2 font-semibold">Mini app is not responding here</div>
+                  <div className="mb-3 text-muted-foreground">
+                    If direct mode shows “Connection Lost” and proxy mode says “refused to connect”, open it in Telegram/System Browser.
+                  </div>
+                  <div className="flex flex-wrap gap-2">
+                    {!directMode && (
+                      <Button size="sm" variant="secondary" onClick={() => { setDirectMode(true); setReloadNonce((n) => n + 1); }}>
+                        Try direct
+                      </Button>
+                    )}
+                    <BrowserPickerButton url={resolvedUrl} size="sm" variant="outline" />
+                  </div>
+                </div>
+              )}
               {blocked && resolvedUrl && (
                 <div className="absolute inset-x-3 bottom-3 rounded-lg border border-border bg-background/95 p-3 text-xs shadow-lg backdrop-blur">
                   <div className="mb-2 font-semibold">Verification blocked in embedded view</div>

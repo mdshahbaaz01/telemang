@@ -1,12 +1,15 @@
-import { Globe } from "lucide-react";
+import { Copy, Globe } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { copyWithToast } from "@/lib/clipboard";
+import { toast } from "sonner";
 
 type BrowserOption = { id: string; label: string; build: (url: string) => string };
 
 const strip = (u: string) => u.replace(/^https?:\/\//i, "");
 
 export const BROWSER_OPTIONS: BrowserOption[] = [
+  { id: "telegram", label: "Telegram app", build: (u) => `tg://resolve?url=${encodeURIComponent(u)}` },
   {
     id: "android",
     label: "📱 System chooser (Just once / Always)",
@@ -77,6 +80,13 @@ export function BrowserPickerButton({
             {opt.label}
           </button>
         ))}
+        <button
+          type="button"
+          className="flex w-full items-center gap-2 rounded px-2 py-1.5 text-left text-xs hover:bg-muted"
+          onClick={() => copyWithToast(url, toast, "Link copied")}
+        >
+          <Copy className="h-3.5 w-3.5" /> Copy link
+        </button>
         <div className="px-2 py-1 text-[10px] text-muted-foreground">
           Tip: "System chooser" tabhi popup dikhayega (Just once / Always)
           jab aapne koi default browser set nahi kiya ho. Agar already default
