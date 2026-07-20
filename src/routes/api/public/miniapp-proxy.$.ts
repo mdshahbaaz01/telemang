@@ -1065,11 +1065,28 @@ function buildOverrideScript(accountId: string, upstreamUrl: string, token: stri
 })();`;
 }
 
-function proxyUrl(target: string, accountId: string, token: string, proxyOrigin = "") {
-  return `${proxyOrigin}/api/public/miniapp-proxy/${encodeURIComponent(target)}?a=${encodeURIComponent(accountId)}&t=${encodeURIComponent(token)}`;
+function proxyUrl(
+  target: string,
+  accountId: string,
+  token: string,
+  proxyOrigin = "",
+  opts: { captcha?: boolean; fpSeed?: string; referrer?: string } = {},
+) {
+  const params = new URLSearchParams({ a: accountId, t: token });
+  if (opts.captcha) params.set("cap", "1");
+  if (opts.fpSeed) params.set("fp", opts.fpSeed);
+  if (opts.referrer) params.set("r", opts.referrer);
+  return `${proxyOrigin}/api/public/miniapp-proxy/${encodeURIComponent(target)}?${params.toString()}`;
 }
 
-function rewriteHtmlUrls(html: string, baseUrl: string, accountId: string, token: string, proxyOrigin: string) {
+function rewriteHtmlUrls(
+  html: string,
+  baseUrl: string,
+  accountId: string,
+  token: string,
+  proxyOrigin: string,
+  opts: { captcha?: boolean; fpSeed?: string } = {},
+) {
   const base = new URL(baseUrl);
   const toProxy = (raw: string) => {
     if (!raw || raw.startsWith("#") || raw.startsWith("data:") || raw.startsWith("blob:") || raw.startsWith("mailto:") || raw.startsWith("tel:")) {
@@ -1078,7 +1095,7 @@ function rewriteHtmlUrls(html: string, baseUrl: string, accountId: string, token
     try {
       const absolute = new URL(raw, base).toString();
       if (!/^https?:\/\//i.test(absolute)) return raw;
-      return proxyUrl(absolute, accountId, token, proxyOrigin);
+      return proxyUrl(absolute, accountId, token, proxyOrigin, { ...opts, referrer: baseUrl });
     } catch {
       return raw;
     }
@@ -1101,12 +1118,19 @@ function rewriteHtmlUrls(html: string, baseUrl: string, accountId: string, token
     });
 }
 
-function rewriteCssUrls(css: string, baseUrl: string, accountId: string, token: string, proxyOrigin: string) {
+function rewriteCssUrls(
+  css: string,
+  baseUrl: string,
+  accountId: string,
+  token: string,
+  proxyOrigin: string,
+  opts: { captcha?: boolean; fpSeed?: string } = {},
+) {
   const base = new URL(baseUrl);
   return css.replace(/url\((['"]?)(.*?)\1\)/gi, (_m, quote, value) => {
     if (!value || value.startsWith("data:") || value.startsWith("blob:")) return `url(${quote}${value}${quote})`;
     try {
-      return `url(${quote}${proxyUrl(new URL(value, base).toString(), accountId, token, proxyOrigin)}${quote})`;
+      return `url(${quote}${proxyUrl(new URL(value, base).toString(), accountId, token, proxyOrigin, { ...opts, referrer: baseUrl })}${quote})`;
     } catch {
       return `url(${quote}${value}${quote})`;
     }
@@ -1316,7 +1340,7 @@ async function handle(request: Request, params: { _splat?: string }) {
     const upstreamDir = new URL(".", finalUrl).toString();
     const script = `<script>${buildOverrideScript(accountId, finalUrl, token!, captchaEnabled, fpSeed)}</script>`;
     const base = `<base href="${upstreamDir}">`;
-    html = rewriteHtmlUrls(html, finalUrl, accountId, token!, proxyOrigin);
+    html = rewriteHtmlUrls(html, finalUrl, accountId, token!, proxyOrigin, { captcha: captchaEnabled, fpSeed });
     if (/<head[^>]*>/i.test(html)) {
       html = html.replace(/<head([^>]*)>/i, `<head$1>${script}${base}`);
     } else {
@@ -1326,7 +1350,7 @@ async function handle(request: Request, params: { _splat?: string }) {
     return new Response(html, { status: upstream.status, headers: outHeaders });
   }
   if (ctype.includes("text/css")) {
-    const css = rewriteCssUrls(await upstream.text(), upstream.url || target, accountId, token!, proxyOrigin);
+    const css = rewriteCssUrls(await upstream.text(), upstream.url || target, accountId, token!, proxyOrigin, { captcha: captchaEnabled, fpSeed });
     outHeaders.set("content-type", "text/css; charset=utf-8");
     return new Response(css, { status: upstream.status, headers: outHeaders });
   }
