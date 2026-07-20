@@ -135,3 +135,63 @@ export const ownerListLogins = createServerFn({ method: "GET" })
     if (error) throw new Error(error.message);
     return data ?? [];
   });
+
+// Owner-only: wipe every history/log/task/broadcast table to keep the app
+// snappy. Never touches telegram_accounts, groups, roles, permissions, or
+// user settings.
+export const ownerClearAllData = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((d: unknown) =>
+    z.object({ confirm: z.literal("CLEAR ALL DATA") }).parse(d),
+  )
+  .handler(async ({ context }) => {
+    await assertOwner(context);
+    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+    // Tables preserved: telegram_accounts, account_groups, account_group_members,
+    // account_add_requests, account_pick_memory, user_roles, user_admin_settings,
+    // user_feature_permissions, notification_settings, password_reset_requests,
+    // feature_requests, feature_request_votes, join_pacing_config.
+    const tables = [
+      "task_logs",
+      "join_task_items",
+      "join_tasks",
+      "join_attempts",
+      "join_cache",
+      "action_logs",
+      "action_runs",
+      "action_presets",
+      "action_recipes",
+      "bot_parse_results",
+      "bot_parse_rules",
+      "captcha_solve_log",
+      "captcha_solvers",
+      "idempotency_keys",
+      "inline_button_clicks",
+      "login_attempts",
+      "media_library",
+      "message_templates",
+      "notification_logs",
+      "owner_audit_log",
+      "referral_joins",
+      "referral_links",
+      "scheduled_broadcast_items",
+      "scheduled_broadcasts",
+      "user_favorites",
+      "user_sessions",
+      "watchlists",
+    ] as const;
+    const results: { table: string; ok: boolean; error?: string }[] = [];
+    for (const t of tables) {
+      const { error } = await supabaseAdmin
+        .from(t)
+        .delete()
+        .not("id", "is", null);
+      if (error) results.push({ table: t, ok: false, error: error.message });
+      else results.push({ table: t, ok: true });
+    }
+    return {
+      ok: true,
+      cleared: results.filter((r) => r.ok).map((r) => r.table),
+      failed: results.filter((r) => !r.ok),
+    };
+  });

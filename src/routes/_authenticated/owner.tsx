@@ -7,6 +7,7 @@ import {
   ownerListAccounts,
   ownerSetAccountStatus,
   ownerListLogins,
+  ownerClearAllData,
 } from "@/lib/owner.functions";
 import {
   listAccountGroups,
@@ -43,6 +44,19 @@ function OwnerPanel() {
   const loginsFn = useServerFn(ownerListLogins);
   const toggleAdmin = useServerFn(ownerToggleAdmin);
   const setAcctStatus = useServerFn(ownerSetAccountStatus);
+  const clearAllFn = useServerFn(ownerClearAllData);
+  const isOwner = !!(me.data as any)?.isOwner || (me.data as any)?.roles?.includes?.("owner");
+  const [clearConfirm, setClearConfirm] = useState("");
+  const clearMut = useMutation({
+    mutationFn: () => clearAllFn({ data: { confirm: "CLEAR ALL DATA" } }) as any,
+    onSuccess: (res: any) => {
+      toast.success(`Cleared ${res?.cleared?.length ?? 0} tables`);
+      if (res?.failed?.length) toast.error(`${res.failed.length} table(s) failed`);
+      setClearConfirm("");
+      qc.invalidateQueries();
+    },
+    onError: (e) => toast.error((e as Error).message),
+  });
 
   // Load Noir & Gold fonts (JetBrains Mono + Work Sans) — scoped to this page's usage via inline font-family below.
   useEffect(() => {
@@ -366,6 +380,45 @@ function OwnerPanel() {
             </div>
           </OwnerCard>
         </div>
+
+        {isOwner && (
+          <section
+            aria-label="Danger zone"
+            className="mt-8 rounded-xl border border-destructive/40 bg-destructive/5 p-4 md:p-6"
+          >
+            <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+              <div className="min-w-0">
+                <h2 className="owner-display text-base sm:text-lg text-destructive">
+                  Clear all data
+                </h2>
+                <p className="mt-1 text-xs text-muted-foreground md:text-sm">
+                  Wipes every history, log, task, broadcast, referral, template,
+                  and cache. Telegram accounts, groups, roles, permissions, and
+                  user settings are kept intact. This cannot be undone.
+                </p>
+              </div>
+              <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+                <Input
+                  placeholder='Type "CLEAR ALL DATA" to confirm'
+                  value={clearConfirm}
+                  onChange={(e) => setClearConfirm(e.target.value)}
+                  className="w-full sm:w-64"
+                />
+                <Button
+                  variant="destructive"
+                  disabled={clearConfirm !== "CLEAR ALL DATA" || clearMut.isPending}
+                  onClick={() => {
+                    if (!window.confirm("Really clear all history and logs? Accounts are kept.")) return;
+                    clearMut.mutate();
+                  }}
+                >
+                  <Trash2 className="mr-1 h-4 w-4" />
+                  {clearMut.isPending ? "Clearing…" : "Clear all data"}
+                </Button>
+              </div>
+            </div>
+          </section>
+        )}
       </div>
     </main>
   );
