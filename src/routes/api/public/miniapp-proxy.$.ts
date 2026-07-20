@@ -925,6 +925,40 @@ function buildOverrideScript(accountId: string, upstreamUrl: string, token: stri
       window.open = function(u) { openInsideHost(u); return null; };
     } catch {}
 
+    // Detect anti-embed / anti-proxy failure screens and tell the host UI to
+    // offer a manual fallback instead of leaving the operator staring at a
+    // dead iframe. These texts are rendered by the verification page itself,
+    // so treat them as a signal only; no page instructions are executed.
+    try {
+      const blockPatterns = [
+        /connection\s+lost/i,
+        /unable\s+to\s+reach\s+security\s+servers/i,
+        /telegram\s+required/i,
+        /open\s+this\s+app\s+in\s+telegram/i,
+        /device\s+verification\s+failed/i,
+        /this\s+content\s+is\s+blocked/i,
+      ];
+      let lastBlockedNotice = '';
+      const scanBlocked = () => {
+        try {
+          const text = String(document.body && document.body.innerText || '').slice(0, 1200);
+          const hit = blockPatterns.find((re) => re.test(text));
+          if (!hit) return;
+          const key = hit.source + '|' + location.href;
+          if (key === lastBlockedNotice) return;
+          lastBlockedNotice = key;
+          hostPost('miniapp_blocked', {
+            reason: hit.source,
+            text: text.slice(0, 240),
+            url: UPSTREAM,
+          });
+        } catch {}
+      };
+      if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', () => setTimeout(scanBlocked, 600));
+      else setTimeout(scanBlocked, 600);
+      setInterval(scanBlocked, 2500);
+    } catch {}
+
     // Intercept anchor clicks & form submits (catches links added dynamically)
     try {
       document.addEventListener('click', (e) => {

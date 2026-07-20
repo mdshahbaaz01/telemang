@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { X, Loader2, RefreshCw, ChevronDown, ChevronUp, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { BrowserPickerButton } from "@/components/BrowserPickerButton";
 import { useTelegramWebviewBridge } from "@/lib/telegram-webview-bridge";
 import { useMiniAppProxyUrl } from "@/lib/miniapp-proxy-url";
 import { useServerFn } from "@tanstack/react-start";
@@ -31,8 +32,9 @@ export function MiniAppDrawer({
   const [resolvedUrl, setResolvedUrl] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [reloadNonce, setReloadNonce] = useState(0);
+  const [blocked, setBlocked] = useState<{ text?: string } | null>(null);
   const iframeRef = useRef<HTMLIFrameElement | null>(null);
-  useTelegramWebviewBridge(iframeRef);
+  useTelegramWebviewBridge(iframeRef, { onBlocked: (details) => setBlocked({ text: details.text }) });
   const solve = useServerFn(solveCaptcha);
 
   type CapLog = { ts: number; level: "info" | "warn" | "error"; source: "iframe" | "host"; msg: string; extra?: any };
@@ -111,6 +113,7 @@ export function MiniAppDrawer({
     let cancelled = false;
     setLoading(true);
     setError(null);
+    setBlocked(null);
     resolver(request)
       .then((res) => {
         if (cancelled) return;
@@ -177,22 +180,36 @@ export function MiniAppDrawer({
             </div>
           )}
           {iframeUrl && !error && (
-            <iframe
-              key={`${iframeUrl}:${reloadNonce}`}
-              ref={iframeRef}
-              src={iframeUrl}
-              title={request?.buttonText || "Telegram Mini App"}
-              name={`tgminiapp-${request?.accountId ?? "drawer"}`}
-              className="h-full w-full border-0"
-              allow="clipboard-read; clipboard-write; camera; microphone; geolocation; payment"
-              sandbox="allow-scripts allow-same-origin allow-forms allow-modals allow-popups allow-popups-to-escape-sandbox allow-storage-access-by-user-activation"
-              referrerPolicy="no-referrer-when-downgrade"
-              onError={() =>
-                setError(
-                  "The mini app refused to load in the embedded viewer.",
-                )
-              }
-            />
+            <>
+              <iframe
+                key={`${iframeUrl}:${reloadNonce}`}
+                ref={iframeRef}
+                src={iframeUrl}
+                title={request?.buttonText || "Telegram Mini App"}
+                name={`tgminiapp-${request?.accountId ?? "drawer"}`}
+                className="h-full w-full border-0"
+                allow="clipboard-read; clipboard-write; camera; microphone; geolocation; payment"
+                sandbox="allow-scripts allow-same-origin allow-forms allow-modals allow-popups allow-popups-to-escape-sandbox allow-storage-access-by-user-activation"
+                referrerPolicy="no-referrer-when-downgrade"
+                onError={() =>
+                  setError(
+                    "The mini app refused to load in the embedded viewer.",
+                  )
+                }
+              />
+              {blocked && resolvedUrl && (
+                <div className="absolute inset-x-3 bottom-3 rounded-lg border border-border bg-background/95 p-3 text-xs shadow-lg backdrop-blur">
+                  <div className="mb-2 font-semibold">Verification blocked in embedded view</div>
+                  <div className="mb-3 line-clamp-2 text-muted-foreground">{blocked.text || "The verification site rejected the proxy session."}</div>
+                  <div className="flex flex-wrap gap-2">
+                    <Button size="sm" variant="secondary" onClick={() => { setBlocked(null); setReloadNonce((n) => n + 1); }}>
+                      <RefreshCw className="mr-1 h-3.5 w-3.5" /> Retry
+                    </Button>
+                    <BrowserPickerButton url={resolvedUrl} size="sm" variant="outline" />
+                  </div>
+                </div>
+              )}
+            </>
           )}
         </div>
 
