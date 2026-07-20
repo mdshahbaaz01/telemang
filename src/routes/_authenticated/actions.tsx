@@ -440,6 +440,7 @@ function ActionsPageInner() {
     closed: boolean;
     totalVoters: number;
     alreadyVoted: boolean;
+    resultsHidden?: boolean;
     checkedAccountId: string;
   } | null>(null);
   const [pollSelected, setPollSelected] = useState<number[]>([]);
