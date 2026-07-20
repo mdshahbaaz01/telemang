@@ -30,6 +30,7 @@ import {
   Gauge,
   Activity,
   Trophy,
+  Flag,
 } from "lucide-react";
 import {
   DndContext,
@@ -104,6 +105,7 @@ const items: Item[] = [
   { id: "captcha", title: "Captcha Solver", to: "/captcha", icon: ShieldAlert },
   { id: "join-pacing", title: "Join Pacing", to: "/join-pacing", icon: Gauge },
   { id: "health", title: "Health", to: "/health", icon: Activity },
+  { id: "report", title: "Bulk Report", to: "/report", icon: Flag },
 ];
 
 // Owner-only items — always hidden from non-owner regardless of features.
