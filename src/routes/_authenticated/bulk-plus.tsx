@@ -237,7 +237,7 @@ function BulkPlusInner() {
         headers: { "content-type": "application/json", authorization: `Bearer ${token}` },
         body: JSON.stringify({
           accountIds: Array.from(selectedIds),
-          minDelay, maxDelay, concurrency, op,
+          minDelay, maxDelay, concurrency: Math.min(20, Math.max(1, concurrency)), op,
         }),
         signal: ac.signal,
       });
