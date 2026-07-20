@@ -14,7 +14,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { toast } from "sonner";
 import { Play, Square, ArrowLeft, Loader2, RefreshCw, X, MessageSquare, Copy, ExternalLink } from "lucide-react";
-import { BrowserPickerButton } from "@/components/BrowserPickerButton";
+import { BrowserPickerButton, openTelegramUrl } from "@/components/BrowserPickerButton";
 import { AccountIdPaste } from "@/components/AccountIdPaste";
 import { copyWithToast } from "@/lib/clipboard";
 import { useBotFlowCaptchaConfig, CAPTCHA_KIND_OPTIONS, CAPTCHA_PROVIDER_OPTIONS } from "@/lib/bot-flow-captcha-config";
@@ -57,8 +57,37 @@ type VerifyLinkSession = {
   hasInitData: boolean;
   userId?: string;
   userLabel?: string;
+  startParam?: string;
   error?: string;
 };
+
+function buildTelegramMiniAppLink(username: string, startParam?: string, appShortName?: string) {
+  const bot = username.replace(/^@/, "").trim();
+  if (!bot) return "";
+  const path = appShortName ? `${bot}/${appShortName.replace(/^\/+/, "")}` : bot;
+  const url = new URL(`https://t.me/${path}`);
+  if (startParam) url.searchParams.set("startapp", startParam);
+  return url.toString();
+}
+
+function guessTelegramLaunchUrl(rawUrl: string): string | null {
+  try {
+    const url = new URL(rawUrl);
+    const host = url.hostname.toLowerCase().replace(/^www\./, "");
+    if (["t.me", "telegram.me", "telegram.dog"].includes(host)) return rawUrl;
+
+    const launchParams = new URLSearchParams(String(url.hash || "").replace(/^#/, ""));
+    const initData = launchParams.get("tgWebAppData") || url.searchParams.get("tgWebAppData") || "";
+    const initParams = initData ? new URLSearchParams(initData) : null;
+    const startParam = initParams?.get("start_param") || url.searchParams.get("startapp") || url.searchParams.get("start") || "";
+    const botFromPath = url.pathname
+      .split("/")
+      .map((part) => decodeURIComponent(part).replace(/^@/, ""))
+      .find((part) => /^[a-zA-Z0-9_]{4,64}bot$/i.test(part));
+    if (botFromPath) return buildTelegramMiniAppLink(botFromPath, startParam || undefined);
+  } catch {}
+  return null;
+}
 
 function parseVerifyLinkSession(rawUrl: string): VerifyLinkSession {
   if (!rawUrl) return { hasInitData: false };
@@ -84,6 +113,7 @@ function parseVerifyLinkSession(rawUrl: string): VerifyLinkSession {
       hasInitData: true,
       userId,
       userLabel: user.username ? `@${user.username}` : displayName || undefined,
+      startParam: initParams.get("start_param") || undefined,
     };
   } catch (e) {
     return { hasInitData: false, error: (e as Error).message };
