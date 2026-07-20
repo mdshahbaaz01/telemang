@@ -645,8 +645,8 @@ function buildOverrideScript(accountId: string, upstreamUrl: string, token: stri
       toJSON() { return { brands, mobile: fp.mobile, platform: platformName }; },
     };
     ['userAgent', 'appVersion', 'platform', 'language', 'languages', 'hardwareConcurrency', 'deviceMemory', 'maxTouchPoints', 'vendor', 'webdriver', 'userAgentData'].forEach((key) => {
-      const val = key === 'userAgent' ? fp.userAgent
-        : key === 'appVersion' ? fp.userAgent.replace(/^Mozilla\\//, '')
+      const val = key === 'userAgent' ? TELEGRAM_UA
+        : key === 'appVersion' ? TELEGRAM_UA.replace(/^Mozilla\\//, '')
         : key === 'platform' ? fp.platform
         : key === 'language' ? fp.languages[0]
         : key === 'languages' ? Object.freeze(fp.languages.slice())
