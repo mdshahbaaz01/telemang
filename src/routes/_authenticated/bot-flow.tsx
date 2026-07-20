@@ -540,8 +540,13 @@ function BotFlowPage() {
     setChatVisibleCount(Math.min(ids.length, batch));
     setChatOpen(ids);
   };
-  const closeChat = (id: string) =>
-    setChatOpen((prev) => prev.filter((x) => x !== id));
+  const closeChat = (id: string) => {
+    setChatOpen((prev) => {
+      const next = prev.filter((x) => x !== id);
+      // Keep the batch size steady so a queued account slides into the freed slot.
+      return next;
+    });
+  };
   const clearChats = () => {
     setChatOpen([]);
     setChatVisibleCount(1);
