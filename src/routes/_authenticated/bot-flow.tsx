@@ -1748,22 +1748,30 @@ function BulkVerifyRunner({
   const selectNone = () => setSelected([]);
 
   const buildRows = () => {
-    if (!parsedLinks.length) return toast.error("Paste at least one verification link");
-    const accs = selected.length ? selected : accountList.map((a) => a.id);
-    if (!accs.length) return toast.error("Select at least one account");
+    if (!parsedEntries.length) return toast.error("Add at least one verification link");
+    const pool = selected.length ? selected : accountList.map((a) => a.id);
     const salt = Date.now().toString(36);
-    const built: BulkRow[] = parsedLinks.map((url, i) => ({
-      id: `${salt}-${i}`,
-      url,
-      accountId: accs[i % accs.length],
-      // Stable per-account seed by default → same device is presented every
-      // time for that account. Turn off "Stable device" to use a fresh one.
-      fpSeed: stableDevice
-        ? stableSeedFor(accs[i % accs.length])
-        : `${salt}-${i}-${Math.random().toString(36).slice(2, 8)}`,
-      status: "queued" as BulkRowStatus,
-      logs: [] as BulkRowLog[],
-    }));
+    let rr = 0;
+    const built: BulkRow[] = [];
+    for (let i = 0; i < parsedEntries.length; i++) {
+      const e = parsedEntries[i];
+      const auto = entryAccountFor(e.normalized);
+      const accountId =
+        e.accountOverride || auto || (pool.length ? pool[rr++ % pool.length] : "");
+      if (!accountId) {
+        return toast.error("Select accounts, or use links with an embedded Telegram user id");
+      }
+      built.push({
+        id: `${salt}-${i}`,
+        url: e.normalized,
+        accountId,
+        fpSeed: stableDevice
+          ? stableSeedFor(accountId)
+          : `${salt}-${i}-${Math.random().toString(36).slice(2, 8)}`,
+        status: "queued" as BulkRowStatus,
+        logs: [] as BulkRowLog[],
+      });
+    }
     setRows(built);
     setRunNonce((n) => n + 1);
   };
