@@ -7,6 +7,7 @@ import {
   ownerListAccounts,
   ownerSetAccountStatus,
   ownerListLogins,
+  ownerClearAllData,
 } from "@/lib/owner.functions";
 import {
   listAccountGroups,
@@ -43,6 +44,19 @@ function OwnerPanel() {
   const loginsFn = useServerFn(ownerListLogins);
   const toggleAdmin = useServerFn(ownerToggleAdmin);
   const setAcctStatus = useServerFn(ownerSetAccountStatus);
+  const clearAllFn = useServerFn(ownerClearAllData);
+  const isOwner = !!(me.data as any)?.isOwner || (me.data as any)?.roles?.includes?.("owner");
+  const [clearConfirm, setClearConfirm] = useState("");
+  const clearMut = useMutation({
+    mutationFn: () => clearAllFn({ data: { confirm: "CLEAR ALL DATA" } }) as any,
+    onSuccess: (res: any) => {
+      toast.success(`Cleared ${res?.cleared?.length ?? 0} tables`);
+      if (res?.failed?.length) toast.error(`${res.failed.length} table(s) failed`);
+      setClearConfirm("");
+      qc.invalidateQueries();
+    },
+    onError: (e) => toast.error((e as Error).message),
+  });
 
   // Load Noir & Gold fonts (JetBrains Mono + Work Sans) — scoped to this page's usage via inline font-family below.
   useEffect(() => {
