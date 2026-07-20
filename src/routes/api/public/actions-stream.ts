@@ -975,18 +975,10 @@ export const Route = createFileRoute("/api/public/actions-stream")({
                    }
                    pacing = { ...pacing, min_delay_ms: adaptive.min_delay_ms, max_delay_ms: adaptive.max_delay_ms };
                  } catch { /* fall back to base pacing */ }
-                  // Only seed cross-run dedupe when the auto-join loop is on
-                  // (bot flow's "Auto-join required channels" option). Every
-                  // other path — pre-join user links, manual joins, join
-                  // tasks — always attempts fresh at the user's request.
-                  if (op.autoJoinRequired !== false && !op.preJoinOnly && !op.forceRejoin) {
-                    try {
-                      const cache = await loadCacheForAccount(supabase, accountId);
-                      for (const [k, status] of cache.entries()) {
-                        if (status === "joined" || status === "requested") alreadyJoined.add(k);
-                      }
-                    } catch { /* dedupe is best-effort */ }
-                  }
+                   // Cross-run join_cache dedupe intentionally disabled — the
+                   // user requested that a previously-joined/cached channel
+                   // never causes us to skip a fresh join attempt. Only the
+                   // per-run alreadyJoined set (populated as we join) applies.
                 const smartJoin = async (rawTarget: string): Promise<"ok" | "requested" | "stop" | "flood" | "skip" | "fail"> => {
                   if (stopRequested) return "stop";
                   const target = extractHandle(rawTarget);
@@ -1014,17 +1006,16 @@ export const Route = createFileRoute("/api/public/actions-stream")({
                   }
                    attemptedThisRun.add(key);
                    recentAttemptAt.set(key, Date.now());
-                    if (op.forceRejoin) {
-                      // Wipe any prior cache row so tryAcquireJoinLock doesn't
-                      // short-circuit as "skipped_cached".
-                      try {
-                        await supabase
-                          .from("join_cache")
-                          .delete()
-                          .eq("account_id", accountId)
-                          .eq("target_key", normalizeTargetKey(rawTarget));
-                      } catch { /* best-effort */ }
-                    }
+                    // Always wipe any prior cache row so tryAcquireJoinLock
+                    // never short-circuits as "skipped_cached". The user asked
+                    // to remove the one-time-per-channel skip behaviour.
+                    try {
+                      await supabase
+                        .from("join_cache")
+                        .delete()
+                        .eq("account_id", accountId)
+                        .eq("target_key", normalizeTargetKey(rawTarget));
+                    } catch { /* best-effort */ }
                    // Acquire per-(account, channel) lock — atomic across all workers.
                    const lock = await tryAcquireJoinLock(supabase, {
                      userId, accountId, target: rawTarget,
