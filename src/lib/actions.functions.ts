@@ -91,6 +91,7 @@ const loadPollSchema = z.object({
   chat: z.string().min(1),
   msgId: z.number().int().positive(),
   accountId: z.string().uuid().optional(),
+  reveal: z.boolean().optional(),
 });
 
 export const loadPoll = createServerFn({ method: "POST" })
@@ -145,7 +146,7 @@ export const loadPoll = createServerFn({ method: "POST" })
       }
       const [msg] = await client.getMessages(peer, { ids: [data.msgId] });
       if (!msg?.poll) throw new Error("Message is not a poll");
-      const media = msg.poll as {
+      let media = msg.poll as {
         poll?: {
           question?: { text?: string } | string;
           answers?: Array<{ text?: { text?: string } | string; option?: Uint8Array }>;
@@ -158,8 +159,34 @@ export const loadPoll = createServerFn({ method: "POST" })
           totalVoters?: number;
         };
       };
-      const p = media.poll ?? {};
-      const r = media.results ?? {};
+      let p = media.poll ?? {};
+      let r = media.results ?? {};
+
+      // Telegram hides per-option counts for non-voters on open, non-quiz polls.
+      // If the caller asks, briefly cast a vote and retract to reveal the tallies.
+      const hasChosen = (r.results ?? []).some((x) => x?.chosen);
+      const perOptionAllZero = (r.results ?? []).every((x) => !Number(x?.voters ?? 0));
+      const resultsHiddenInitial = !p.closed && !hasChosen && Number(r.totalVoters ?? 0) > 0 && perOptionAllZero;
+      if (data.reveal && resultsHiddenInitial && (p.answers ?? []).length > 0) {
+        const { Api } = await import("telegram");
+        const firstOpt = p.answers?.[0]?.option;
+        if (firstOpt) {
+          try {
+            await client.invoke(new Api.messages.SendVote({ peer, msgId: data.msgId, options: [firstOpt] }));
+            // Immediately retract by sending an empty options array.
+            await client.invoke(new Api.messages.SendVote({ peer, msgId: data.msgId, options: [] }));
+          } catch {
+            // ignore — we'll just return whatever we can read below
+          }
+          const [msg2] = await client.getMessages(peer, { ids: [data.msgId] });
+          if (msg2?.poll) {
+            media = msg2.poll as typeof media;
+            p = media.poll ?? {};
+            r = media.results ?? {};
+          }
+        }
+      }
+
       const q = typeof p.question === "string" ? p.question : p.question?.text ?? "";
       const rawAnswers = p.answers ?? [];
       const rawResults = r.results ?? [];
@@ -178,6 +205,8 @@ export const loadPoll = createServerFn({ method: "POST" })
         };
       });
       const chosenAny = answers.some((a) => a.chosen);
+      const revealedAllZero = answers.every((a) => !a.voters);
+      const resultsHidden = !p.closed && !chosenAny && Number(r.totalVoters ?? 0) > 0 && revealedAllZero;
       return {
         question: q,
         answers,
@@ -185,6 +214,7 @@ export const loadPoll = createServerFn({ method: "POST" })
         closed: !!p.closed,
         totalVoters: Number(r.totalVoters ?? 0),
         alreadyVoted: chosenAny,
+        resultsHidden,
         checkedAccountId: accountId,
       };
     } finally {
