@@ -108,15 +108,17 @@ export const bulkReport = createServerFn({ method: "POST" })
             const reasonObj = buildReason(Api, data.reason);
 
             if (msgIds.length > 0) {
+              // Newer layer takes `option` bytes; we don't have a category option
+              // handshake, so fall back to full-peer report with message ids listed
+              // in the free-text message.
               await client.invoke(
-                new Api.messages.Report({
+                new Api.account.ReportPeer({
                   peer,
-                  id: msgIds,
                   reason: reasonObj,
-                  message: data.message || "",
+                  message: `${data.message || ""}\n\nMessage IDs: ${msgIds.join(", ")}`.trim(),
                 }),
               );
-              results.push({ accountId, target, ok: true, mode: "message", message: `Reported msg ${msgIds.join(",")}` });
+              results.push({ accountId, target, ok: true, mode: "message", message: `Reported peer (msg ref ${msgIds.join(",")})` });
             } else {
               await client.invoke(
                 new Api.account.ReportPeer({
