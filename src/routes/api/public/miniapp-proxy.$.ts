@@ -28,6 +28,7 @@ const STRIP_HEADERS = new Set([
 ]);
 
 const COOKIE_JAR_NAME = "miniapp_proxy_cj";
+const COOKIE_JAR_CHUNK_COUNT = 4;
 
 const DROP_UPSTREAM_REQUEST_HEADERS = new Set([
   "host",
@@ -91,7 +92,16 @@ function readCookieValue(request: Request, cookieName: string): string | null {
 }
 
 function readCookieJar(request: Request): CookieJar {
-  const raw = readCookieValue(request, COOKIE_JAR_NAME);
+  let raw = readCookieValue(request, COOKIE_JAR_NAME);
+  if (!raw) {
+    const chunks: string[] = [];
+    for (let i = 0; i < COOKIE_JAR_CHUNK_COUNT; i++) {
+      const chunk = readCookieValue(request, `${COOKIE_JAR_NAME}_${i}`);
+      if (!chunk) break;
+      chunks.push(chunk);
+    }
+    raw = chunks.length ? chunks.join("") : null;
+  }
   if (!raw) return {};
   try {
     const parsed = JSON.parse(b64urlDecode(raw)) as CookieJar;
@@ -110,7 +120,16 @@ function scopedCookieJarName(accountIdentity: string, targetUrl: URL): string {
 }
 
 function readScopedCookieJar(request: Request, name: string): CookieJar {
-  const raw = readCookieValue(request, name);
+  let raw = readCookieValue(request, name);
+  if (!raw) {
+    const chunks: string[] = [];
+    for (let i = 0; i < COOKIE_JAR_CHUNK_COUNT; i++) {
+      const chunk = readCookieValue(request, `${name}_${i}`);
+      if (!chunk) break;
+      chunks.push(chunk);
+    }
+    raw = chunks.length ? chunks.join("") : null;
+  }
   if (!raw) return {};
   try {
     const parsed = JSON.parse(b64urlDecode(raw)) as CookieJar;
@@ -122,9 +141,12 @@ function readScopedCookieJar(request: Request, name: string): CookieJar {
 
 function serializeCookieJar(jar: CookieJar): string {
   pruneExpiredCookies(jar);
-  let encoded = b64urlEncode(JSON.stringify(jar));
-  if (encoded.length <= 3600) return encoded;
+  return b64urlEncode(JSON.stringify(jar));
+}
 
+function serializeCookieJarCompact(jar: CookieJar): string {
+  let encoded = serializeCookieJar(jar);
+  if (encoded.length <= 3600 * COOKIE_JAR_CHUNK_COUNT) return encoded;
   const all = Object.entries(jar).flatMap(([domain, cookies]) =>
     Object.entries(cookies).map(([name, cookie]) => ({ domain, name, created: cookie.created || 0 })),
   );
@@ -132,10 +154,31 @@ function serializeCookieJar(jar: CookieJar): string {
   for (const item of all) {
     delete jar[item.domain]?.[item.name];
     if (jar[item.domain] && Object.keys(jar[item.domain]).length === 0) delete jar[item.domain];
-    encoded = b64urlEncode(JSON.stringify(jar));
-    if (encoded.length <= 3600) return encoded;
+    encoded = serializeCookieJar(jar);
+    if (encoded.length <= 3600 * COOKIE_JAR_CHUNK_COUNT) return encoded;
   }
   return b64urlEncode("{}");
+}
+
+function appendCookieJarCookies(headers: Headers, name: string, jar: CookieJar) {
+  const encoded = serializeCookieJarCompact(jar);
+  if (encoded.length <= 3600) {
+    headers.append("set-cookie", `${name}=${encodeURIComponent(encoded)}; Path=/api/public/miniapp-proxy/; Max-Age=3600; HttpOnly; Secure; SameSite=None`);
+    for (let i = 0; i < COOKIE_JAR_CHUNK_COUNT; i++) {
+      headers.append("set-cookie", `${name}_${i}=; Path=/api/public/miniapp-proxy/; Max-Age=0; HttpOnly; Secure; SameSite=None`);
+    }
+    return;
+  }
+  headers.append("set-cookie", `${name}=; Path=/api/public/miniapp-proxy/; Max-Age=0; HttpOnly; Secure; SameSite=None`);
+  for (let i = 0; i < COOKIE_JAR_CHUNK_COUNT; i++) {
+    const chunk = encoded.slice(i * 3600, (i + 1) * 3600);
+    headers.append(
+      "set-cookie",
+      chunk
+        ? `${name}_${i}=${encodeURIComponent(chunk)}; Path=/api/public/miniapp-proxy/; Max-Age=3600; HttpOnly; Secure; SameSite=None`
+        : `${name}_${i}=; Path=/api/public/miniapp-proxy/; Max-Age=0; HttpOnly; Secure; SameSite=None`,
+    );
+  }
 }
 
 function defaultCookiePath(pathname: string): string {
