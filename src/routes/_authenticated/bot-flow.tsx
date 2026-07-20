@@ -625,8 +625,11 @@ function BotFlowPage() {
     perAccount: Record<string, PerAccountBtn>;
   }>({ loading: false, labels: [], perAccount: {} });
   const [pressingLabel, setPressingLabel] = useState<string | null>(null);
+  // 0 = latest bot message with buttons, 1 = previous, 2 = older, ...
+  const [botBtnOffset, setBotBtnOffset] = useState(0);
 
-  const refreshBotButtons = useCallback(async () => {
+  const refreshBotButtons = useCallback(async (offsetArg?: number) => {
+    const offset = Math.max(0, offsetArg ?? botBtnOffset);
     if (!parsed?.username) return;
     if (chatOpen.length === 0) return;
     const target = `@${parsed.username}`;
@@ -638,13 +641,14 @@ function BotFlowPage() {
           const peerKey: string | null = res?.peerKey ?? null;
           const messages: any[] = Array.isArray(res?.messages) ? res.messages : [];
           if (!peerKey) return [accountId, null];
-          const withBtn = [...messages].reverse().find(
+          const withBtnList = [...messages].reverse().filter(
             (m: any) =>
               m.replyMarkup &&
               (m.replyMarkup.kind === "inline" || m.replyMarkup.kind === "keyboard") &&
               Array.isArray(m.replyMarkup.rows) &&
               m.replyMarkup.rows.some((r: any[]) => (r?.length ?? 0) > 0),
           );
+          const withBtn = withBtnList[Math.min(offset, withBtnList.length - 1)];
           if (!withBtn) return [accountId, null];
           const buttons: BroadcastBtn[] = [];
           for (const row of withBtn.replyMarkup.rows as any[][]) {
@@ -678,8 +682,13 @@ function BotFlowPage() {
       kinds: [...kinds],
     }));
     setBotBtnState({ loading: false, labels, perAccount });
-    if (!labels.length) toast.info("No inline buttons found on the bot's latest messages");
-  }, [chatOpen, parsed?.username, previewChatFn]);
+    if (!labels.length)
+      toast.info(
+        offset > 0
+          ? `No buttons on message #${offset + 1} back — try a different offset`
+          : "No inline buttons found on the bot's latest messages",
+      );
+  }, [chatOpen, parsed?.username, previewChatFn, botBtnOffset]);
 
   const broadcastPress = useCallback(
     async (label: string) => {
