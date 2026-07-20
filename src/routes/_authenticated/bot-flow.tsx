@@ -5,7 +5,13 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useTelegramWebviewBridge } from "@/lib/telegram-webview-bridge";
 import { supabase } from "@/integrations/supabase/client";
 import { listAccounts } from "@/lib/accounts.functions";
-import { openStartAppLink, joinFromLink, extractVerifyLink } from "@/lib/tg-viewer.functions";
+import {
+  openStartAppLink,
+  joinFromLink,
+  extractVerifyLink,
+  pressInlineButtonAs,
+  sendMessageAs,
+} from "@/lib/tg-viewer.functions";
 import { previewChat } from "@/lib/chat-viewer.functions";
 import { useMiniAppProxyUrl } from "@/lib/miniapp-proxy-url";
 import { AdminGate } from "@/components/AdminGate";
@@ -604,6 +610,113 @@ function BotFlowPage() {
   const visibleChatIds = chatOpen.slice(0, chatVisibleCount);
   const queuedChatCount = Math.max(0, chatOpen.length - visibleChatIds.length);
 
+  // ─── Broadcast bot button to all open chats ───────────────────────
+  const pressInlineButtonAsFn = useServerFn(pressInlineButtonAs);
+  const sendMessageAsFn = useServerFn(sendMessageAs);
+  type BroadcastBtn = { label: string; kind: string; data?: string; url?: string };
+  type PerAccountBtn = { peerKey: string; msgId: number; buttons: BroadcastBtn[] };
+  const [botBtnState, setBotBtnState] = useState<{
+    loading: boolean;
+    labels: Array<{ label: string; kinds: string[] }>;
+    perAccount: Record<string, PerAccountBtn>;
+  }>({ loading: false, labels: [], perAccount: {} });
+  const [pressingLabel, setPressingLabel] = useState<string | null>(null);
+
+  const refreshBotButtons = useCallback(async () => {
+    if (!parsed?.username) return;
+    if (chatOpen.length === 0) return;
+    const target = `@${parsed.username}`;
+    setBotBtnState((s) => ({ ...s, loading: true }));
+    const results = await Promise.all(
+      chatOpen.map(async (accountId): Promise<[string, PerAccountBtn | null]> => {
+        try {
+          const res: any = await previewChatFn({ data: { target, accountId } });
+          const peerKey: string | null = res?.peerKey ?? null;
+          const messages: any[] = Array.isArray(res?.messages) ? res.messages : [];
+          if (!peerKey) return [accountId, null];
+          const withBtn = [...messages].reverse().find(
+            (m: any) =>
+              m.replyMarkup &&
+              (m.replyMarkup.kind === "inline" || m.replyMarkup.kind === "keyboard") &&
+              Array.isArray(m.replyMarkup.rows) &&
+              m.replyMarkup.rows.some((r: any[]) => (r?.length ?? 0) > 0),
+          );
+          if (!withBtn) return [accountId, null];
+          const buttons: BroadcastBtn[] = [];
+          for (const row of withBtn.replyMarkup.rows as any[][]) {
+            for (const b of row) {
+              buttons.push({
+                label: String(b?.text ?? ""),
+                kind: String(b?.kind ?? ""),
+                data: b?.data,
+                url: b?.url,
+              });
+            }
+          }
+          return [accountId, { peerKey, msgId: Number(withBtn.id), buttons }];
+        } catch {
+          return [accountId, null];
+        }
+      }),
+    );
+    const perAccount: Record<string, PerAccountBtn> = {};
+    const labelMap = new Map<string, Set<string>>();
+    for (const [id, v] of results) {
+      if (!v) continue;
+      perAccount[id] = v;
+      for (const b of v.buttons) {
+        if (!labelMap.has(b.label)) labelMap.set(b.label, new Set());
+        labelMap.get(b.label)!.add(b.kind);
+      }
+    }
+    const labels = Array.from(labelMap.entries()).map(([label, kinds]) => ({
+      label,
+      kinds: [...kinds],
+    }));
+    setBotBtnState({ loading: false, labels, perAccount });
+    if (!labels.length) toast.info("No inline buttons found on the bot's latest messages");
+  }, [chatOpen, parsed?.username, previewChatFn]);
+
+  const broadcastPress = useCallback(
+    async (label: string) => {
+      const entries = Object.entries(botBtnState.perAccount);
+      if (!entries.length) return toast.error("Refresh bot buttons first");
+      setPressingLabel(label);
+      let ok = 0, fail = 0, skip = 0;
+      await Promise.all(
+        entries.map(async ([accountId, v]) => {
+          const btn = v.buttons.find((b) => b.label === label);
+          if (!btn) { skip++; return; }
+          try {
+            if (btn.kind === "callback" && btn.data) {
+              await pressInlineButtonAsFn({
+                data: { accountId, peerKey: v.peerKey, msgId: v.msgId, data: btn.data, buttonLabel: label },
+              });
+              ok++;
+            } else if (btn.kind === "reply") {
+              await sendMessageAsFn({
+                data: { accountId, peerKey: v.peerKey, text: label },
+              });
+              ok++;
+            } else {
+              skip++;
+            }
+          } catch {
+            fail++;
+          }
+        }),
+      );
+      setPressingLabel(null);
+      toast.success(`"${label}" → ok:${ok} fail:${fail} skip:${skip}`);
+    },
+    [botBtnState.perAccount, pressInlineButtonAsFn, sendMessageAsFn],
+  );
+
+  // Auto-clear cached buttons when the set of open chats changes.
+  useEffect(() => {
+    setBotBtnState({ loading: false, labels: [], perAccount: {} });
+  }, [chatOpen.length, parsed?.username]);
+
   return (
     <main className="min-h-screen bg-background">
       <div className="mx-auto max-w-5xl space-y-6 px-4 py-6 md:px-8">
@@ -964,6 +1077,67 @@ function BotFlowPage() {
                         >
                           Show 3 more
                         </Button>
+                      </>
+                    )}
+                  </div>
+                  <div className="rounded-md border border-border bg-background/60 p-2 text-xs space-y-2">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <span className="font-medium">Broadcast a bot button</span>
+                      <span className="text-muted-foreground">
+                        · press once, fires on all {chatOpen.length} open account(s)
+                      </span>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        className="ml-auto"
+                        onClick={refreshBotButtons}
+                        disabled={botBtnState.loading}
+                      >
+                        {botBtnState.loading ? "Loading…" : botBtnState.labels.length ? "Refresh buttons" : "Load bot buttons"}
+                      </Button>
+                    </div>
+                    {botBtnState.labels.length > 0 && (
+                      <>
+                        <div className="flex flex-wrap gap-1.5">
+                          {botBtnState.labels.map((b) => {
+                            const supported =
+                              b.kinds.includes("callback") || b.kinds.includes("reply");
+                            const cover = Object.values(botBtnState.perAccount).filter((v) =>
+                              v.buttons.some((x) => x.label === b.label),
+                            ).length;
+                            const total = Object.keys(botBtnState.perAccount).length;
+                            const busy = pressingLabel === b.label;
+                            return (
+                              <button
+                                key={b.label}
+                                type="button"
+                                disabled={!supported || busy}
+                                onClick={() => broadcastPress(b.label)}
+                                title={
+                                  supported
+                                    ? `Press "${b.label}" on ${cover}/${total} accounts`
+                                    : `Not broadcastable (${b.kinds.join(", ")})`
+                                }
+                                className={
+                                  "inline-flex items-center gap-1 rounded-md border px-2 py-1 text-[11px] " +
+                                  (supported
+                                    ? "border-primary/40 bg-primary/10 hover:bg-primary/20"
+                                    : "border-border bg-muted text-muted-foreground opacity-70") +
+                                  (busy ? " animate-pulse" : "")
+                                }
+                              >
+                                <span className="max-w-[220px] truncate">{b.label || "(unnamed)"}</span>
+                                <span className="rounded bg-background/70 px-1 text-[10px] font-mono">
+                                  {cover}/{total}
+                                </span>
+                              </button>
+                            );
+                          })}
+                        </div>
+                        <div className="text-[10px] text-muted-foreground">
+                          Callback + reply-text buttons broadcast automatically. URL / WebApp
+                          buttons stay per-account (open them inside each chat).
+                        </div>
                       </>
                     )}
                   </div>
