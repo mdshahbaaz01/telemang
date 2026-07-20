@@ -1496,8 +1496,16 @@ function VerifyFrame({ url, accountId }: { url: string; accountId: string }) {
   const [retrySeed, setRetrySeed] = useState(0);
   const [blocked, setBlocked] = useState<{ text?: string } | null>(null);
   const [directMode, setDirectMode] = useState(false);
+  const [slowFallback, setSlowFallback] = useState(false);
   const { url: proxied } = useMiniAppProxyUrl(url, accountId, { fpSeed: retrySeed || undefined });
   useTelegramWebviewBridge(iframeRef, { onBlocked: (details) => setBlocked({ text: details.text }) });
+  useEffect(() => {
+    const src = directMode ? url : proxied;
+    if (!src) return;
+    setSlowFallback(false);
+    const t = window.setTimeout(() => setSlowFallback(true), directMode ? 6500 : 8500);
+    return () => window.clearTimeout(t);
+  }, [url, proxied, directMode, retrySeed]);
   return (
     <div className="relative h-full w-full flex-1">
       <div className="absolute right-2 top-2 z-10 rounded-md border border-border bg-background/95 p-1 shadow-sm backdrop-blur">
@@ -1519,7 +1527,24 @@ function VerifyFrame({ url, accountId }: { url: string; accountId: string }) {
         allow="clipboard-read; clipboard-write; camera; microphone; geolocation; payment"
         sandbox="allow-scripts allow-same-origin allow-forms allow-modals allow-popups allow-popups-to-escape-sandbox allow-storage-access-by-user-activation allow-top-navigation-by-user-activation"
         referrerPolicy="no-referrer-when-downgrade"
+        onLoad={() => setSlowFallback(false)}
       />
+      {slowFallback && !blocked && (
+        <div className="absolute inset-x-3 bottom-3 rounded-lg border border-yellow-500/40 bg-background/95 p-3 text-xs shadow-lg backdrop-blur">
+          <div className="mb-2 font-semibold">Verification is not responding here</div>
+          <div className="mb-3 text-muted-foreground">
+            This provider is rejecting embedded/proxy sessions. Use Telegram/System Browser for this link.
+          </div>
+          <div className="flex flex-wrap gap-2">
+            {!directMode && (
+              <Button size="sm" variant="secondary" onClick={() => { setDirectMode(true); setRetrySeed(Date.now()); }}>
+                Try direct
+              </Button>
+            )}
+            <BrowserPickerButton url={url} size="sm" variant="outline" />
+          </div>
+        </div>
+      )}
       {blocked && (
         <div className="absolute inset-x-3 bottom-3 rounded-lg border border-border bg-background/95 p-3 text-xs shadow-lg backdrop-blur">
           <div className="mb-2 font-semibold">Verification blocked in embedded view</div>
@@ -2008,8 +2033,16 @@ function BulkVerifyFrame({
   const localRef = useRef<HTMLIFrameElement | null>(null);
   const [retrySeed, setRetrySeed] = useState(fpSeed);
   const [blocked, setBlocked] = useState<{ text?: string } | null>(null);
+  const [slowFallback, setSlowFallback] = useState(false);
   const { url: proxied } = useMiniAppProxyUrl(url, accountId, { fpSeed: retrySeed });
   useTelegramWebviewBridge(localRef, { onBlocked: (details) => setBlocked({ text: details.text }) });
+  useEffect(() => {
+    const src = directMode ? url : proxied;
+    if (!src) return;
+    setSlowFallback(false);
+    const t = window.setTimeout(() => setSlowFallback(true), directMode ? 6500 : 8500);
+    return () => window.clearTimeout(t);
+  }, [url, proxied, directMode, retrySeed]);
   return (
     <div className="relative h-full w-full flex-1">
       <iframe
@@ -2024,8 +2057,15 @@ function BulkVerifyFrame({
         allow="clipboard-read; clipboard-write; camera; microphone; geolocation; payment"
         sandbox="allow-scripts allow-same-origin allow-forms allow-modals allow-popups allow-popups-to-escape-sandbox allow-storage-access-by-user-activation allow-top-navigation-by-user-activation"
         referrerPolicy="no-referrer-when-downgrade"
-        onLoad={onLoaded}
+        onLoad={() => { setSlowFallback(false); onLoaded?.(); }}
       />
+      {slowFallback && !blocked && (
+        <div className="absolute inset-x-2 bottom-2 rounded-lg border border-yellow-500/40 bg-background/95 p-2 text-[11px] shadow-lg backdrop-blur">
+          <div className="mb-1 font-semibold">No response in embedded view</div>
+          <div className="mb-2 text-muted-foreground">Open this row in Telegram/System Browser.</div>
+          <BrowserPickerButton url={url} size="sm" variant="outline" />
+        </div>
+      )}
       {blocked && (
         <div className="absolute inset-x-2 bottom-2 rounded-lg border border-border bg-background/95 p-2 text-[11px] shadow-lg backdrop-blur">
           <div className="mb-1 font-semibold">Blocked in embedded view</div>
