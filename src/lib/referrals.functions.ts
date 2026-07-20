@@ -154,7 +154,7 @@ export const joinReferralFromAccounts = createServerFn({ method: "POST" })
     z.object({
       referral_link_id: z.string().uuid(),
       accountIds: z.array(z.string().uuid()).min(1).max(100),
-      concurrency: z.number().int().min(1).max(10).default(3),
+      concurrency: z.coerce.number().int().min(1).max(10).catch(10).default(3),
     }).parse(d),
   )
   .handler(async ({ data, context }) => {

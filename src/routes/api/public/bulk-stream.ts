@@ -108,7 +108,7 @@ const bodySchema = z.object({
   accountIds: z.array(z.string().uuid()).min(1).max(200),
   minDelay: z.number().int().min(0).max(120).default(1),
   maxDelay: z.number().int().min(0).max(120).default(3),
-  concurrency: z.number().int().min(1).max(20).default(3),
+  concurrency: z.coerce.number().int().min(1).max(20).catch(20).default(3),
   op: z.discriminatedUnion("kind", [
     createChatSchema, inviteToChatSchema, dmBlastSchema, editSentSchema,
     copyCleanSchema, voiceNoteSchema, pollCreateSchema, pollVoteSchema, readAllSchema,
