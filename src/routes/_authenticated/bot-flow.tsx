@@ -1589,7 +1589,12 @@ function BulkVerifyRunner({
 }: {
   accountList: Array<{ id: string; first_name?: string | null; username?: string | null; phone?: string | null }>;
 }) {
-  const [text, setText] = useState("");
+  type LinkEntry = { id: string; url: string; accountOverride?: string | null };
+  const mkEntry = (url = ""): LinkEntry => ({
+    id: `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`,
+    url,
+  });
+  const [entries, setEntries] = useState<LinkEntry[]>([mkEntry()]);
   const [selected, setSelected] = useState<string[]>([]);
   const [rows, setRows] = useState<BulkRow[]>([]);
   const [runNonce, setRunNonce] = useState(0);
