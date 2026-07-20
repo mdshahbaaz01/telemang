@@ -1540,6 +1540,39 @@ function ActionsPageInner() {
                       >
                         {showResults ? "Refresh results" : "View results"}
                       </Button>
+                      {pollInfo.resultsHidden && (
+                        <Button
+                          type="button"
+                          variant="secondary"
+                          size="sm"
+                          disabled={pollLoading}
+                          onClick={async () => {
+                            const src = parseMessageLink(source);
+                            if (!src) return;
+                            setPollLoading(true);
+                            try {
+                              const info = await loadPollFn({
+                                data: {
+                                  chat: src.chat,
+                                  msgId: src.msgId,
+                                  ...(pollCheckAccountId ? { accountId: pollCheckAccountId } : {}),
+                                  reveal: true,
+                                },
+                              });
+                              setPollInfo(info);
+                              setShowResults(true);
+                              if (info.resultsHidden) toast.warning("Telegram still hid the counts — try a different account.");
+                              else toast.success("Results revealed");
+                            } catch (e) {
+                              toast.error((e as Error).message);
+                            } finally {
+                              setPollLoading(false);
+                            }
+                          }}
+                        >
+                          Reveal results (vote & retract)
+                        </Button>
+                      )}
                     </>
                   )}
                   {pollInfo && (
@@ -1571,6 +1604,11 @@ function ActionsPageInner() {
                 {pollInfo?.alreadyVoted && (
                   <div className="rounded-md border border-amber-500/50 bg-amber-500/10 p-2 text-xs text-amber-700 dark:text-amber-300">
                     This account already voted for {pollInfo.answers.filter((a) => a.chosen).map((a) => `"${a.text}"`).join(", ")}. Running "Vote" again will retract it and cast the new selection.
+                  </div>
+                )}
+                {pollInfo?.resultsHidden && (
+                  <div className="rounded-md border border-sky-500/50 bg-sky-500/10 p-2 text-xs text-sky-700 dark:text-sky-300">
+                    Telegram hides per-option counts on open polls until the account has voted. Click <b>Reveal results</b> to briefly vote &amp; retract, or pick a check-account that already voted.
                   </div>
                 )}
                 {pollInfo ? (
