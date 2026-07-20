@@ -1210,6 +1210,17 @@ function BotFlowPage() {
                         <RefreshCw className={`h-3.5 w-3.5 ${r.status === "loading" ? "animate-spin" : ""}`} />
                         Refresh
                       </button>
+                      {r.status === "ready" && (
+                        <button
+                          type="button"
+                          className="inline-flex items-center gap-1 rounded border border-border px-2 py-1 text-[11px] hover:bg-muted"
+                          title={miniMounted.has(r.accountId) ? "Unload iframe (free resources)" : "Load this mini app"}
+                          onClick={() => toggleMiniMount(r.accountId)}
+                        >
+                          {miniMounted.has(r.accountId) ? <Square className="h-3.5 w-3.5" /> : <Play className="h-3.5 w-3.5" />}
+                          {miniMounted.has(r.accountId) ? "Unload" : "Load"}
+                        </button>
+                      )}
                       <button
                         type="button"
                         className="rounded p-1 hover:bg-muted"
