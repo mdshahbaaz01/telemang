@@ -122,8 +122,8 @@ export const loadPoll = createServerFn({ method: "POST" })
         } catch (e) {
           const msg = (e as Error).message || "";
           if (!/Could not find the input entity/i.test(msg)) throw e;
-          // Warm the entity cache by iterating dialogs, then retry once.
-          for await (const _ of client.iterDialogs({ limit: 200 })) {
+          // Warm entity cache by scanning ALL dialogs (incl. archived/folders).
+          for await (const _ of client.iterDialogs({ limit: 3000, archived: true } as any)) {
             void _;
           }
           return await client.getEntity(target);
@@ -137,7 +137,7 @@ export const loadPoll = createServerFn({ method: "POST" })
           peer = await resolveEntity(new Api.PeerChannel({ channelId: bigInt(raw) }));
         } catch (e) {
           throw new Error(
-            `Account can't access this private chat (t.me/c/${raw}). The account must be a member of the group/channel first. Original: ${(e as Error).message}`,
+            `The selected account is not a member of this private chat (t.me/c/${raw}). Pick an account that has already joined it, or join the channel first (use Pre-join with the invite link), then retry.`,
           );
         }
       } else {
