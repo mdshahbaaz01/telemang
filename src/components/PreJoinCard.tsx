@@ -4,13 +4,15 @@ import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { toast } from "sonner";
 import { Play, Square, ChevronDown, ChevronUp, History, Trash2 } from "lucide-react";
+import { Link } from "@tanstack/react-router";
+import { friendlyJoinReason } from "@/lib/telegram/errors";
 
 type Account = { id: string; first_name?: string | null; username?: string | null; phone?: string | null };
 
-type PreJoinLog = { level: "info" | "success" | "warn" | "error"; message: string; ts: number; target?: string; accountId?: string };
+type PreJoinLog = { level: "info" | "success" | "warn" | "error"; message: string; ts: number; target?: string; accountId?: string; reason?: string };
 
 type ChStatus = "queued" | "attempting" | "requested" | "succeeded" | "skipped" | "failed";
-type ChCell = { status: ChStatus; ts: number; message?: string };
+type ChCell = { status: ChStatus; ts: number; message?: string; reason?: string; attempts?: number };
 type ChMap = Record<string, Record<string, ChCell>>; // channel -> accountId -> cell
 
 function normalizeTarget(t: string): string {
@@ -114,14 +116,20 @@ export function PreJoinCard({ accounts }: { accounts: Account[] }) {
     if (currentEntryRef.current) currentEntryRef.current.logs.unshift(entry);
   };
 
-  const updateStatus = (channel: string, accountId: string, status: ChStatus, message?: string) => {
+  const updateStatus = (channel: string, accountId: string, status: ChStatus, message?: string, reason?: string, bumpAttempt?: boolean) => {
     const key = normalizeTarget(channel);
     if (!key) return;
     setStatuses((prev) => {
       const row = { ...(prev[key] || {}) };
       const cur = row[accountId];
       if (cur && STATUS_RANK[cur.status] > STATUS_RANK[status]) return prev;
-      row[accountId] = { status, ts: Date.now(), message };
+      row[accountId] = {
+        status,
+        ts: Date.now(),
+        message,
+        reason: reason ?? cur?.reason,
+        attempts: (cur?.attempts ?? 0) + (bumpAttempt ? 1 : 0),
+      };
       return { ...prev, [key]: row };
     });
   };
@@ -219,10 +227,19 @@ export function PreJoinCard({ accounts }: { accounts: Account[] }) {
           try { data = JSON.parse(dataLine.slice(6)); } catch {}
           if (event === "start") addLog({ level: "info", message: "Pre-join started" });
           else if (event === "log") {
-            addLog({ accountId: data.accountId, level: data.level ?? "info", target: data.target, message: data.message ?? "" });
+            addLog({ accountId: data.accountId, level: data.level ?? "info", target: data.target, message: data.message ?? "", reason: data.reason });
             if (data.target && data.accountId) {
-              const s = classify(data.level ?? "info", data.message ?? "");
-              if (s) updateStatus(data.target, data.accountId, s, data.message);
+              // Prefer the server's terminal marker; fall back to text classification.
+              const s: ChStatus | null = data.terminal
+                ? (data.terminal === "joined" ? "succeeded" : data.terminal as ChStatus)
+                : classify(data.level ?? "info", data.message ?? "");
+              const isAttempt = /Attempting join|Retry \d+\//i.test(data.message ?? "");
+              if (s) {
+                const reason = data.reason ?? friendlyJoinReason({ code: data.errorCode, message: data.message, status: data.terminal, floodSeconds: data.floodSeconds }) ?? undefined;
+                updateStatus(data.target, data.accountId, s, data.message, reason, isAttempt);
+              } else if (isAttempt) {
+                updateStatus(data.target, data.accountId, "attempting", data.message, undefined, true);
+              }
             }
           }
           else if (event === "done") {
