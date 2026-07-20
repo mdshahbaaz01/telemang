@@ -1078,7 +1078,8 @@ export const Route = createFileRoute("/api/public/actions-stream")({
                     };
                     const attempt = async (): Promise<"ok" | "requested" | "flood" | "skip" | "transient" | "fail"> => {
                     try {
-                       send("log", { accountId, level: "info", target: joinLogTarget, message: `Attempting join ${target}…` });
+                       attemptCount++;
+                       send("log", { accountId, level: "info", target: joinLogTarget, message: `Attempting join ${target}… (attempt ${attemptCount})`, attempts: attemptCount });
                        const result = await withTimeout(joinTelegramTargetVerified({
                          client,
                          Api,
@@ -1092,24 +1093,24 @@ export const Route = createFileRoute("/api/public/actions-stream")({
                            const { friendlyJoinReason } = await import("@/lib/telegram/errors");
                            const terminal = result.status === "requested" ? "requested" : "joined";
                            const reason = friendlyJoinReason({ code: result.errorCode, message: result.message, status: terminal }) ?? (result.verified ? "Joined — membership verified" : terminal === "requested" ? "Approval required — request sent" : "Joined");
-                           send("log", { accountId, level: result.status === "requested" ? "info" : "success", target: joinLogTarget, message: `${result.message}${result.verified ? " · membership verified" : ""}`, reason, terminal, verified: result.verified });
+                            send("log", { accountId, level: result.status === "requested" ? "info" : "success", target: joinLogTarget, message: `${result.message}${result.verified ? " · membership verified" : terminal === "joined" ? " · verification pending" : ""}`, reason, terminal, verified: result.verified, attempts: attemptCount });
                          }
                        return result.status === "requested" ? "requested" : "ok";
                     } catch (e) {
                       const em = errorText(e);
                        joinErrorCode = joinErrorCode ?? extractErrCode(em);
                        if (/USER_ALREADY_PARTICIPANT/i.test(em)) {
-                          send("log", { accountId, level: "success", target: joinLogTarget, message: `${target}: already a member`, reason: "Already a member", terminal: "joined", verified: true });
+                           send("log", { accountId, level: "success", target: joinLogTarget, message: `${target}: already a member`, reason: "Already a member", terminal: "joined", verified: true, attempts: attemptCount });
                          return "ok";
                        }
                        if (/INVITE_REQUEST_SENT|INVITE_REQUEST_ALREADY_SENT|REQUEST_SENT/i.test(em)) {
-                          send("log", { accountId, level: "info", target: joinLogTarget, message: `${target}: join request sent, waiting for approval`, reason: "Approval required — request sent", terminal: "requested" });
+                           send("log", { accountId, level: "info", target: joinLogTarget, message: `${target}: join request sent, waiting for approval`, reason: "Approval required — request sent", terminal: "requested", attempts: attemptCount });
                          return "requested";
                        }
                        if (/INVITE_HASH_EXPIRED|INVITE_HASH_INVALID|CHANNELS_TOO_MUCH|USER_BANNED_IN_CHANNEL|USER_RESTRICTED|CHANNEL_PRIVATE|USERNAME_NOT_OCCUPIED|USERNAME_INVALID|PEER_ID_INVALID/i.test(em)) {
                           const { friendlyJoinReason } = await import("@/lib/telegram/errors");
                           const reason = friendlyJoinReason({ code: joinErrorCode, message: em, status: "failed" }) ?? em;
-                          send("log", { accountId, level: "error", target: joinLogTarget, message: `Failed ${target}: ${em}`, reason, terminal: "failed", errorCode: joinErrorCode });
+                           send("log", { accountId, level: "error", target: joinLogTarget, message: `Failed ${target}: ${em}`, reason, terminal: "failed", errorCode: joinErrorCode, attempts: attemptCount });
                          return "fail";
                       }
                       const secs = floodWaitSeconds(em);
@@ -1120,21 +1121,22 @@ export const Route = createFileRoute("/api/public/actions-stream")({
                           return "flood"; // caller decides whether to retry
                         }
                         const p = await pauseAccountOnFlood(accountId, em);
-                          send("log", { accountId, level: "warn", target: joinLogTarget, message: `FloodWait ${p ?? secs}s — account paused`, reason: `Rate-limited by Telegram (${p ?? secs}s) — account paused`, terminal: "failed", floodSeconds: p ?? secs });
+                           send("log", { accountId, level: "warn", target: joinLogTarget, message: `FloodWait ${p ?? secs}s — account paused`, reason: `Rate-limited by Telegram (${p ?? secs}s) — account paused`, terminal: "failed", floodSeconds: p ?? secs, attempts: attemptCount });
                         return "flood";
                       }
                         if (isTransient(em)) {
-                           send("log", { accountId, level: "info", target: joinLogTarget, message: `Retryable join issue (${target}): ${em}` });
+                            send("log", { accountId, level: "info", target: joinLogTarget, message: `Retryable join issue (${target}): ${em}`, attempts: attemptCount });
                           return "transient";
                         }
                          {
                            const { friendlyJoinReason } = await import("@/lib/telegram/errors");
                            const reason = friendlyJoinReason({ code: joinErrorCode, message: em, status: "failed" }) ?? em;
-                           send("log", { accountId, level: "error", target: joinLogTarget, message: `Failed ${target} (path=${joinPath}, code=${joinErrorCode ?? "?"}): ${em}`, reason, terminal: "failed", errorCode: joinErrorCode, path: joinPath });
+                           send("log", { accountId, level: "error", target: joinLogTarget, message: `Failed ${target} (path=${joinPath}, code=${joinErrorCode ?? "?"}): ${em}`, reason, terminal: "failed", errorCode: joinErrorCode, path: joinPath, attempts: attemptCount });
                          }
                        return "fail";
                     }
                   };
+                    let attemptCount = 0;
                    let out = await attempt();
                     // Exponential backoff for transient errors — up to 3 tries
                     // (1s, 2s, 4s ± jitter). Non-flood transient failures no
@@ -1185,6 +1187,8 @@ export const Route = createFileRoute("/api/public/actions-stream")({
                         path: joinPath,
                         errorCode: joinErrorCode,
                         publicInviteFallback: op.publicInviteFallback !== false,
+                         attempts: attemptCount,
+                         isolated: !!op.preJoinOnly,
                       },
                    });
                    // Only mark as permanently handled if we actually joined

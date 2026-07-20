@@ -118,7 +118,7 @@ export function PreJoinCard({ accounts }: { accounts: Account[] }) {
     if (currentEntryRef.current) currentEntryRef.current.logs.unshift(entry);
   };
 
-  const updateStatus = (channel: string, accountId: string, status: ChStatus, message?: string, reason?: string, bumpAttempt?: boolean) => {
+  const updateStatus = (channel: string, accountId: string, status: ChStatus, message?: string, reason?: string, bumpAttempt?: boolean, attemptsOverride?: number) => {
     const key = normalizeTarget(channel);
     if (!key) return;
     setStatuses((prev) => {
@@ -130,7 +130,7 @@ export function PreJoinCard({ accounts }: { accounts: Account[] }) {
         ts: Date.now(),
         message,
         reason: reason ?? cur?.reason,
-        attempts: (cur?.attempts ?? 0) + (bumpAttempt ? 1 : 0),
+        attempts: attemptsOverride ?? ((cur?.attempts ?? 0) + (bumpAttempt ? 1 : 0)),
       };
       return { ...prev, [key]: row };
     });
@@ -237,11 +237,12 @@ export function PreJoinCard({ accounts }: { accounts: Account[] }) {
                 ? (data.terminal === "joined" ? "succeeded" : data.terminal as ChStatus)
                 : classify(data.level ?? "info", data.message ?? "");
               const isAttempt = /Attempting join|Retry \d+\//i.test(data.message ?? "");
+              const attemptsNum = typeof data.attempts === "number" ? data.attempts : undefined;
               if (s) {
                 const reason = data.reason ?? friendlyJoinReason({ code: data.errorCode, message: data.message, status: data.terminal, floodSeconds: data.floodSeconds }) ?? undefined;
-                updateStatus(data.target, data.accountId, s, data.message, reason, isAttempt);
+                updateStatus(data.target, data.accountId, s, data.message, reason, isAttempt && attemptsNum === undefined, attemptsNum);
               } else if (isAttempt) {
-                updateStatus(data.target, data.accountId, "attempting", data.message, undefined, true);
+                updateStatus(data.target, data.accountId, "attempting", data.message, undefined, attemptsNum === undefined, attemptsNum);
               }
             }
           }
