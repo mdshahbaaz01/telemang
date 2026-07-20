@@ -112,6 +112,16 @@ export const previewChat = createServerFn({ method: "POST" })
           const entity = info.chat;
           return await buildFullPreview({ client, Api, entity, accountId, target: data.target });
         }
+        // Telegram bots sometimes store approval-style invite links for chats
+        // that are actually public. If the preview title can be resolved to a
+        // public username, show the real chat immediately so the Join button
+        // uses JoinChannel(@username) instead of ImportChatInvite(+hash).
+        const { findPublicUsernameByInvitePreview } = await import("./telegram-join-helper.server");
+        const publicEntity = await findPublicUsernameByInvitePreview(client, Api, info);
+        if (publicEntity?.username) {
+          const entity = await client.getEntity(publicEntity.username);
+          return await buildFullPreview({ client, Api, entity, accountId, target: publicEntity.username });
+        }
         // Not a member → return preview-only card.
         const requestNeeded = !!info?.requestNeeded;
         const title = String(info?.title ?? "Private channel");

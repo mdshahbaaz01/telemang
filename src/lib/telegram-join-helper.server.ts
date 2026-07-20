@@ -43,6 +43,11 @@ function cleanTitle(value: unknown): string {
     .trim();
 }
 
+function toCount(value: unknown): number {
+  const n = Number(value ?? 0);
+  return Number.isFinite(n) ? n : 0;
+}
+
 function firstChatFrom(value: any): any | null {
   if (!value) return null;
   if (value.chat) return value.chat;
@@ -176,24 +181,64 @@ async function joinEntityVerified(
   };
 }
 
-async function findPublicUsernameByInvitePreview(client: any, Api: any, inviteInfo: any): Promise<any | null> {
+export async function findPublicUsernameByInvitePreview(
+  client: any,
+  Api: any,
+  inviteInfo: any,
+  log?: Logger,
+): Promise<any | null> {
   const title = String(inviteInfo?.title ?? "").trim();
-  if (!title || inviteInfo?.public !== true) return null;
+  if (!title) return null;
+  const wantedTitle = cleanTitle(title);
+  if (!wantedTitle) return null;
+  const wantedCount = toCount(inviteInfo?.participantsCount);
+  const wantedMegagroup = !!inviteInfo?.megagroup;
+  const wantedBroadcast = !!inviteInfo?.broadcast || (!!inviteInfo?.channel && !wantedMegagroup);
+
   try {
-    const found: any = await client.invoke(new Api.contacts.Search({ q: title, limit: 10 }));
-    const chats: any[] = Array.isArray(found?.chats) ? found.chats : [];
-    const wantedTitle = cleanTitle(title);
-    const wantedCount = Number(inviteInfo?.participantsCount ?? 0);
-    const candidates = chats
-      .filter((chat) => chat?.username && cleanTitle(chat?.title) === wantedTitle)
+    const queries = Array.from(
+      new Set([
+        title,
+        wantedTitle,
+        wantedTitle.split(" ").slice(0, 4).join(" "),
+      ].filter((q) => q && q.length >= 3)),
+    );
+    const byId = new Map<string, any>();
+    for (const q of queries) {
+      const found: any = await client.invoke(new Api.contacts.Search({ q, limit: 20 }));
+      for (const chat of (Array.isArray(found?.chats) ? found.chats : [])) {
+        if (!chat?.username || !chat?.id) continue;
+        byId.set(String(chat.id), chat);
+      }
+    }
+
+    const candidates = Array.from(byId.values())
       .map((chat) => {
-        const count = Number(chat?.participantsCount ?? chat?.participants_count ?? 0);
-        const countDistance = wantedCount && count ? Math.abs(count - wantedCount) : Number.MAX_SAFE_INTEGER;
-        return { chat, countDistance };
+        const titleScore = cleanTitle(chat?.title) === wantedTitle
+          ? 1000
+          : cleanTitle(chat?.title).includes(wantedTitle) || wantedTitle.includes(cleanTitle(chat?.title))
+            ? 250
+            : 0;
+        const typeScore =
+          (wantedMegagroup && !!chat?.megagroup) || (wantedBroadcast && !!chat?.broadcast)
+            ? 100
+            : 0;
+        const count = toCount(chat?.participantsCount ?? chat?.participants_count);
+        const countScore = wantedCount && count
+          ? Math.max(0, 100 - Math.min(100, Math.round((Math.abs(count - wantedCount) / Math.max(wantedCount, 1)) * 100)))
+          : 0;
+        return { chat, score: titleScore + typeScore + countScore, count };
       })
-      .sort((a, b) => a.countDistance - b.countDistance);
-    return candidates[0]?.chat ?? null;
-  } catch {
+      .filter((c) => c.score >= 1000 || (c.score >= 350 && wantedCount > 0))
+      .sort((a, b) => b.score - a.score || Math.abs((a.count || 0) - wantedCount) - Math.abs((b.count || 0) - wantedCount));
+
+    const best = candidates[0]?.chat ?? null;
+    if (best?.username) {
+      log?.("info", `Resolved invite preview "${title}" to public @${best.username}; joining public username instead of approval invite`);
+    }
+    return best;
+  } catch (error) {
+    log?.("info", `Public username search failed for invite preview (${extractTelegramErrorCode(textOf(error)) ?? "search_failed"})`);
     return null;
   }
 }
@@ -268,18 +313,24 @@ export async function joinTelegramTargetVerified(args: {
         return joinEntityVerified(client, Api, entity, `@${chat.username}`, "peek_username", log);
       }
 
+      // Some bots save an approval-required +invite link even though the
+      // channel/group itself is public. In that case Telegram may return
+      // INVITE_REQUEST_SENT when joining through the invite hash, while joining
+      // the public username works immediately. Search by the invite preview
+      // title first and join the verified public match before falling back to
+      // the private/request flow.
+      const searched = await findPublicUsernameByInvitePreview(client, Api, peekInfo, log);
+      if (searched?.username) {
+        const entity = await client.getEntity(searched.username);
+        return joinEntityVerified(client, Api, entity, `@${searched.username}`, "peek_search_username", log);
+      }
+
       if (chat && cn === "ChatInvitePeek") {
         try {
           return await joinEntityVerified(client, Api, chat, chat.title || "channel", "peek_chat", log);
         } catch (error) {
           log?.("info", `Peek chat join did not verify (${extractTelegramErrorCode(textOf(error)) ?? "err"}); trying invite import…`);
         }
-      }
-
-      const searched = await findPublicUsernameByInvitePreview(client, Api, peekInfo);
-      if (searched?.username) {
-        const entity = await client.getEntity(searched.username);
-        return joinEntityVerified(client, Api, entity, `@${searched.username}`, "peek_search_username", log);
       }
     } catch (error) {
       log?.("info", `Invite peek/fallback failed (${extractTelegramErrorCode(textOf(error)) ?? "err"}); trying ImportChatInvite…`);
