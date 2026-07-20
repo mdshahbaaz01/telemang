@@ -242,11 +242,24 @@ function buildOverrideScript(accountId: string, upstreamUrl: string, token: stri
         // hop see an empty location.hash and show "Telegram Required".
         const TG_STORE_KEY = '__lv_tgLaunchHash_v1__';
         const hashParams = new URLSearchParams(String(location.hash || '').replace(/^#/, ''));
-        const hasTg = ['tgWebAppData','tgWebAppPlatform','tgWebAppVersion','tgWebAppThemeParams']
-          .some((k) => hashParams.get(k));
+        const searchParams = new URLSearchParams(String(location.search || '').replace(/^\?/, ''));
+        // Some verification pages put tgWebAppData in the query string
+        // beside botHash instead of in the URL hash. Telegram's official
+        // web-app script only reads location.hash, so mirror every
+        // tgWebApp* query parameter into the hash before page scripts run.
+        try {
+          searchParams.forEach((v, k) => {
+            if (/^tgWebApp/i.test(k) && !hashParams.get(k)) hashParams.set(k, v);
+          });
+        } catch {}
+        const hasTg = Array.from(hashParams.keys()).some((k) => /^tgWebApp/i.test(k));
         try {
           if (hasTg) {
-            sessionStorage.setItem(TG_STORE_KEY, String(location.hash || '').replace(/^#/, ''));
+            const mergedHash = hashParams.toString();
+            sessionStorage.setItem(TG_STORE_KEY, mergedHash);
+            if (mergedHash && String(location.hash || '').replace(/^#/, '') !== mergedHash) {
+              try { history.replaceState(history.state, '', location.pathname + location.search + '#' + mergedHash); } catch {}
+            }
           } else {
             const saved = sessionStorage.getItem(TG_STORE_KEY);
             if (saved) {
