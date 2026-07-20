@@ -900,7 +900,7 @@ export const Route = createFileRoute("/api/public/actions-stream")({
               return { username: s, startParam };
             };
 
-            const runBotFlowForAccount = async (accountId: string, op: { bot: string; startParam?: string; steps: string[]; autoJoinRequired?: boolean; maxJoinRounds?: number; preJoinChannels?: string[]; preJoinOnly?: boolean; publicInviteFallback?: boolean; forceRejoin?: boolean }) => {
+            const runBotFlowForAccount = async (accountId: string, op: { bot: string; startParam?: string; steps: string[]; autoJoinRequired?: boolean; maxJoinRounds?: number; preJoinChannels?: string[]; preJoinOnly?: boolean; publicInviteFallback?: boolean; forceRejoin?: boolean; dedupeByLinkSeconds?: number }) => {
               send("log", { accountId, level: "info", message: "Connecting…" });
               let client: any;
               try {
@@ -956,6 +956,10 @@ export const Route = createFileRoute("/api/public/actions-stream")({
                 // the whole account. Returns "ok" | "stop" | "flood" | "skip".
                  const alreadyJoined = new Set<string>();
                  const attemptedThisRun = new Set<string>();
+                 // Per-run "recent attempt" map for same-task link dedupe.
+                 // Keyed by lowercase target handle → epoch ms of last attempt.
+                 const recentAttemptAt = new Map<string, number>();
+                 const dedupeWindowMs = Math.max(0, (op.dedupeByLinkSeconds ?? 0)) * 1000;
                  // Cross-run dedupe from persistent join_cache (all sources).
                  let pacing: PacingConfig;
                  try {
@@ -996,11 +1000,20 @@ export const Route = createFileRoute("/api/public/actions-stream")({
                     send("log", { accountId, level: "info", target: joinLogTarget, message: `Skip ${target} — already handled in this run` });
                     return "skip";
                   }
+                  if (dedupeWindowMs > 0) {
+                    const last = recentAttemptAt.get(key);
+                    if (last && Date.now() - last < dedupeWindowMs) {
+                      const secs = Math.ceil((dedupeWindowMs - (Date.now() - last)) / 1000);
+                      send("log", { accountId, level: "info", target: joinLogTarget, message: `Skip ${target} — retried within dedupe window (${secs}s left)`, reason: "Dedupe window active", terminal: "skipped" });
+                      return "skip";
+                    }
+                  }
                   if (key === parsed.username.toLowerCase()) {
                     send("log", { accountId, level: "info", target: joinLogTarget, message: `Skip ${target} — this is the bot itself` });
                     return "skip";
                   }
                    attemptedThisRun.add(key);
+                   recentAttemptAt.set(key, Date.now());
                     if (op.forceRejoin) {
                       // Wipe any prior cache row so tryAcquireJoinLock doesn't
                       // short-circuit as "skipped_cached".
