@@ -444,7 +444,10 @@ function buildOverrideScript(accountId: string, upstreamUrl: string, token: stri
             if (typeof data === 'string') { try { data = JSON.parse(data); } catch {} }
             hostPost(eventType, data || {});
           },
+          receiveEvent: emit,
         };
+        window.TelegramWebviewProxyProto = window.TelegramWebviewProxyProto || window.TelegramWebviewProxy;
+        window.TelegramWebview = window.TelegramWebview || window.TelegramWebviewProxy;
         try {
           window.external = window.external || {};
           window.external.notify = (raw) => {
