@@ -1602,6 +1602,7 @@ type BulkRowLog = { ts: number; level: "info" | "warn" | "error" | "success"; ms
 type BulkRow = {
   id: string;
   url: string;
+  launchUrl?: string;
   accountId: string;
   fpSeed: string;
   status: BulkRowStatus;
@@ -1662,6 +1663,7 @@ function BulkVerifyRunner({
     const built: BulkRow[] = parsedLinks.map((url, i) => ({
       id: `${salt}-${i}`,
       url,
+      launchUrl: guessTelegramLaunchUrl(url) ?? undefined,
       accountId: accs[i % accs.length],
       // Stable per-account seed by default → same device is presented every
       // time for that account. Turn off "Stable device" to use a fresh one.
@@ -1704,9 +1706,12 @@ function BulkVerifyRunner({
   }, [appendLog]);
   const openExternalRow = useCallback((r: BulkRow) => {
     try {
-      const w = window.open(r.url, "_blank", "noopener,noreferrer");
-      if (!w) window.location.href = r.url;
-      markRow(r.id, "opened", "Opened externally");
+      if (r.launchUrl) openTelegramUrl(r.launchUrl);
+      else {
+        const w = window.open(r.url, "_blank", "noopener,noreferrer");
+        if (!w) window.location.href = r.url;
+      }
+      markRow(r.id, "opened", r.launchUrl ? "Opened in Telegram app" : "Opened externally — raw verify URLs may still show Telegram Required");
     } catch (e) {
       markRow(r.id, "failed", (e as Error).message || "Failed to open externally");
     }
@@ -1920,6 +1925,7 @@ function BulkVerifyRunner({
                 <BulkVerifyFrame
                   key={`${r.id}:${r.fpSeed}`}
                   url={r.url}
+                  telegramUrl={r.launchUrl}
                   accountId={r.accountId}
                   fpSeed={r.fpSeed}
                   status={r.status}
@@ -1988,6 +1994,7 @@ function OverallProgress({
 
 function BulkVerifyFrame({
   url,
+  telegramUrl,
   accountId,
   fpSeed,
   status,
@@ -1997,6 +2004,7 @@ function BulkVerifyFrame({
   onCopy,
 }: {
   url: string;
+  telegramUrl?: string;
   accountId: string;
   fpSeed: string;
   status: BulkRowStatus;
@@ -2020,7 +2028,7 @@ function BulkVerifyFrame({
           <span className="min-w-0 truncate text-muted-foreground">{host}</span>
         </div>
         <div className="rounded-md border border-yellow-500/40 bg-yellow-500/10 p-3 text-yellow-700 dark:text-yellow-300">
-          Embedded mode is disabled for this provider because it returns Connection Lost / Telegram Required / refused to connect. Open externally and mark the result.
+          This provider needs Telegram WebView. {telegramUrl ? "Open will launch Telegram, not the raw verification website." : "Raw verification website links can still show Telegram Required; use original t.me/startapp links when possible."}
         </div>
         <div className="break-all rounded border bg-muted/20 p-2 font-mono text-[10px] text-muted-foreground">
           account:{accountId.slice(0, 8)} · fp:{fpSeed.slice(0, 10)} · {url}
@@ -2028,9 +2036,9 @@ function BulkVerifyFrame({
       </div>
       <div className="mt-3 flex flex-wrap gap-2">
         <Button size="sm" onClick={onOpen}>
-          <ExternalLink className="mr-1 h-4 w-4" /> Open external
+          <ExternalLink className="mr-1 h-4 w-4" /> {telegramUrl ? "Open in Telegram" : "Open external"}
         </Button>
-        <BrowserPickerButton url={url} size="sm" variant="outline" />
+        <BrowserPickerButton url={url} telegramUrl={telegramUrl} size="sm" variant="outline" />
         <Button size="sm" variant="outline" onClick={() => { copyWithToast(url, toast, "Verification link copied"); onCopy(); }}>
           <Copy className="mr-1 h-4 w-4" /> Copy
         </Button>
@@ -2041,7 +2049,7 @@ function BulkVerifyFrame({
   );
 }
 
-function MiniAppFrameImpl({ url, title, accountId, botUsername }: { url: string; title: string; accountId: string; botUsername: string }) {
+function MiniAppFrameImpl({ url, launchUrl, title, accountId, botUsername }: { url: string; launchUrl?: string; title: string; accountId: string; botUsername: string }) {
   const ref = useRef<HTMLIFrameElement | null>(null);
   const joinFn = useServerFn(joinFromLink);
   const { url: proxiedUrl } = useMiniAppProxyUrl(url, accountId);
@@ -2137,7 +2145,7 @@ function MiniAppFrameImpl({ url, title, accountId, botUsername }: { url: string;
                       Direct device mode
                     </Button>
                   )}
-                  <BrowserPickerButton url={overlay.url} size="sm" variant="outline" />
+                  <BrowserPickerButton url={overlay.url} telegramUrl={launchUrl} size="sm" variant="outline" />
                 </div>
               </div>
             )}
