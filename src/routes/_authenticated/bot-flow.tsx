@@ -569,6 +569,7 @@ function BotFlowPage() {
         );
       }
       setVerifyNonce((n) => n + 1);
+      toast.success("Verification handoff ready");
     } catch {
       toast.error("Invalid verification URL");
     }
@@ -1280,7 +1281,7 @@ function BotFlowPage() {
 
         <CollapsibleSection storageKey="botflow.verifysingle" title="Verification URL runner (single account)" defaultOpen={false}>
           <p className="text-xs text-muted-foreground">
-            Paste a direct mini-app verification URL and open it inside a specific account's proxy.
+            Paste a direct mini-app verification URL, open it outside the embedded viewer, and track the result here.
           </p>
 
           <div className="grid gap-3 md:grid-cols-[1fr_260px]">
@@ -1338,17 +1339,17 @@ function BotFlowPage() {
 
           <div className="flex gap-2">
             <Button onClick={openVerification} disabled={!normalizedVerifyLink || !verifyAccountId || verifyLinkAccountMismatch}>
-              <Play className="mr-1 h-4 w-4" /> Open verification
+              <Play className="mr-1 h-4 w-4" /> Prepare handoff
             </Button>
             {verifyNonce > 0 && (
               <Button variant="outline" onClick={() => setVerifyNonce((n) => n + 1)}>
-                <RefreshCw className="mr-1 h-4 w-4" /> Refresh
+                <RefreshCw className="mr-1 h-4 w-4" /> Reset status
               </Button>
             )}
           </div>
 
           {verifyNonce > 0 && verifyAccountId && normalizedVerifyLink && (
-            <div className="flex h-[680px] flex-col overflow-hidden rounded-md border border-border bg-background">
+            <div className="flex flex-col overflow-hidden rounded-md border border-border bg-background">
               <div className="flex items-center gap-2 border-b px-2 py-1.5">
                 <div className="min-w-0 flex-1 text-xs">
                   <div className="truncate font-semibold">
@@ -1492,76 +1493,57 @@ function BotFlowCaptchaCard() {
 }
 
 function VerifyFrame({ url, accountId }: { url: string; accountId: string }) {
-  const iframeRef = useRef<HTMLIFrameElement | null>(null);
-  const [retrySeed, setRetrySeed] = useState(0);
-  const [blocked, setBlocked] = useState<{ text?: string } | null>(null);
-  const [directMode, setDirectMode] = useState(false);
-  const [slowFallback, setSlowFallback] = useState(false);
-  const { url: proxied } = useMiniAppProxyUrl(url, accountId, { fpSeed: retrySeed || undefined });
-  useTelegramWebviewBridge(iframeRef, { onBlocked: (details) => setBlocked({ text: details.text }) });
-  useEffect(() => {
-    const src = directMode ? url : proxied;
-    if (!src) return;
-    setSlowFallback(false);
-    const t = window.setTimeout(() => setSlowFallback(true), directMode ? 6500 : 8500);
-    return () => window.clearTimeout(t);
-  }, [url, proxied, directMode, retrySeed]);
+  const [status, setStatus] = useState<"queued" | "opened" | "success" | "failed">("queued");
+  const [logs, setLogs] = useState<BulkRowLog[]>([
+    { ts: Date.now(), level: "info", msg: `Ready for account ${accountId.slice(0, 8)}` },
+  ]);
+  const add = (level: BulkRowLog["level"], msg: string) =>
+    setLogs((prev) => [...prev.slice(-49), { ts: Date.now(), level, msg }]);
+  const openExternal = () => {
+    try {
+      const w = window.open(url, "_blank", "noopener,noreferrer");
+      if (!w) window.location.href = url;
+      setStatus("opened");
+      add("info", "Opened externally. Complete the verification, then mark the result here.");
+    } catch (e) {
+      setStatus("failed");
+      add("error", (e as Error).message || "Failed to open link");
+    }
+  };
+  const badge =
+    status === "success" ? "bg-green-500/15 text-green-600 dark:text-green-400"
+    : status === "failed" ? "bg-destructive/15 text-destructive"
+    : status === "opened" ? "bg-blue-500/15 text-blue-600 dark:text-blue-400"
+    : "bg-muted text-muted-foreground";
   return (
-    <div className="relative h-full w-full flex-1">
-      <div className="absolute right-2 top-2 z-10 rounded-md border border-border bg-background/95 p-1 shadow-sm backdrop-blur">
-        <Button
-          size="sm"
-          variant={directMode ? "secondary" : "outline"}
-          className="h-7 px-2 text-[11px]"
-          onClick={() => { setDirectMode((v) => !v); setBlocked(null); setRetrySeed(Date.now()); }}
-        >
-          {directMode ? "Direct device" : "Proxy mode"}
+    <div className="space-y-3 p-4 text-sm">
+      <div className="rounded-md border border-yellow-500/40 bg-yellow-500/10 p-3 text-xs text-yellow-700 dark:text-yellow-300">
+        This verification provider is blocking iframe/proxy loading. Use the external handoff below, then mark the row as success or failed.
+      </div>
+      <div className="flex flex-wrap items-center gap-2">
+        <span className={`rounded px-2 py-1 text-[11px] font-semibold uppercase ${badge}`}>{status}</span>
+        <Button size="sm" onClick={openExternal}>
+          <ExternalLink className="mr-1 h-4 w-4" /> Open external
+        </Button>
+        <BrowserPickerButton url={url} size="sm" variant="outline" />
+        <Button size="sm" variant="outline" onClick={() => copyWithToast(url, toast, "Verification link copied")}>
+          <Copy className="mr-1 h-4 w-4" /> Copy
+        </Button>
+        <Button size="sm" variant="secondary" onClick={() => { setStatus("success"); add("success", "Marked success manually"); }}>
+          Mark success
+        </Button>
+        <Button size="sm" variant="outline" onClick={() => { setStatus("failed"); add("error", "Marked failed manually"); }}>
+          Mark failed
         </Button>
       </div>
-      <iframe
-        key={`${directMode ? "direct" : "proxy"}:${retrySeed}`}
-        ref={iframeRef}
-        src={directMode ? url : proxied ?? "about:blank"}
-        title="Verification runner"
-        className="h-full w-full flex-1 border-0"
-        allow="clipboard-read; clipboard-write; camera; microphone; geolocation; payment"
-        sandbox="allow-scripts allow-same-origin allow-forms allow-modals allow-popups allow-popups-to-escape-sandbox allow-storage-access-by-user-activation allow-top-navigation-by-user-activation"
-        referrerPolicy="no-referrer-when-downgrade"
-        onLoad={() => setSlowFallback(false)}
-      />
-      {slowFallback && !blocked && (
-        <div className="absolute inset-x-3 bottom-3 rounded-lg border border-yellow-500/40 bg-background/95 p-3 text-xs shadow-lg backdrop-blur">
-          <div className="mb-2 font-semibold">Verification is not responding here</div>
-          <div className="mb-3 text-muted-foreground">
-            This provider is rejecting embedded/proxy sessions. Use Telegram/System Browser for this link.
+      <div className="max-h-40 overflow-auto rounded border bg-muted/20 p-2 font-mono text-[10px]">
+        {logs.map((l, i) => (
+          <div key={i} className={l.level === "error" ? "text-destructive" : l.level === "success" ? "text-green-600 dark:text-green-400" : "text-foreground"}>
+            <span className="text-muted-foreground">{new Date(l.ts).toLocaleTimeString()} </span>
+            [{l.level}] {l.msg}
           </div>
-          <div className="flex flex-wrap gap-2">
-            {!directMode && (
-              <Button size="sm" variant="secondary" onClick={() => { setDirectMode(true); setRetrySeed(Date.now()); }}>
-                Try direct
-              </Button>
-            )}
-            <BrowserPickerButton url={url} size="sm" variant="outline" />
-          </div>
-        </div>
-      )}
-      {blocked && (
-        <div className="absolute inset-x-3 bottom-3 rounded-lg border border-border bg-background/95 p-3 text-xs shadow-lg backdrop-blur">
-          <div className="mb-2 font-semibold">Verification blocked in embedded view</div>
-          <div className="mb-3 line-clamp-2 text-muted-foreground">{blocked.text || "The verification site rejected the proxy session."}</div>
-          <div className="flex flex-wrap gap-2">
-            <Button size="sm" variant="secondary" onClick={() => { setBlocked(null); setRetrySeed(Date.now()); }}>
-              <RefreshCw className="mr-1 h-3.5 w-3.5" /> Retry new device
-            </Button>
-            {!directMode && (
-              <Button size="sm" variant="outline" onClick={() => { setDirectMode(true); setBlocked(null); setRetrySeed(Date.now()); }}>
-                Direct device mode
-              </Button>
-            )}
-            <BrowserPickerButton url={url} size="sm" variant="outline" />
-          </div>
-        </div>
-      )}
+        ))}
+      </div>
     </div>
   );
 }
@@ -1573,7 +1555,7 @@ function VerifyFrame({ url, accountId }: { url: string; accountId: string }) {
 // differ per run — even for the same account. If the server has
 // MINIAPP_PROXY_URL_TEMPLATE set, each upstream fetch also rotates its
 // outbound IP via the configured proxy service.
-type BulkRowStatus = "queued" | "running" | "success" | "failed" | "manual";
+type BulkRowStatus = "queued" | "opened" | "success" | "failed";
 type BulkRowLog = { ts: number; level: "info" | "warn" | "error" | "success"; msg: string };
 type BulkRow = {
   id: string;
@@ -1592,27 +1574,13 @@ function BulkVerifyRunner({
   const [text, setText] = useState("");
   const [selected, setSelected] = useState<string[]>([]);
   const [rows, setRows] = useState<BulkRow[]>([]);
-  const [runNonce, setRunNonce] = useState(0);
   const [openLogs, setOpenLogs] = useState<Record<string, boolean>>({});
   const [stableDevice, setStableDevice] = useState(true);
-  const [directMode, setDirectMode] = useState(false);
-  const iframeRefs = useRef<Record<string, HTMLIFrameElement | null>>({});
+  const [handoffIndex, setHandoffIndex] = useState(0);
 
   // Stable fingerprint per account: same seed every run for the same account,
   // so the target site sees a consistent device instead of a brand-new one.
   const stableSeedFor = (accountId: string) => `acc-${accountId}`;
-
-  // Patterns that indicate the site refused the request because of device /
-  // account fingerprint checks — do not fake success, mark for manual review.
-  const MANUAL_PATTERNS = [
-    /same device/i,
-    /device.*(blocked|banned|not allowed|already)/i,
-    /already (verified|claimed|used)/i,
-    /multi(ple)?[- ]?accounts?/i,
-    /suspicious/i,
-    /fraud/i,
-    /vpn|proxy detected/i,
-  ];
 
   const appendLog = useCallback((id: string, entry: BulkRowLog, statusPatch?: BulkRowStatus) => {
     setRows((prev) =>
@@ -1627,45 +1595,6 @@ function BulkVerifyRunner({
       ),
     );
   }, []);
-
-  useEffect(() => {
-    const findIdBySource = (src: unknown): string | null => {
-      for (const [id, el] of Object.entries(iframeRefs.current)) {
-        if (el && el.contentWindow === src) return id;
-      }
-      return null;
-    };
-    const onMsg = (ev: MessageEvent) => {
-      const id = findIdBySource(ev.source);
-      if (!id) return;
-      let payload: any = ev.data;
-      if (typeof payload === "string") {
-        try { payload = JSON.parse(payload); } catch { return; }
-      }
-      if (!payload || typeof payload !== "object") return;
-      const { eventType, eventData } = payload as { eventType?: string; eventData?: any };
-      if (!eventType) return;
-      const now = Date.now();
-      if (eventType === "captcha_log") {
-        const level = (eventData?.level as BulkRowLog["level"]) || "info";
-        const msg = String(eventData?.msg || "");
-        let status: BulkRowStatus | undefined;
-        if (MANUAL_PATTERNS.some((re) => re.test(msg))) status = "manual";
-        else if (/callback fired with token/i.test(msg)) status = "success";
-        else if (level === "error") status = "failed";
-        appendLog(id, { ts: now, level, msg }, status);
-      } else if (eventType === "captcha_detected") {
-        const n = Array.isArray(eventData?.items) ? eventData.items.length : 0;
-        appendLog(id, { ts: now, level: "info", msg: `captcha detected (${n})` });
-      } else if (eventType === "web_app_close") {
-        appendLog(id, { ts: now, level: "success", msg: "mini-app closed (likely verified)" }, "success");
-      } else if (eventType === "web_app_open_tg_link") {
-        appendLog(id, { ts: now, level: "info", msg: `open tg link: ${eventData?.url || ""}` });
-      }
-    };
-    window.addEventListener("message", onMsg);
-    return () => window.removeEventListener("message", onMsg);
-  }, [appendLog]);
 
   const parsedLinks = useMemo(() => {
     return text
@@ -1698,10 +1627,10 @@ function BulkVerifyRunner({
         ? stableSeedFor(accs[i % accs.length])
         : `${salt}-${i}-${Math.random().toString(36).slice(2, 8)}`,
       status: "queued" as BulkRowStatus,
-      logs: [] as BulkRowLog[],
+      logs: [{ ts: Date.now(), level: "info", msg: "Ready for external verification handoff" }] as BulkRowLog[],
     }));
     setRows(built);
-    setRunNonce((n) => n + 1);
+    setHandoffIndex(0);
   };
 
   const rerollAll = () => {
@@ -1713,10 +1642,9 @@ function BulkVerifyRunner({
           ? stableSeedFor(r.accountId)
           : `${salt}-${i}-${Math.random().toString(36).slice(2, 8)}`,
         status: "queued",
-        logs: [],
+        logs: [{ ts: Date.now(), level: "info", msg: "Reset and ready for external verification handoff" }],
       })),
     );
-    setRunNonce((n) => n + 1);
   };
 
   const rerollOne = (id: string) => {
@@ -1728,16 +1656,30 @@ function BulkVerifyRunner({
   };
 
   const removeOne = (id: string) => setRows((prev) => prev.filter((r) => r.id !== id));
-  const clearAll = () => setRows([]);
+  const clearAll = () => { setRows([]); setHandoffIndex(0); };
+  const markRow = useCallback((id: string, status: BulkRowStatus, msg: string) => {
+    appendLog(id, { ts: Date.now(), level: status === "success" ? "success" : status === "failed" ? "error" : "info", msg }, status);
+  }, [appendLog]);
+  const openExternalRow = useCallback((r: BulkRow) => {
+    try {
+      const w = window.open(r.url, "_blank", "noopener,noreferrer");
+      if (!w) window.location.href = r.url;
+      markRow(r.id, "opened", "Opened externally");
+    } catch (e) {
+      markRow(r.id, "failed", (e as Error).message || "Failed to open externally");
+    }
+  }, [markRow]);
+  const nextHandoffRow = rows[handoffIndex] ?? null;
+  const openNextExternal = () => {
+    if (!nextHandoffRow) return toast.success("All verification links are done");
+    openExternalRow(nextHandoffRow);
+    setHandoffIndex((i) => Math.min(rows.length, i + 1));
+  };
 
   return (
     <div className="space-y-4">
       <p className="text-xs text-muted-foreground">
-        Paste many verification URLs (one per line). Each is opened in its own iframe with a unique
-        device fingerprint (UA, screen, timezone, canvas, languages). Accounts are round-robin
-        assigned from your selection. Use “Reroll” to force fresh fingerprints on the next run.
-        Outbound IP rotation is applied automatically when the server proxy template is configured
-        (secret <code>MINIAPP_PROXY_URL_TEMPLATE</code>).
+        Paste many verification URLs (one per line). The website now uses an external handoff because these providers block embedded/proxy sessions. Accounts are round-robin assigned from your selection and each row keeps its own status/log.
       </p>
 
       <label className="flex items-start gap-2 rounded-md border border-border bg-muted/20 p-2 text-xs">
@@ -1752,21 +1694,6 @@ function BulkVerifyRunner({
           <span className="text-muted-foreground">
             (recommended) — reuse the same fingerprint for each account across runs instead of a fresh one.
             Sites that block repeat / same-device attempts are flagged as <em>manual</em> instead of faked as success.
-          </span>
-        </span>
-      </label>
-
-      <label className="flex items-start gap-2 rounded-md border border-border bg-muted/20 p-2 text-xs">
-        <input
-          type="checkbox"
-          className="mt-0.5"
-          checked={directMode}
-          onChange={(e) => setDirectMode(e.target.checked)}
-        />
-        <span>
-          <span className="font-medium">Direct device mode</span>{" "}
-          <span className="text-muted-foreground">
-            Opens verification URLs from your browser/IP instead of the server proxy for sites that show “Telegram Required” or “Connection Lost”.
           </span>
         </span>
       </label>
@@ -1826,6 +1753,9 @@ function BulkVerifyRunner({
             <Button variant="outline" onClick={rerollAll}>
               <RefreshCw className="mr-1 h-4 w-4" /> Reroll fingerprints
             </Button>
+            <Button variant="secondary" onClick={openNextExternal}>
+              <ExternalLink className="mr-1 h-4 w-4" /> Open next external ({Math.min(handoffIndex + 1, rows.length)}/{rows.length})
+            </Button>
             <Button variant="outline" onClick={clearAll}>
               <X className="mr-1 h-4 w-4" /> Close all
             </Button>
@@ -1838,7 +1768,7 @@ function BulkVerifyRunner({
           <div className="mb-2 flex items-center justify-between">
             <div className="text-xs font-semibold">Progress</div>
             <div className="flex gap-2 text-[11px] text-muted-foreground">
-              {(["queued", "running", "success", "failed"] as BulkRowStatus[]).map((s) => {
+              {(["queued", "opened", "success", "failed"] as BulkRowStatus[]).map((s) => {
                 const n = rows.filter((r) => r.status === s).length;
                 return (
                   <span key={s} className="capitalize">
@@ -1846,11 +1776,6 @@ function BulkVerifyRunner({
                   </span>
                 );
               })}
-              <span>
-                manual: <span className="font-mono text-yellow-600 dark:text-yellow-400">
-                  {rows.filter((r) => r.status === "manual").length}
-                </span>
-              </span>
               <span>total: <span className="font-mono text-foreground">{rows.length}</span></span>
             </div>
           </div>
@@ -1864,8 +1789,7 @@ function BulkVerifyRunner({
               const color =
                 r.status === "success" ? "bg-green-500/15 text-green-600 dark:text-green-400"
                 : r.status === "failed" ? "bg-destructive/15 text-destructive"
-                : r.status === "manual" ? "bg-yellow-500/15 text-yellow-600 dark:text-yellow-400"
-                : r.status === "running" ? "bg-blue-500/15 text-blue-600 dark:text-blue-400"
+                : r.status === "opened" ? "bg-blue-500/15 text-blue-600 dark:text-blue-400"
                 : "bg-muted text-muted-foreground";
               return (
                 <div key={r.id} className="rounded border border-border bg-background">
@@ -1881,6 +1805,11 @@ function BulkVerifyRunner({
                       <span className="font-medium">{who}</span>
                       <span className="text-muted-foreground"> · {host}</span>
                     </span>
+                    <div className="flex shrink-0 gap-1" onClick={(e) => e.stopPropagation()}>
+                      <Button size="sm" variant="ghost" className="h-6 px-2 text-[10px]" onClick={() => openExternalRow(r)}>Open</Button>
+                      <Button size="sm" variant="ghost" className="h-6 px-2 text-[10px]" onClick={() => markRow(r.id, "success", "Marked success manually")}>Success</Button>
+                      <Button size="sm" variant="ghost" className="h-6 px-2 text-[10px]" onClick={() => markRow(r.id, "failed", "Marked failed manually")}>Fail</Button>
+                    </div>
                     <span className="text-[10px] text-muted-foreground">{r.logs.length} log(s)</span>
                     <span className="text-[10px] text-muted-foreground">{isOpen ? "▾" : "▸"}</span>
                   </button>
@@ -1947,15 +1876,15 @@ function BulkVerifyRunner({
                   </button>
                 </div>
                 <BulkVerifyFrame
-                  key={`${r.id}:${r.fpSeed}:${runNonce}`}
+                  key={`${r.id}:${r.fpSeed}`}
                   url={r.url}
                   accountId={r.accountId}
                   fpSeed={r.fpSeed}
-                  directMode={directMode}
-                  iframeRef={(el) => { iframeRefs.current[r.id] = el; }}
-                  onLoaded={() =>
-                    appendLog(r.id, { ts: Date.now(), level: "info", msg: "iframe loaded" }, "running")
-                  }
+                  status={r.status}
+                  onOpen={() => openExternalRow(r)}
+                  onSuccess={() => markRow(r.id, "success", "Marked success manually")}
+                  onFailed={() => markRow(r.id, "failed", "Marked failed manually")}
+                  onCopy={() => appendLog(r.id, { ts: Date.now(), level: "info", msg: "Copied link" })}
                 />
               </div>
             );
@@ -2019,65 +1948,53 @@ function BulkVerifyFrame({
   url,
   accountId,
   fpSeed,
-  directMode,
-  iframeRef,
-  onLoaded,
+  status,
+  onOpen,
+  onSuccess,
+  onFailed,
+  onCopy,
 }: {
   url: string;
   accountId: string;
   fpSeed: string;
-  directMode: boolean;
-  iframeRef?: (el: HTMLIFrameElement | null) => void;
-  onLoaded?: () => void;
+  status: BulkRowStatus;
+  onOpen: () => void;
+  onSuccess: () => void;
+  onFailed: () => void;
+  onCopy: () => void;
 }) {
-  const localRef = useRef<HTMLIFrameElement | null>(null);
-  const [retrySeed, setRetrySeed] = useState(fpSeed);
-  const [blocked, setBlocked] = useState<{ text?: string } | null>(null);
-  const [slowFallback, setSlowFallback] = useState(false);
-  const { url: proxied } = useMiniAppProxyUrl(url, accountId, { fpSeed: retrySeed });
-  useTelegramWebviewBridge(localRef, { onBlocked: (details) => setBlocked({ text: details.text }) });
-  useEffect(() => {
-    const src = directMode ? url : proxied;
-    if (!src) return;
-    setSlowFallback(false);
-    const t = window.setTimeout(() => setSlowFallback(true), directMode ? 6500 : 8500);
-    return () => window.clearTimeout(t);
-  }, [url, proxied, directMode, retrySeed]);
+  const badge =
+    status === "success" ? "bg-green-500/15 text-green-600 dark:text-green-400"
+    : status === "failed" ? "bg-destructive/15 text-destructive"
+    : status === "opened" ? "bg-blue-500/15 text-blue-600 dark:text-blue-400"
+    : "bg-muted text-muted-foreground";
+  let host = url;
+  try { host = new URL(url).host; } catch {}
   return (
-    <div className="relative h-full w-full flex-1">
-      <iframe
-        key={`${directMode ? "direct" : "proxy"}:${retrySeed}`}
-        ref={(el) => {
-          localRef.current = el;
-          iframeRef?.(el);
-        }}
-        src={directMode ? url : proxied ?? "about:blank"}
-        title="Bulk verification runner"
-        className="h-full w-full flex-1 border-0"
-        allow="clipboard-read; clipboard-write; camera; microphone; geolocation; payment"
-        sandbox="allow-scripts allow-same-origin allow-forms allow-modals allow-popups allow-popups-to-escape-sandbox allow-storage-access-by-user-activation allow-top-navigation-by-user-activation"
-        referrerPolicy="no-referrer-when-downgrade"
-        onLoad={() => { setSlowFallback(false); onLoaded?.(); }}
-      />
-      {slowFallback && !blocked && (
-        <div className="absolute inset-x-2 bottom-2 rounded-lg border border-yellow-500/40 bg-background/95 p-2 text-[11px] shadow-lg backdrop-blur">
-          <div className="mb-1 font-semibold">No response in embedded view</div>
-          <div className="mb-2 text-muted-foreground">Open this row in Telegram/System Browser.</div>
-          <BrowserPickerButton url={url} size="sm" variant="outline" />
+    <div className="flex h-full flex-col justify-between p-3 text-xs">
+      <div className="space-y-3">
+        <div className="flex items-center gap-2">
+          <span className={`rounded px-2 py-1 text-[10px] font-semibold uppercase ${badge}`}>{status}</span>
+          <span className="min-w-0 truncate text-muted-foreground">{host}</span>
         </div>
-      )}
-      {blocked && (
-        <div className="absolute inset-x-2 bottom-2 rounded-lg border border-border bg-background/95 p-2 text-[11px] shadow-lg backdrop-blur">
-          <div className="mb-1 font-semibold">Blocked in embedded view</div>
-          <div className="mb-2 line-clamp-2 text-muted-foreground">{blocked.text || "The verification site rejected this session."}</div>
-          <div className="flex flex-wrap gap-1.5">
-            <Button size="sm" variant="secondary" className="h-7 px-2 text-[11px]" onClick={() => { setBlocked(null); setRetrySeed(`${fpSeed}:${Date.now()}`); }}>
-              <RefreshCw className="mr-1 h-3 w-3" /> Retry
-            </Button>
-            <BrowserPickerButton url={url} size="sm" variant="outline" />
-          </div>
+        <div className="rounded-md border border-yellow-500/40 bg-yellow-500/10 p-3 text-yellow-700 dark:text-yellow-300">
+          Embedded mode is disabled for this provider because it returns Connection Lost / Telegram Required / refused to connect. Open externally and mark the result.
         </div>
-      )}
+        <div className="break-all rounded border bg-muted/20 p-2 font-mono text-[10px] text-muted-foreground">
+          account:{accountId.slice(0, 8)} · fp:{fpSeed.slice(0, 10)} · {url}
+        </div>
+      </div>
+      <div className="mt-3 flex flex-wrap gap-2">
+        <Button size="sm" onClick={onOpen}>
+          <ExternalLink className="mr-1 h-4 w-4" /> Open external
+        </Button>
+        <BrowserPickerButton url={url} size="sm" variant="outline" />
+        <Button size="sm" variant="outline" onClick={() => { copyWithToast(url, toast, "Verification link copied"); onCopy(); }}>
+          <Copy className="mr-1 h-4 w-4" /> Copy
+        </Button>
+        <Button size="sm" variant="secondary" onClick={onSuccess}>Success</Button>
+        <Button size="sm" variant="outline" onClick={onFailed}>Fail</Button>
+      </div>
     </div>
   );
 }
