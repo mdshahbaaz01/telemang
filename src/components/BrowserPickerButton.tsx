@@ -4,37 +4,12 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { copyWithToast } from "@/lib/clipboard";
 import { toast } from "sonner";
 
-export type BrowserOption = { id: string; label: string; build: (url: string) => string };
+type BrowserOption = { id: string; label: string; build: (url: string) => string };
 
 const strip = (u: string) => u.replace(/^https?:\/\//i, "");
 
-export function buildTelegramAppUrl(input: string): string {
-  if (/^tg:\/\//i.test(input)) return input;
-  try {
-    const url = new URL(input);
-    const host = url.hostname.toLowerCase().replace(/^www\./, "");
-    if (["t.me", "telegram.me", "telegram.dog"].includes(host)) {
-      const parts = url.pathname.replace(/^\/+/, "").split("/").filter(Boolean);
-      const domain = parts[0]?.replace(/^@/, "");
-      const appname = parts[1];
-      if (domain) {
-        const params = new URLSearchParams({ domain });
-        if (appname && !["c", "s", "joinchat", "+"].includes(domain.toLowerCase())) {
-          params.set("appname", appname);
-        }
-        const startapp = url.searchParams.get("startapp") || url.searchParams.get("startattach");
-        const start = url.searchParams.get("start");
-        if (startapp) params.set("startapp", startapp);
-        else if (start) params.set(appname ? "startapp" : "start", start);
-        return `tg://resolve?${params.toString()}`;
-      }
-    }
-  } catch {}
-  return `tg://resolve?url=${encodeURIComponent(input)}`;
-}
-
 export const BROWSER_OPTIONS: BrowserOption[] = [
-  { id: "telegram", label: "Telegram app", build: buildTelegramAppUrl },
+  { id: "telegram", label: "Telegram app", build: (u) => `tg://resolve?url=${encodeURIComponent(u)}` },
   {
     id: "android",
     label: "📱 System chooser (Just once / Always)",
@@ -55,7 +30,7 @@ export function openInBrowser(url: string, opt: BrowserOption) {
   // blocked/ignored on most Android browsers, which is why the chooser never
   // appeared. Same-tab navigation reliably triggers the OS "Open with" sheet
   // (with Just once / Always buttons) when no default browser is set.
-  if (/^(intent|tg):\/\//i.test(target) || target.startsWith("intent:")) {
+  if (target.startsWith("intent://") || target.startsWith("intent:")) {
     window.location.href = target;
     return;
   }
@@ -67,19 +42,13 @@ export function openInBrowser(url: string, opt: BrowserOption) {
   }
 }
 
-export function openTelegramUrl(url: string) {
-  openInBrowser(url, BROWSER_OPTIONS[0]);
-}
-
 export function BrowserPickerButton({
   url,
-  telegramUrl,
   size = "sm",
   variant = "outline",
   compact = false,
 }: {
   url: string;
-  telegramUrl?: string;
   size?: "sm" | "default" | "icon";
   variant?: "outline" | "ghost" | "default";
   compact?: boolean;
@@ -106,7 +75,7 @@ export function BrowserPickerButton({
             key={opt.id}
             type="button"
             className="w-full rounded px-2 py-1.5 text-left text-xs hover:bg-muted"
-            onClick={() => openInBrowser((telegramUrl && (opt.id === "telegram" || opt.id === "android")) ? telegramUrl : url, opt)}
+            onClick={() => openInBrowser(url, opt)}
           >
             {opt.label}
           </button>
@@ -119,7 +88,6 @@ export function BrowserPickerButton({
           <Copy className="h-3.5 w-3.5" /> Copy link
         </button>
         <div className="px-2 py-1 text-[10px] text-muted-foreground">
-          {telegramUrl ? "Telegram/System chooser original t.me mini-app link use karega, final verify website URL nahi. " : ""}
           Tip: "System chooser" tabhi popup dikhayega (Just once / Always)
           jab aapne koi default browser set nahi kiya ho. Agar already default
           set hai → Android Settings → Apps → Default apps → Browser app →

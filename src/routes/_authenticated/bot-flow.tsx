@@ -14,7 +14,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { toast } from "sonner";
 import { Play, Square, ArrowLeft, Loader2, RefreshCw, X, MessageSquare, Copy, ExternalLink } from "lucide-react";
-import { BrowserPickerButton, openTelegramUrl } from "@/components/BrowserPickerButton";
+import { BrowserPickerButton } from "@/components/BrowserPickerButton";
 import { AccountIdPaste } from "@/components/AccountIdPaste";
 import { copyWithToast } from "@/lib/clipboard";
 import { useBotFlowCaptchaConfig, CAPTCHA_KIND_OPTIONS, CAPTCHA_PROVIDER_OPTIONS } from "@/lib/bot-flow-captcha-config";
@@ -57,37 +57,8 @@ type VerifyLinkSession = {
   hasInitData: boolean;
   userId?: string;
   userLabel?: string;
-  startParam?: string;
   error?: string;
 };
-
-function buildTelegramMiniAppLink(username: string, startParam?: string, appShortName?: string) {
-  const bot = username.replace(/^@/, "").trim();
-  if (!bot) return "";
-  const path = appShortName ? `${bot}/${appShortName.replace(/^\/+/, "")}` : bot;
-  const url = new URL(`https://t.me/${path}`);
-  if (startParam) url.searchParams.set("startapp", startParam);
-  return url.toString();
-}
-
-function guessTelegramLaunchUrl(rawUrl: string): string | null {
-  try {
-    const url = new URL(rawUrl);
-    const host = url.hostname.toLowerCase().replace(/^www\./, "");
-    if (["t.me", "telegram.me", "telegram.dog"].includes(host)) return rawUrl;
-
-    const launchParams = new URLSearchParams(String(url.hash || "").replace(/^#/, ""));
-    const initData = launchParams.get("tgWebAppData") || url.searchParams.get("tgWebAppData") || "";
-    const initParams = initData ? new URLSearchParams(initData) : null;
-    const startParam = initParams?.get("start_param") || url.searchParams.get("startapp") || url.searchParams.get("start") || "";
-    const botFromPath = url.pathname
-      .split("/")
-      .map((part) => decodeURIComponent(part).replace(/^@/, ""))
-      .find((part) => /^[a-zA-Z0-9_]{4,64}bot$/i.test(part));
-    if (botFromPath) return buildTelegramMiniAppLink(botFromPath, startParam || undefined);
-  } catch {}
-  return null;
-}
 
 function parseVerifyLinkSession(rawUrl: string): VerifyLinkSession {
   if (!rawUrl) return { hasInitData: false };
@@ -113,7 +84,6 @@ function parseVerifyLinkSession(rawUrl: string): VerifyLinkSession {
       hasInitData: true,
       userId,
       userLabel: user.username ? `@${user.username}` : displayName || undefined,
-      startParam: initParams.get("start_param") || undefined,
     };
   } catch (e) {
     return { hasInitData: false, error: (e as Error).message };
@@ -371,7 +341,7 @@ function BotFlowPage() {
   const [miniLink, setMiniLink] = useState("");
   const [miniSelected, setMiniSelected] = useState<string[]>([]);
   const [miniRuns, setMiniRuns] = useState<
-    { accountId: string; status: "loading" | "ready" | "error"; url?: string; launchUrl?: string; error?: string }[]
+    { accountId: string; status: "loading" | "ready" | "error"; url?: string; error?: string }[]
   >([]);
   // Concurrency cap for mounted mini-app iframes. Each iframe boots a full
   // Telegram WebView proxy + fingerprint bridge; mounting 10+ at once
@@ -432,7 +402,7 @@ function BotFlowPage() {
   const miniToggle = (id: string) =>
     setMiniSelected((ids) => (ids.includes(id) ? ids.filter((x) => x !== id) : [...ids, id]));
 
-  const resolveOne = async (accountId: string, username: string, startParam: string, appShortName?: string) => {
+  const resolveOne = async (accountId: string, username: string, startParam: string) => {
     setMiniRuns((prev) => {
       const others = prev.filter((r) => r.accountId !== accountId);
       return [...others, { accountId, status: "loading" }];
@@ -442,9 +412,8 @@ function BotFlowPage() {
         data: { accountId, botUsername: username, startParam: startParam || undefined },
       });
       if (!res?.url) throw new Error("Telegram returned no URL");
-      const launchUrl = buildTelegramMiniAppLink(username, startParam || undefined, appShortName);
       setMiniRuns((prev) =>
-        prev.map((r) => (r.accountId === accountId ? { ...r, status: "ready", url: res.url, launchUrl } : r)),
+        prev.map((r) => (r.accountId === accountId ? { ...r, status: "ready", url: res.url } : r)),
       );
     } catch (e) {
       setMiniRuns((prev) =>
@@ -462,7 +431,7 @@ function BotFlowPage() {
     const ids = miniSelected.length ? miniSelected : allIds;
     if (!ids.length) return toast.error("Select at least one account");
     setMiniRuns(ids.map((id) => ({ accountId: id, status: "loading" as const })));
-    await Promise.all(ids.map((id) => resolveOne(id, miniParsed.username, miniParsed.startParam, miniParsed.appShortName)));
+    await Promise.all(ids.map((id) => resolveOne(id, miniParsed.username, miniParsed.startParam)));
   };
 
   const closeMini = (accountId: string) =>
@@ -475,7 +444,7 @@ function BotFlowPage() {
   const [vxSelected, setVxSelected] = useState<string[]>([]);
   const [vxRunning, setVxRunning] = useState(false);
   const [vxResults, setVxResults] = useState<
-    { accountId: string; status: "loading" | "ready" | "error"; url?: string; launchUrl?: string; label?: string; kind?: "webview" | "url"; error?: string }[]
+    { accountId: string; status: "loading" | "ready" | "error"; url?: string; label?: string; kind?: "webview" | "url"; error?: string }[]
   >([]);
 
   const vxParsed = useMemo(() => {
@@ -518,14 +487,7 @@ function BotFlowPage() {
           setVxResults((prev) =>
             prev.map((r) =>
               r.accountId === accountId
-                ? {
-                    ...r,
-                    status: "ready",
-                    url: res.url,
-                    launchUrl: buildTelegramMiniAppLink(vxParsed.username, vxParsed.startParam || undefined),
-                    label: res.label,
-                    kind: res.kind,
-                  }
+                ? { ...r, status: "ready", url: res.url, label: res.label, kind: res.kind }
                 : r,
             ),
           );
@@ -607,7 +569,6 @@ function BotFlowPage() {
         );
       }
       setVerifyNonce((n) => n + 1);
-      toast.success("Verification handoff ready");
     } catch {
       toast.error("Invalid verification URL");
     }
@@ -1147,7 +1108,7 @@ function BotFlowPage() {
                         >
                           <Copy className="h-3.5 w-3.5" />
                         </button>
-                        <BrowserPickerButton url={r.url} telegramUrl={r.launchUrl} compact />
+                        <BrowserPickerButton url={r.url} compact />
                       </>
                     )}
                   </div>
@@ -1257,7 +1218,7 @@ function BotFlowPage() {
                         className="inline-flex items-center gap-1 rounded border border-border px-2 py-1 text-[11px] hover:bg-muted disabled:opacity-50"
                         title="Resolve and refresh this mini app"
                         disabled={r.status === "loading"}
-                        onClick={() => miniParsed && resolveOne(r.accountId, miniParsed.username, miniParsed.startParam, miniParsed.appShortName)}
+                        onClick={() => miniParsed && resolveOne(r.accountId, miniParsed.username, miniParsed.startParam)}
                       >
                         <RefreshCw className={`h-3.5 w-3.5 ${r.status === "loading" ? "animate-spin" : ""}`} />
                         Refresh
@@ -1292,7 +1253,7 @@ function BotFlowPage() {
                         <div className="p-3 text-xs text-destructive">{r.error}</div>
                       )}
                        {r.status === "ready" && r.url && (miniMounted.has(r.accountId) ? (
-                         <MiniAppFrame url={r.url} launchUrl={r.launchUrl} title={who} accountId={r.accountId} botUsername={miniParsed?.username ?? ""} />
+                         <MiniAppFrame url={r.url} title={who} accountId={r.accountId} botUsername={miniParsed?.username ?? ""} />
                        ) : (
                          <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 bg-muted/30 p-3 text-center text-xs text-muted-foreground">
                            <div>Queued — mini-app not loaded to save resources.</div>
@@ -1319,7 +1280,7 @@ function BotFlowPage() {
 
         <CollapsibleSection storageKey="botflow.verifysingle" title="Verification URL runner (single account)" defaultOpen={false}>
           <p className="text-xs text-muted-foreground">
-            Paste a direct mini-app verification URL, open it outside the embedded viewer, and track the result here.
+            Paste a direct mini-app verification URL and open it inside a specific account's proxy.
           </p>
 
           <div className="grid gap-3 md:grid-cols-[1fr_260px]">
@@ -1377,17 +1338,17 @@ function BotFlowPage() {
 
           <div className="flex gap-2">
             <Button onClick={openVerification} disabled={!normalizedVerifyLink || !verifyAccountId || verifyLinkAccountMismatch}>
-              <Play className="mr-1 h-4 w-4" /> Prepare handoff
+              <Play className="mr-1 h-4 w-4" /> Open verification
             </Button>
             {verifyNonce > 0 && (
               <Button variant="outline" onClick={() => setVerifyNonce((n) => n + 1)}>
-                <RefreshCw className="mr-1 h-4 w-4" /> Reset status
+                <RefreshCw className="mr-1 h-4 w-4" /> Refresh
               </Button>
             )}
           </div>
 
           {verifyNonce > 0 && verifyAccountId && normalizedVerifyLink && (
-            <div className="flex flex-col overflow-hidden rounded-md border border-border bg-background">
+            <div className="flex h-[680px] flex-col overflow-hidden rounded-md border border-border bg-background">
               <div className="flex items-center gap-2 border-b px-2 py-1.5">
                 <div className="min-w-0 flex-1 text-xs">
                   <div className="truncate font-semibold">
@@ -1412,7 +1373,6 @@ function BotFlowPage() {
               <VerifyFrame
                 key={`${verifyAccountId}-${verifyNonce}`}
                 url={normalizedVerifyLink}
-                telegramUrl={guessTelegramLaunchUrl(normalizedVerifyLink) ?? undefined}
                 accountId={verifyAccountId}
               />
             </div>
@@ -1482,8 +1442,8 @@ function LiveLogsPanel({
   );
 }
 
-function MiniAppFrame({ url, launchUrl, title, accountId, botUsername }: { url: string; launchUrl?: string; title: string; accountId: string; botUsername: string }) {
-  return <MiniAppFrameImpl url={url} launchUrl={launchUrl} title={title} accountId={accountId} botUsername={botUsername} />;
+function MiniAppFrame({ url, title, accountId, botUsername }: { url: string; title: string; accountId: string; botUsername: string }) {
+  return <MiniAppFrameImpl url={url} title={title} accountId={accountId} botUsername={botUsername} />;
 }
 
 function BotFlowCaptchaCard() {
@@ -1531,61 +1491,77 @@ function BotFlowCaptchaCard() {
   );
 }
 
-function VerifyFrame({ url, telegramUrl, accountId }: { url: string; telegramUrl?: string; accountId: string }) {
-  const [status, setStatus] = useState<"queued" | "opened" | "success" | "failed">("queued");
-  const [logs, setLogs] = useState<BulkRowLog[]>([
-    { ts: Date.now(), level: "info", msg: `Ready for account ${accountId.slice(0, 8)}` },
-  ]);
-  const add = (level: BulkRowLog["level"], msg: string) =>
-    setLogs((prev) => [...prev.slice(-49), { ts: Date.now(), level, msg }]);
-  const openExternal = () => {
-    try {
-      if (telegramUrl) openTelegramUrl(telegramUrl);
-      else {
-        const w = window.open(url, "_blank", "noopener,noreferrer");
-        if (!w) window.location.href = url;
-      }
-      setStatus("opened");
-      add("info", telegramUrl ? "Opened in Telegram app. Complete verification there, then mark the result here." : "Opened externally. If it says Telegram Required, paste/open the original t.me startapp link instead.");
-    } catch (e) {
-      setStatus("failed");
-      add("error", (e as Error).message || "Failed to open link");
-    }
-  };
-  const badge =
-    status === "success" ? "bg-green-500/15 text-green-600 dark:text-green-400"
-    : status === "failed" ? "bg-destructive/15 text-destructive"
-    : status === "opened" ? "bg-blue-500/15 text-blue-600 dark:text-blue-400"
-    : "bg-muted text-muted-foreground";
+function VerifyFrame({ url, accountId }: { url: string; accountId: string }) {
+  const iframeRef = useRef<HTMLIFrameElement | null>(null);
+  const [retrySeed, setRetrySeed] = useState(0);
+  const [blocked, setBlocked] = useState<{ text?: string } | null>(null);
+  const [directMode, setDirectMode] = useState(false);
+  const [slowFallback, setSlowFallback] = useState(false);
+  const { url: proxied } = useMiniAppProxyUrl(url, accountId, { fpSeed: retrySeed || undefined });
+  useTelegramWebviewBridge(iframeRef, { onBlocked: (details) => setBlocked({ text: details.text }) });
+  useEffect(() => {
+    const src = directMode ? url : proxied;
+    if (!src) return;
+    setSlowFallback(false);
+    const t = window.setTimeout(() => setSlowFallback(true), directMode ? 6500 : 8500);
+    return () => window.clearTimeout(t);
+  }, [url, proxied, directMode, retrySeed]);
   return (
-    <div className="space-y-3 p-4 text-sm">
-      <div className="rounded-md border border-yellow-500/40 bg-yellow-500/10 p-3 text-xs text-yellow-700 dark:text-yellow-300">
-        This provider needs Telegram WebView. {telegramUrl ? "Open will launch the original Telegram mini-app link instead of the raw verification website." : "Raw verification website links can still show Telegram Required; use the original t.me/startapp link when available."}
-      </div>
-      <div className="flex flex-wrap items-center gap-2">
-        <span className={`rounded px-2 py-1 text-[11px] font-semibold uppercase ${badge}`}>{status}</span>
-        <Button size="sm" onClick={openExternal}>
-          <ExternalLink className="mr-1 h-4 w-4" /> {telegramUrl ? "Open in Telegram" : "Open external"}
-        </Button>
-        <BrowserPickerButton url={url} telegramUrl={telegramUrl} size="sm" variant="outline" />
-        <Button size="sm" variant="outline" onClick={() => copyWithToast(url, toast, "Verification link copied")}>
-          <Copy className="mr-1 h-4 w-4" /> Copy
-        </Button>
-        <Button size="sm" variant="secondary" onClick={() => { setStatus("success"); add("success", "Marked success manually"); }}>
-          Mark success
-        </Button>
-        <Button size="sm" variant="outline" onClick={() => { setStatus("failed"); add("error", "Marked failed manually"); }}>
-          Mark failed
+    <div className="relative h-full w-full flex-1">
+      <div className="absolute right-2 top-2 z-10 rounded-md border border-border bg-background/95 p-1 shadow-sm backdrop-blur">
+        <Button
+          size="sm"
+          variant={directMode ? "secondary" : "outline"}
+          className="h-7 px-2 text-[11px]"
+          onClick={() => { setDirectMode((v) => !v); setBlocked(null); setRetrySeed(Date.now()); }}
+        >
+          {directMode ? "Direct device" : "Proxy mode"}
         </Button>
       </div>
-      <div className="max-h-40 overflow-auto rounded border bg-muted/20 p-2 font-mono text-[10px]">
-        {logs.map((l, i) => (
-          <div key={i} className={l.level === "error" ? "text-destructive" : l.level === "success" ? "text-green-600 dark:text-green-400" : "text-foreground"}>
-            <span className="text-muted-foreground">{new Date(l.ts).toLocaleTimeString()} </span>
-            [{l.level}] {l.msg}
+      <iframe
+        key={`${directMode ? "direct" : "proxy"}:${retrySeed}`}
+        ref={iframeRef}
+        src={directMode ? url : proxied ?? "about:blank"}
+        title="Verification runner"
+        className="h-full w-full flex-1 border-0"
+        allow="clipboard-read; clipboard-write; camera; microphone; geolocation; payment"
+        sandbox="allow-scripts allow-same-origin allow-forms allow-modals allow-popups allow-popups-to-escape-sandbox allow-storage-access-by-user-activation allow-top-navigation-by-user-activation"
+        referrerPolicy="no-referrer-when-downgrade"
+        onLoad={() => setSlowFallback(false)}
+      />
+      {slowFallback && !blocked && (
+        <div className="absolute inset-x-3 bottom-3 rounded-lg border border-yellow-500/40 bg-background/95 p-3 text-xs shadow-lg backdrop-blur">
+          <div className="mb-2 font-semibold">Verification is not responding here</div>
+          <div className="mb-3 text-muted-foreground">
+            This provider is rejecting embedded/proxy sessions. Use Telegram/System Browser for this link.
           </div>
-        ))}
-      </div>
+          <div className="flex flex-wrap gap-2">
+            {!directMode && (
+              <Button size="sm" variant="secondary" onClick={() => { setDirectMode(true); setRetrySeed(Date.now()); }}>
+                Try direct
+              </Button>
+            )}
+            <BrowserPickerButton url={url} size="sm" variant="outline" />
+          </div>
+        </div>
+      )}
+      {blocked && (
+        <div className="absolute inset-x-3 bottom-3 rounded-lg border border-border bg-background/95 p-3 text-xs shadow-lg backdrop-blur">
+          <div className="mb-2 font-semibold">Verification blocked in embedded view</div>
+          <div className="mb-3 line-clamp-2 text-muted-foreground">{blocked.text || "The verification site rejected the proxy session."}</div>
+          <div className="flex flex-wrap gap-2">
+            <Button size="sm" variant="secondary" onClick={() => { setBlocked(null); setRetrySeed(Date.now()); }}>
+              <RefreshCw className="mr-1 h-3.5 w-3.5" /> Retry new device
+            </Button>
+            {!directMode && (
+              <Button size="sm" variant="outline" onClick={() => { setDirectMode(true); setBlocked(null); setRetrySeed(Date.now()); }}>
+                Direct device mode
+              </Button>
+            )}
+            <BrowserPickerButton url={url} size="sm" variant="outline" />
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -1597,12 +1573,11 @@ function VerifyFrame({ url, telegramUrl, accountId }: { url: string; telegramUrl
 // differ per run — even for the same account. If the server has
 // MINIAPP_PROXY_URL_TEMPLATE set, each upstream fetch also rotates its
 // outbound IP via the configured proxy service.
-type BulkRowStatus = "queued" | "opened" | "success" | "failed";
+type BulkRowStatus = "queued" | "running" | "success" | "failed" | "manual";
 type BulkRowLog = { ts: number; level: "info" | "warn" | "error" | "success"; msg: string };
 type BulkRow = {
   id: string;
   url: string;
-  launchUrl?: string;
   accountId: string;
   fpSeed: string;
   status: BulkRowStatus;
@@ -1617,13 +1592,27 @@ function BulkVerifyRunner({
   const [text, setText] = useState("");
   const [selected, setSelected] = useState<string[]>([]);
   const [rows, setRows] = useState<BulkRow[]>([]);
+  const [runNonce, setRunNonce] = useState(0);
   const [openLogs, setOpenLogs] = useState<Record<string, boolean>>({});
   const [stableDevice, setStableDevice] = useState(true);
-  const [handoffIndex, setHandoffIndex] = useState(0);
+  const [directMode, setDirectMode] = useState(false);
+  const iframeRefs = useRef<Record<string, HTMLIFrameElement | null>>({});
 
   // Stable fingerprint per account: same seed every run for the same account,
   // so the target site sees a consistent device instead of a brand-new one.
   const stableSeedFor = (accountId: string) => `acc-${accountId}`;
+
+  // Patterns that indicate the site refused the request because of device /
+  // account fingerprint checks — do not fake success, mark for manual review.
+  const MANUAL_PATTERNS = [
+    /same device/i,
+    /device.*(blocked|banned|not allowed|already)/i,
+    /already (verified|claimed|used)/i,
+    /multi(ple)?[- ]?accounts?/i,
+    /suspicious/i,
+    /fraud/i,
+    /vpn|proxy detected/i,
+  ];
 
   const appendLog = useCallback((id: string, entry: BulkRowLog, statusPatch?: BulkRowStatus) => {
     setRows((prev) =>
@@ -1638,6 +1627,45 @@ function BulkVerifyRunner({
       ),
     );
   }, []);
+
+  useEffect(() => {
+    const findIdBySource = (src: unknown): string | null => {
+      for (const [id, el] of Object.entries(iframeRefs.current)) {
+        if (el && el.contentWindow === src) return id;
+      }
+      return null;
+    };
+    const onMsg = (ev: MessageEvent) => {
+      const id = findIdBySource(ev.source);
+      if (!id) return;
+      let payload: any = ev.data;
+      if (typeof payload === "string") {
+        try { payload = JSON.parse(payload); } catch { return; }
+      }
+      if (!payload || typeof payload !== "object") return;
+      const { eventType, eventData } = payload as { eventType?: string; eventData?: any };
+      if (!eventType) return;
+      const now = Date.now();
+      if (eventType === "captcha_log") {
+        const level = (eventData?.level as BulkRowLog["level"]) || "info";
+        const msg = String(eventData?.msg || "");
+        let status: BulkRowStatus | undefined;
+        if (MANUAL_PATTERNS.some((re) => re.test(msg))) status = "manual";
+        else if (/callback fired with token/i.test(msg)) status = "success";
+        else if (level === "error") status = "failed";
+        appendLog(id, { ts: now, level, msg }, status);
+      } else if (eventType === "captcha_detected") {
+        const n = Array.isArray(eventData?.items) ? eventData.items.length : 0;
+        appendLog(id, { ts: now, level: "info", msg: `captcha detected (${n})` });
+      } else if (eventType === "web_app_close") {
+        appendLog(id, { ts: now, level: "success", msg: "mini-app closed (likely verified)" }, "success");
+      } else if (eventType === "web_app_open_tg_link") {
+        appendLog(id, { ts: now, level: "info", msg: `open tg link: ${eventData?.url || ""}` });
+      }
+    };
+    window.addEventListener("message", onMsg);
+    return () => window.removeEventListener("message", onMsg);
+  }, [appendLog]);
 
   const parsedLinks = useMemo(() => {
     return text
@@ -1663,7 +1691,6 @@ function BulkVerifyRunner({
     const built: BulkRow[] = parsedLinks.map((url, i) => ({
       id: `${salt}-${i}`,
       url,
-      launchUrl: guessTelegramLaunchUrl(url) ?? undefined,
       accountId: accs[i % accs.length],
       // Stable per-account seed by default → same device is presented every
       // time for that account. Turn off "Stable device" to use a fresh one.
@@ -1671,10 +1698,10 @@ function BulkVerifyRunner({
         ? stableSeedFor(accs[i % accs.length])
         : `${salt}-${i}-${Math.random().toString(36).slice(2, 8)}`,
       status: "queued" as BulkRowStatus,
-      logs: [{ ts: Date.now(), level: "info", msg: "Ready for external verification handoff" }] as BulkRowLog[],
+      logs: [] as BulkRowLog[],
     }));
     setRows(built);
-    setHandoffIndex(0);
+    setRunNonce((n) => n + 1);
   };
 
   const rerollAll = () => {
@@ -1686,9 +1713,10 @@ function BulkVerifyRunner({
           ? stableSeedFor(r.accountId)
           : `${salt}-${i}-${Math.random().toString(36).slice(2, 8)}`,
         status: "queued",
-        logs: [{ ts: Date.now(), level: "info", msg: "Reset and ready for external verification handoff" }],
+        logs: [],
       })),
     );
+    setRunNonce((n) => n + 1);
   };
 
   const rerollOne = (id: string) => {
@@ -1700,33 +1728,16 @@ function BulkVerifyRunner({
   };
 
   const removeOne = (id: string) => setRows((prev) => prev.filter((r) => r.id !== id));
-  const clearAll = () => { setRows([]); setHandoffIndex(0); };
-  const markRow = useCallback((id: string, status: BulkRowStatus, msg: string) => {
-    appendLog(id, { ts: Date.now(), level: status === "success" ? "success" : status === "failed" ? "error" : "info", msg }, status);
-  }, [appendLog]);
-  const openExternalRow = useCallback((r: BulkRow) => {
-    try {
-      if (r.launchUrl) openTelegramUrl(r.launchUrl);
-      else {
-        const w = window.open(r.url, "_blank", "noopener,noreferrer");
-        if (!w) window.location.href = r.url;
-      }
-      markRow(r.id, "opened", r.launchUrl ? "Opened in Telegram app" : "Opened externally — raw verify URLs may still show Telegram Required");
-    } catch (e) {
-      markRow(r.id, "failed", (e as Error).message || "Failed to open externally");
-    }
-  }, [markRow]);
-  const nextHandoffRow = rows[handoffIndex] ?? null;
-  const openNextExternal = () => {
-    if (!nextHandoffRow) return toast.success("All verification links are done");
-    openExternalRow(nextHandoffRow);
-    setHandoffIndex((i) => Math.min(rows.length, i + 1));
-  };
+  const clearAll = () => setRows([]);
 
   return (
     <div className="space-y-4">
       <p className="text-xs text-muted-foreground">
-        Paste many verification URLs (one per line). The website now uses an external handoff because these providers block embedded/proxy sessions. Accounts are round-robin assigned from your selection and each row keeps its own status/log.
+        Paste many verification URLs (one per line). Each is opened in its own iframe with a unique
+        device fingerprint (UA, screen, timezone, canvas, languages). Accounts are round-robin
+        assigned from your selection. Use “Reroll” to force fresh fingerprints on the next run.
+        Outbound IP rotation is applied automatically when the server proxy template is configured
+        (secret <code>MINIAPP_PROXY_URL_TEMPLATE</code>).
       </p>
 
       <label className="flex items-start gap-2 rounded-md border border-border bg-muted/20 p-2 text-xs">
@@ -1741,6 +1752,21 @@ function BulkVerifyRunner({
           <span className="text-muted-foreground">
             (recommended) — reuse the same fingerprint for each account across runs instead of a fresh one.
             Sites that block repeat / same-device attempts are flagged as <em>manual</em> instead of faked as success.
+          </span>
+        </span>
+      </label>
+
+      <label className="flex items-start gap-2 rounded-md border border-border bg-muted/20 p-2 text-xs">
+        <input
+          type="checkbox"
+          className="mt-0.5"
+          checked={directMode}
+          onChange={(e) => setDirectMode(e.target.checked)}
+        />
+        <span>
+          <span className="font-medium">Direct device mode</span>{" "}
+          <span className="text-muted-foreground">
+            Opens verification URLs from your browser/IP instead of the server proxy for sites that show “Telegram Required” or “Connection Lost”.
           </span>
         </span>
       </label>
@@ -1800,9 +1826,6 @@ function BulkVerifyRunner({
             <Button variant="outline" onClick={rerollAll}>
               <RefreshCw className="mr-1 h-4 w-4" /> Reroll fingerprints
             </Button>
-            <Button variant="secondary" onClick={openNextExternal}>
-              <ExternalLink className="mr-1 h-4 w-4" /> Open next external ({Math.min(handoffIndex + 1, rows.length)}/{rows.length})
-            </Button>
             <Button variant="outline" onClick={clearAll}>
               <X className="mr-1 h-4 w-4" /> Close all
             </Button>
@@ -1815,7 +1838,7 @@ function BulkVerifyRunner({
           <div className="mb-2 flex items-center justify-between">
             <div className="text-xs font-semibold">Progress</div>
             <div className="flex gap-2 text-[11px] text-muted-foreground">
-              {(["queued", "opened", "success", "failed"] as BulkRowStatus[]).map((s) => {
+              {(["queued", "running", "success", "failed"] as BulkRowStatus[]).map((s) => {
                 const n = rows.filter((r) => r.status === s).length;
                 return (
                   <span key={s} className="capitalize">
@@ -1823,6 +1846,11 @@ function BulkVerifyRunner({
                   </span>
                 );
               })}
+              <span>
+                manual: <span className="font-mono text-yellow-600 dark:text-yellow-400">
+                  {rows.filter((r) => r.status === "manual").length}
+                </span>
+              </span>
               <span>total: <span className="font-mono text-foreground">{rows.length}</span></span>
             </div>
           </div>
@@ -1836,7 +1864,8 @@ function BulkVerifyRunner({
               const color =
                 r.status === "success" ? "bg-green-500/15 text-green-600 dark:text-green-400"
                 : r.status === "failed" ? "bg-destructive/15 text-destructive"
-                : r.status === "opened" ? "bg-blue-500/15 text-blue-600 dark:text-blue-400"
+                : r.status === "manual" ? "bg-yellow-500/15 text-yellow-600 dark:text-yellow-400"
+                : r.status === "running" ? "bg-blue-500/15 text-blue-600 dark:text-blue-400"
                 : "bg-muted text-muted-foreground";
               return (
                 <div key={r.id} className="rounded border border-border bg-background">
@@ -1852,11 +1881,6 @@ function BulkVerifyRunner({
                       <span className="font-medium">{who}</span>
                       <span className="text-muted-foreground"> · {host}</span>
                     </span>
-                    <div className="flex shrink-0 gap-1" onClick={(e) => e.stopPropagation()}>
-                      <Button size="sm" variant="ghost" className="h-6 px-2 text-[10px]" onClick={() => openExternalRow(r)}>Open</Button>
-                      <Button size="sm" variant="ghost" className="h-6 px-2 text-[10px]" onClick={() => markRow(r.id, "success", "Marked success manually")}>Success</Button>
-                      <Button size="sm" variant="ghost" className="h-6 px-2 text-[10px]" onClick={() => markRow(r.id, "failed", "Marked failed manually")}>Fail</Button>
-                    </div>
                     <span className="text-[10px] text-muted-foreground">{r.logs.length} log(s)</span>
                     <span className="text-[10px] text-muted-foreground">{isOpen ? "▾" : "▸"}</span>
                   </button>
@@ -1923,16 +1947,15 @@ function BulkVerifyRunner({
                   </button>
                 </div>
                 <BulkVerifyFrame
-                  key={`${r.id}:${r.fpSeed}`}
+                  key={`${r.id}:${r.fpSeed}:${runNonce}`}
                   url={r.url}
-                  telegramUrl={r.launchUrl}
                   accountId={r.accountId}
                   fpSeed={r.fpSeed}
-                  status={r.status}
-                  onOpen={() => openExternalRow(r)}
-                  onSuccess={() => markRow(r.id, "success", "Marked success manually")}
-                  onFailed={() => markRow(r.id, "failed", "Marked failed manually")}
-                  onCopy={() => appendLog(r.id, { ts: Date.now(), level: "info", msg: "Copied link" })}
+                  directMode={directMode}
+                  iframeRef={(el) => { iframeRefs.current[r.id] = el; }}
+                  onLoaded={() =>
+                    appendLog(r.id, { ts: Date.now(), level: "info", msg: "iframe loaded" }, "running")
+                  }
                 />
               </div>
             );
@@ -1994,62 +2017,72 @@ function OverallProgress({
 
 function BulkVerifyFrame({
   url,
-  telegramUrl,
   accountId,
   fpSeed,
-  status,
-  onOpen,
-  onSuccess,
-  onFailed,
-  onCopy,
+  directMode,
+  iframeRef,
+  onLoaded,
 }: {
   url: string;
-  telegramUrl?: string;
   accountId: string;
   fpSeed: string;
-  status: BulkRowStatus;
-  onOpen: () => void;
-  onSuccess: () => void;
-  onFailed: () => void;
-  onCopy: () => void;
+  directMode: boolean;
+  iframeRef?: (el: HTMLIFrameElement | null) => void;
+  onLoaded?: () => void;
 }) {
-  const badge =
-    status === "success" ? "bg-green-500/15 text-green-600 dark:text-green-400"
-    : status === "failed" ? "bg-destructive/15 text-destructive"
-    : status === "opened" ? "bg-blue-500/15 text-blue-600 dark:text-blue-400"
-    : "bg-muted text-muted-foreground";
-  let host = url;
-  try { host = new URL(url).host; } catch {}
+  const localRef = useRef<HTMLIFrameElement | null>(null);
+  const [retrySeed, setRetrySeed] = useState(fpSeed);
+  const [blocked, setBlocked] = useState<{ text?: string } | null>(null);
+  const [slowFallback, setSlowFallback] = useState(false);
+  const { url: proxied } = useMiniAppProxyUrl(url, accountId, { fpSeed: retrySeed });
+  useTelegramWebviewBridge(localRef, { onBlocked: (details) => setBlocked({ text: details.text }) });
+  useEffect(() => {
+    const src = directMode ? url : proxied;
+    if (!src) return;
+    setSlowFallback(false);
+    const t = window.setTimeout(() => setSlowFallback(true), directMode ? 6500 : 8500);
+    return () => window.clearTimeout(t);
+  }, [url, proxied, directMode, retrySeed]);
   return (
-    <div className="flex h-full flex-col justify-between p-3 text-xs">
-      <div className="space-y-3">
-        <div className="flex items-center gap-2">
-          <span className={`rounded px-2 py-1 text-[10px] font-semibold uppercase ${badge}`}>{status}</span>
-          <span className="min-w-0 truncate text-muted-foreground">{host}</span>
+    <div className="relative h-full w-full flex-1">
+      <iframe
+        key={`${directMode ? "direct" : "proxy"}:${retrySeed}`}
+        ref={(el) => {
+          localRef.current = el;
+          iframeRef?.(el);
+        }}
+        src={directMode ? url : proxied ?? "about:blank"}
+        title="Bulk verification runner"
+        className="h-full w-full flex-1 border-0"
+        allow="clipboard-read; clipboard-write; camera; microphone; geolocation; payment"
+        sandbox="allow-scripts allow-same-origin allow-forms allow-modals allow-popups allow-popups-to-escape-sandbox allow-storage-access-by-user-activation allow-top-navigation-by-user-activation"
+        referrerPolicy="no-referrer-when-downgrade"
+        onLoad={() => { setSlowFallback(false); onLoaded?.(); }}
+      />
+      {slowFallback && !blocked && (
+        <div className="absolute inset-x-2 bottom-2 rounded-lg border border-yellow-500/40 bg-background/95 p-2 text-[11px] shadow-lg backdrop-blur">
+          <div className="mb-1 font-semibold">No response in embedded view</div>
+          <div className="mb-2 text-muted-foreground">Open this row in Telegram/System Browser.</div>
+          <BrowserPickerButton url={url} size="sm" variant="outline" />
         </div>
-        <div className="rounded-md border border-yellow-500/40 bg-yellow-500/10 p-3 text-yellow-700 dark:text-yellow-300">
-          This provider needs Telegram WebView. {telegramUrl ? "Open will launch Telegram, not the raw verification website." : "Raw verification website links can still show Telegram Required; use original t.me/startapp links when possible."}
+      )}
+      {blocked && (
+        <div className="absolute inset-x-2 bottom-2 rounded-lg border border-border bg-background/95 p-2 text-[11px] shadow-lg backdrop-blur">
+          <div className="mb-1 font-semibold">Blocked in embedded view</div>
+          <div className="mb-2 line-clamp-2 text-muted-foreground">{blocked.text || "The verification site rejected this session."}</div>
+          <div className="flex flex-wrap gap-1.5">
+            <Button size="sm" variant="secondary" className="h-7 px-2 text-[11px]" onClick={() => { setBlocked(null); setRetrySeed(`${fpSeed}:${Date.now()}`); }}>
+              <RefreshCw className="mr-1 h-3 w-3" /> Retry
+            </Button>
+            <BrowserPickerButton url={url} size="sm" variant="outline" />
+          </div>
         </div>
-        <div className="break-all rounded border bg-muted/20 p-2 font-mono text-[10px] text-muted-foreground">
-          account:{accountId.slice(0, 8)} · fp:{fpSeed.slice(0, 10)} · {url}
-        </div>
-      </div>
-      <div className="mt-3 flex flex-wrap gap-2">
-        <Button size="sm" onClick={onOpen}>
-          <ExternalLink className="mr-1 h-4 w-4" /> {telegramUrl ? "Open in Telegram" : "Open external"}
-        </Button>
-        <BrowserPickerButton url={url} telegramUrl={telegramUrl} size="sm" variant="outline" />
-        <Button size="sm" variant="outline" onClick={() => { copyWithToast(url, toast, "Verification link copied"); onCopy(); }}>
-          <Copy className="mr-1 h-4 w-4" /> Copy
-        </Button>
-        <Button size="sm" variant="secondary" onClick={onSuccess}>Success</Button>
-        <Button size="sm" variant="outline" onClick={onFailed}>Fail</Button>
-      </div>
+      )}
     </div>
   );
 }
 
-function MiniAppFrameImpl({ url, launchUrl, title, accountId, botUsername }: { url: string; launchUrl?: string; title: string; accountId: string; botUsername: string }) {
+function MiniAppFrameImpl({ url, title, accountId, botUsername }: { url: string; title: string; accountId: string; botUsername: string }) {
   const ref = useRef<HTMLIFrameElement | null>(null);
   const joinFn = useServerFn(joinFromLink);
   const { url: proxiedUrl } = useMiniAppProxyUrl(url, accountId);
@@ -2145,7 +2178,7 @@ function MiniAppFrameImpl({ url, launchUrl, title, accountId, botUsername }: { u
                       Direct device mode
                     </Button>
                   )}
-                  <BrowserPickerButton url={overlay.url} telegramUrl={launchUrl} size="sm" variant="outline" />
+                  <BrowserPickerButton url={overlay.url} size="sm" variant="outline" />
                 </div>
               </div>
             )}
