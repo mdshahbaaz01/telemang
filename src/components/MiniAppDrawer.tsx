@@ -185,8 +185,8 @@ export function MiniAppDrawer({
               name={`tgminiapp-${request?.accountId ?? "drawer"}`}
               className="h-full w-full border-0"
               allow="clipboard-read; clipboard-write; camera; microphone; geolocation; payment"
-              sandbox="allow-scripts allow-same-origin allow-forms allow-modals allow-storage-access-by-user-activation"
-              referrerPolicy="no-referrer"
+              sandbox="allow-scripts allow-same-origin allow-forms allow-modals allow-popups allow-popups-to-escape-sandbox allow-storage-access-by-user-activation"
+              referrerPolicy="no-referrer-when-downgrade"
               onError={() =>
                 setError(
                   "The mini app refused to load in the embedded viewer.",

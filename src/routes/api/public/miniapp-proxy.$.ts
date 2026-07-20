@@ -1,4 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
+import { createHash } from "crypto";
 import { deriveMiniAppIdentity } from "@/lib/mini-app-identity.server";
 import { verifyMiniAppProxyToken, isBlockedProxyHost } from "@/lib/miniapp-token.server";
 
@@ -27,6 +28,30 @@ const STRIP_HEADERS = new Set([
 ]);
 
 const COOKIE_JAR_NAME = "miniapp_proxy_cj";
+const COOKIE_JAR_CHUNK_COUNT = 4;
+
+const DROP_UPSTREAM_REQUEST_HEADERS = new Set([
+  "host",
+  "connection",
+  "content-length",
+  "accept-encoding",
+  "cookie",
+  "origin",
+  "referer",
+  "referrer",
+  "sec-fetch-dest",
+  "sec-fetch-mode",
+  "sec-fetch-site",
+  "sec-fetch-user",
+  "upgrade-insecure-requests",
+  "cf-connecting-ip",
+  "cf-ipcountry",
+  "cf-ray",
+  "x-forwarded-for",
+  "x-forwarded-host",
+  "x-forwarded-proto",
+  "x-real-ip",
+]);
 
 type StoredCookie = {
   value: string;
@@ -67,7 +92,44 @@ function readCookieValue(request: Request, cookieName: string): string | null {
 }
 
 function readCookieJar(request: Request): CookieJar {
-  const raw = readCookieValue(request, COOKIE_JAR_NAME);
+  let raw = readCookieValue(request, COOKIE_JAR_NAME);
+  if (!raw) {
+    const chunks: string[] = [];
+    for (let i = 0; i < COOKIE_JAR_CHUNK_COUNT; i++) {
+      const chunk = readCookieValue(request, `${COOKIE_JAR_NAME}_${i}`);
+      if (!chunk) break;
+      chunks.push(chunk);
+    }
+    raw = chunks.length ? chunks.join("") : null;
+  }
+  if (!raw) return {};
+  try {
+    const parsed = JSON.parse(b64urlDecode(raw)) as CookieJar;
+    return parsed && typeof parsed === "object" ? parsed : {};
+  } catch {
+    return {};
+  }
+}
+
+function scopedCookieJarName(accountIdentity: string, targetUrl: URL): string {
+  const key = createHash("sha256")
+    .update(`${accountIdentity}|${targetUrl.hostname.toLowerCase()}`)
+    .digest("base64url")
+    .slice(0, 18);
+  return `${COOKIE_JAR_NAME}_${key}`;
+}
+
+function readScopedCookieJar(request: Request, name: string): CookieJar {
+  let raw = readCookieValue(request, name);
+  if (!raw) {
+    const chunks: string[] = [];
+    for (let i = 0; i < COOKIE_JAR_CHUNK_COUNT; i++) {
+      const chunk = readCookieValue(request, `${name}_${i}`);
+      if (!chunk) break;
+      chunks.push(chunk);
+    }
+    raw = chunks.length ? chunks.join("") : null;
+  }
   if (!raw) return {};
   try {
     const parsed = JSON.parse(b64urlDecode(raw)) as CookieJar;
@@ -79,9 +141,12 @@ function readCookieJar(request: Request): CookieJar {
 
 function serializeCookieJar(jar: CookieJar): string {
   pruneExpiredCookies(jar);
-  let encoded = b64urlEncode(JSON.stringify(jar));
-  if (encoded.length <= 3600) return encoded;
+  return b64urlEncode(JSON.stringify(jar));
+}
 
+function serializeCookieJarCompact(jar: CookieJar): string {
+  let encoded = serializeCookieJar(jar);
+  if (encoded.length <= 3600 * COOKIE_JAR_CHUNK_COUNT) return encoded;
   const all = Object.entries(jar).flatMap(([domain, cookies]) =>
     Object.entries(cookies).map(([name, cookie]) => ({ domain, name, created: cookie.created || 0 })),
   );
@@ -89,10 +154,31 @@ function serializeCookieJar(jar: CookieJar): string {
   for (const item of all) {
     delete jar[item.domain]?.[item.name];
     if (jar[item.domain] && Object.keys(jar[item.domain]).length === 0) delete jar[item.domain];
-    encoded = b64urlEncode(JSON.stringify(jar));
-    if (encoded.length <= 3600) return encoded;
+    encoded = serializeCookieJar(jar);
+    if (encoded.length <= 3600 * COOKIE_JAR_CHUNK_COUNT) return encoded;
   }
   return b64urlEncode("{}");
+}
+
+function appendCookieJarCookies(headers: Headers, name: string, jar: CookieJar) {
+  const encoded = serializeCookieJarCompact(jar);
+  if (encoded.length <= 3600) {
+    headers.append("set-cookie", `${name}=${encodeURIComponent(encoded)}; Path=/api/public/miniapp-proxy/; Max-Age=3600; HttpOnly; Secure; SameSite=None`);
+    for (let i = 0; i < COOKIE_JAR_CHUNK_COUNT; i++) {
+      headers.append("set-cookie", `${name}_${i}=; Path=/api/public/miniapp-proxy/; Max-Age=0; HttpOnly; Secure; SameSite=None`);
+    }
+    return;
+  }
+  headers.append("set-cookie", `${name}=; Path=/api/public/miniapp-proxy/; Max-Age=0; HttpOnly; Secure; SameSite=None`);
+  for (let i = 0; i < COOKIE_JAR_CHUNK_COUNT; i++) {
+    const chunk = encoded.slice(i * 3600, (i + 1) * 3600);
+    headers.append(
+      "set-cookie",
+      chunk
+        ? `${name}_${i}=${encodeURIComponent(chunk)}; Path=/api/public/miniapp-proxy/; Max-Age=3600; HttpOnly; Secure; SameSite=None`
+        : `${name}_${i}=; Path=/api/public/miniapp-proxy/; Max-Age=0; HttpOnly; Secure; SameSite=None`,
+    );
+  }
 }
 
 function defaultCookiePath(pathname: string): string {
@@ -212,8 +298,36 @@ function toTelegramUserAgent(fp: ReturnType<typeof deriveMiniAppIdentity>["finge
   return `${base} Telegram-Android/11.7.4 (${model}; Android ${androidVersion}; SDK ${sdk}; HIGH)`;
 }
 
-function buildOverrideScript(accountId: string, upstreamUrl: string, token: string, enableCaptcha: boolean) {
-  const identity = deriveMiniAppIdentity(accountId);
+function setClientHintHeaders(headers: Headers, fp: ReturnType<typeof deriveMiniAppIdentity>["fingerprint"]) {
+  const chromeVersion = (fp.userAgent.split("Chrome/")[1] || "").split(".")[0] || "120";
+  const platform = fp.platform.includes("iPhone") ? "iOS" : fp.mobile ? "Android" : fp.platform.includes("Win") ? "Windows" : "Linux";
+  headers.set("sec-ch-ua", `"Chromium";v="${chromeVersion}", "Google Chrome";v="${chromeVersion}", "Not:A-Brand";v="99"`);
+  headers.set("sec-ch-ua-mobile", fp.mobile ? "?1" : "?0");
+  headers.set("sec-ch-ua-platform", `"${platform}"`);
+}
+
+function copyBrowserRequestHeaders(request: Request, upstreamHeaders: Headers) {
+  request.headers.forEach((value, key) => {
+    const lower = key.toLowerCase();
+    if (DROP_UPSTREAM_REQUEST_HEADERS.has(lower)) return;
+    if (lower.startsWith("proxy-")) return;
+    upstreamHeaders.set(key, value);
+  });
+}
+
+function safeHeaderReferrer(raw: string | null, fallback: string): URL {
+  try {
+    const parsed = raw ? new URL(raw) : new URL(fallback);
+    if ((parsed.protocol === "http:" || parsed.protocol === "https:") && !isBlockedProxyHost(parsed.hostname)) {
+      return parsed;
+    }
+  } catch {}
+  return new URL(fallback);
+}
+
+function buildOverrideScript(accountId: string, upstreamUrl: string, token: string, enableCaptcha: boolean, fpSeed: string) {
+  const identityKey = fpSeed ? `${accountId}:${fpSeed}` : accountId;
+  const identity = deriveMiniAppIdentity(identityKey);
   const fp = identity.fingerprint;
   const telegramUserAgent = toTelegramUserAgent(fp);
   const telegramDefaults = {
@@ -382,6 +496,8 @@ function buildOverrideScript(accountId: string, upstreamUrl: string, token: stri
     const fp = ${JSON.stringify(fp)};
     const ACCT = ${JSON.stringify(accountId)};
     const TOKEN = ${JSON.stringify(token)};
+    const FP_SEED = ${JSON.stringify(fpSeed)};
+    const CAP_ENABLED = ${enableCaptcha ? "true" : "false"};
     const UPSTREAM = ${JSON.stringify(upstreamUrl)};
     const TELEGRAM_UA = ${JSON.stringify(telegramUserAgent)};
     const TG_DEFAULTS = ${JSON.stringify(telegramDefaults)};
@@ -665,6 +781,9 @@ function buildOverrideScript(accountId: string, upstreamUrl: string, token: stri
         if (abs.origin === location.origin && abs.pathname.startsWith(PROXY_PREFIX)) {
           if (!abs.searchParams.get('a')) abs.searchParams.set('a', ACCT);
           if (!abs.searchParams.get('t')) abs.searchParams.set('t', TOKEN);
+          if (FP_SEED && !abs.searchParams.get('fp')) abs.searchParams.set('fp', FP_SEED);
+          if (CAP_ENABLED && !abs.searchParams.get('cap')) abs.searchParams.set('cap', '1');
+          if (!abs.searchParams.get('r')) abs.searchParams.set('r', UPSTREAM);
           return abs.toString();
         }
         // Rewrite both same-preview paths and absolute upstream calls through the proxy.
@@ -674,7 +793,7 @@ function buildOverrideScript(accountId: string, upstreamUrl: string, token: stri
         const hashIdx = target.indexOf('#');
         const bare = hashIdx === -1 ? target : target.slice(0, hashIdx);
         const hash = hashIdx === -1 ? '' : target.slice(hashIdx);
-        return location.origin + PROXY_PREFIX + encodeURIComponent(bare) + '?a=' + encodeURIComponent(ACCT) + '&t=' + encodeURIComponent(TOKEN) + hash;
+        return location.origin + PROXY_PREFIX + encodeURIComponent(bare) + '?a=' + encodeURIComponent(ACCT) + '&t=' + encodeURIComponent(TOKEN) + (CAP_ENABLED ? '&cap=1' : '') + (FP_SEED ? '&fp=' + encodeURIComponent(FP_SEED) : '') + '&r=' + encodeURIComponent(UPSTREAM) + hash;
       } catch { return s; }
     };
     const isTgLink = (raw) => {
@@ -719,7 +838,45 @@ function buildOverrideScript(accountId: string, upstreamUrl: string, token: stri
       };
     } catch {}
 
-    // Patch WebSocket / EventSource to upstream host
+    // Patch browser APIs commonly used by verification/security SDKs after
+    // initial boot. Without these, heartbeat / telemetry calls escape the
+    // proxy, lose Telegram/referrer/cookie context, then pages show
+    // "Connection Lost" even though the main document loaded correctly.
+    try {
+      const origBeacon = navigator.sendBeacon && navigator.sendBeacon.bind(navigator);
+      if (origBeacon) {
+        navigator.sendBeacon = function(url, data) {
+          try { url = proxify(url); } catch {}
+          return origBeacon(url, data);
+        };
+      }
+    } catch {}
+
+    try {
+      const OrigEventSource = window.EventSource;
+      if (OrigEventSource) {
+        window.EventSource = function(url, config) {
+          try { url = proxify(url); } catch {}
+          return new OrigEventSource(url, config);
+        };
+        window.EventSource.prototype = OrigEventSource.prototype;
+      }
+    } catch {}
+
+    try {
+      const origSetAttribute = Element.prototype.setAttribute;
+      Element.prototype.setAttribute = function(name, value) {
+        try {
+          const n = String(name || '').toLowerCase();
+          if ((n === 'src' || n === 'href' || n === 'action') && value) {
+            value = proxify(value);
+          }
+        } catch {}
+        return origSetAttribute.call(this, name, value);
+      };
+    } catch {}
+
+    // Patch WebSocket to upstream host
     try {
       const OrigWS = window.WebSocket;
       if (OrigWS && upstreamOrigin) {
@@ -951,11 +1108,28 @@ function buildOverrideScript(accountId: string, upstreamUrl: string, token: stri
 })();`;
 }
 
-function proxyUrl(target: string, accountId: string, token: string, proxyOrigin = "") {
-  return `${proxyOrigin}/api/public/miniapp-proxy/${encodeURIComponent(target)}?a=${encodeURIComponent(accountId)}&t=${encodeURIComponent(token)}`;
+function proxyUrl(
+  target: string,
+  accountId: string,
+  token: string,
+  proxyOrigin = "",
+  opts: { captcha?: boolean; fpSeed?: string; referrer?: string } = {},
+) {
+  const params = new URLSearchParams({ a: accountId, t: token });
+  if (opts.captcha) params.set("cap", "1");
+  if (opts.fpSeed) params.set("fp", opts.fpSeed);
+  if (opts.referrer) params.set("r", opts.referrer);
+  return `${proxyOrigin}/api/public/miniapp-proxy/${encodeURIComponent(target)}?${params.toString()}`;
 }
 
-function rewriteHtmlUrls(html: string, baseUrl: string, accountId: string, token: string, proxyOrigin: string) {
+function rewriteHtmlUrls(
+  html: string,
+  baseUrl: string,
+  accountId: string,
+  token: string,
+  proxyOrigin: string,
+  opts: { captcha?: boolean; fpSeed?: string } = {},
+) {
   const base = new URL(baseUrl);
   const toProxy = (raw: string) => {
     if (!raw || raw.startsWith("#") || raw.startsWith("data:") || raw.startsWith("blob:") || raw.startsWith("mailto:") || raw.startsWith("tel:")) {
@@ -964,7 +1138,7 @@ function rewriteHtmlUrls(html: string, baseUrl: string, accountId: string, token
     try {
       const absolute = new URL(raw, base).toString();
       if (!/^https?:\/\//i.test(absolute)) return raw;
-      return proxyUrl(absolute, accountId, token, proxyOrigin);
+      return proxyUrl(absolute, accountId, token, proxyOrigin, { ...opts, referrer: baseUrl });
     } catch {
       return raw;
     }
@@ -987,12 +1161,19 @@ function rewriteHtmlUrls(html: string, baseUrl: string, accountId: string, token
     });
 }
 
-function rewriteCssUrls(css: string, baseUrl: string, accountId: string, token: string, proxyOrigin: string) {
+function rewriteCssUrls(
+  css: string,
+  baseUrl: string,
+  accountId: string,
+  token: string,
+  proxyOrigin: string,
+  opts: { captcha?: boolean; fpSeed?: string } = {},
+) {
   const base = new URL(baseUrl);
   return css.replace(/url\((['"]?)(.*?)\1\)/gi, (_m, quote, value) => {
     if (!value || value.startsWith("data:") || value.startsWith("blob:")) return `url(${quote}${value}${quote})`;
     try {
-      return `url(${quote}${proxyUrl(new URL(value, base).toString(), accountId, token, proxyOrigin)}${quote})`;
+      return `url(${quote}${proxyUrl(new URL(value, base).toString(), accountId, token, proxyOrigin, { ...opts, referrer: baseUrl })}${quote})`;
     } catch {
       return `url(${quote}${value}${quote})`;
     }
@@ -1022,7 +1203,6 @@ async function handle(request: Request, params: { _splat?: string }) {
   const accountId = proxyReqUrl.searchParams.get("a") || "anon";
   const token = proxyReqUrl.searchParams.get("t") || readTokenCookie(request);
   const captchaEnabled = proxyReqUrl.searchParams.get("cap") === "1";
-  const cookieJar = readCookieJar(request);
   // Optional per-run fingerprint seed. When present, the derived
   // navigator/screen/timezone/UA identity varies even for the same
   // account, so the bot sees a different "device" on each run.
@@ -1046,15 +1226,23 @@ async function handle(request: Request, params: { _splat?: string }) {
   if (isBlockedProxyHost(targetUrlEarly.hostname)) {
     return new Response("Target host is not permitted", { status: 403 });
   }
+  const cookieJarName = scopedCookieJarName(identityKey, targetUrlEarly);
+  const cookieJar = {
+    ...readCookieJar(request),
+    ...readScopedCookieJar(request, cookieJarName),
+  };
 
   const upstreamHeaders = new Headers();
   const fp = deriveMiniAppIdentity(identityKey).fingerprint;
   const targetUrl = targetUrlEarly;
+  copyBrowserRequestHeaders(request, upstreamHeaders);
   upstreamHeaders.set("user-agent", toTelegramUserAgent(fp));
   upstreamHeaders.set("x-requested-with", "org.telegram.messenger");
   upstreamHeaders.set("accept-language", fp.languages.join(","));
-  upstreamHeaders.set("origin", targetUrl.origin);
-  upstreamHeaders.set("referer", `${targetUrl.origin}/`);
+  setClientHintHeaders(upstreamHeaders, fp);
+  const referrerUrl = safeHeaderReferrer(proxyReqUrl.searchParams.get("r"), targetUrl.toString());
+  upstreamHeaders.set("origin", referrerUrl.origin);
+  upstreamHeaders.set("referer", referrerUrl.toString());
   const accept = request.headers.get("accept");
   if (accept) upstreamHeaders.set("accept", accept);
   // Some anti-bot / CDN layers serve a placeholder image (rendered as a
@@ -1139,8 +1327,11 @@ async function handle(request: Request, params: { _splat?: string }) {
           return new Response("Redirect target host is not permitted", { status: 403 });
         }
         currentUrl = next.toString();
-        upstreamHeaders.set("origin", next.origin);
-        upstreamHeaders.set("referer", `${next.origin}/`);
+        if (!isDocumentNav) {
+          const hopReferrer = safeHeaderReferrer(currentTargetUrl.toString(), next.toString());
+          upstreamHeaders.set("origin", hopReferrer.origin);
+          upstreamHeaders.set("referer", hopReferrer.toString());
+        }
         continue;
       }
       upstream = resp;
@@ -1176,19 +1367,17 @@ async function handle(request: Request, params: { _splat?: string }) {
     "set-cookie",
     `miniapp_proxy_t=${encodeURIComponent(token!)}; Path=/api/public/miniapp-proxy/; Max-Age=3600; HttpOnly; Secure; SameSite=None`,
   );
-  outHeaders.append(
-    "set-cookie",
-    `${COOKIE_JAR_NAME}=${encodeURIComponent(serializeCookieJar(cookieJar))}; Path=/api/public/miniapp-proxy/; Max-Age=3600; HttpOnly; Secure; SameSite=None`,
-  );
+  appendCookieJarCookies(outHeaders, COOKIE_JAR_NAME, cookieJar);
+  appendCookieJarCookies(outHeaders, cookieJarName, cookieJar);
 
   const ctype = upstream.headers.get("content-type") || "";
   if (ctype.includes("text/html")) {
     let html = await upstream.text();
     const finalUrl = upstream.url || target;
     const upstreamDir = new URL(".", finalUrl).toString();
-    const script = `<script>${buildOverrideScript(accountId, finalUrl, token!, captchaEnabled)}</script>`;
+    const script = `<script>${buildOverrideScript(accountId, finalUrl, token!, captchaEnabled, fpSeed)}</script>`;
     const base = `<base href="${upstreamDir}">`;
-    html = rewriteHtmlUrls(html, finalUrl, accountId, token!, proxyOrigin);
+    html = rewriteHtmlUrls(html, finalUrl, accountId, token!, proxyOrigin, { captcha: captchaEnabled, fpSeed });
     if (/<head[^>]*>/i.test(html)) {
       html = html.replace(/<head([^>]*)>/i, `<head$1>${script}${base}`);
     } else {
@@ -1198,7 +1387,7 @@ async function handle(request: Request, params: { _splat?: string }) {
     return new Response(html, { status: upstream.status, headers: outHeaders });
   }
   if (ctype.includes("text/css")) {
-    const css = rewriteCssUrls(await upstream.text(), upstream.url || target, accountId, token!, proxyOrigin);
+    const css = rewriteCssUrls(await upstream.text(), upstream.url || target, accountId, token!, proxyOrigin, { captcha: captchaEnabled, fpSeed });
     outHeaders.set("content-type", "text/css; charset=utf-8");
     return new Response(css, { status: upstream.status, headers: outHeaders });
   }
