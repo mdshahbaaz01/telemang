@@ -57,3 +57,56 @@ export function isTerminalAccountError(err: unknown): boolean {
   const cls = classifyTelegramError(err);
   return cls === "auth_key_unregistered" || cls === "user_deactivated";
 }
+
+/**
+ * Map a raw Telegram error or gramjs message into a short, human-friendly
+ * reason string suitable for surfacing in the bot flow UI.
+ * Returns `null` when the reason is unknown so callers can fall back to the
+ * raw message.
+ */
+export function friendlyJoinReason(input: {
+  code?: string | null;
+  message?: string | null;
+  status?: "joined" | "requested" | "failed" | "skipped" | "flood" | null;
+  floodSeconds?: number | null;
+}): string | null {
+  const code = (input.code || "").toUpperCase();
+  const msg = input.message || "";
+  if (input.status === "requested" || /INVITE_REQUEST_SENT|REQUEST_SENT/i.test(msg))
+    return "Approval required — request sent";
+  if (code === "USER_ALREADY_PARTICIPANT" || /already[_ ]?participant|already a member/i.test(msg))
+    return "Already a member";
+  if (input.floodSeconds || /FLOOD_WAIT/i.test(msg))
+    return `Rate-limited by Telegram${input.floodSeconds ? ` (${input.floodSeconds}s)` : ""}`;
+  if (code === "INVITE_HASH_EXPIRED" || /INVITE_HASH_EXPIRED/i.test(msg))
+    return "Invite link expired";
+  if (code === "INVITE_HASH_INVALID" || /INVITE_HASH_INVALID/i.test(msg))
+    return "Invite link invalid";
+  if (code === "CHANNEL_PRIVATE" || /CHANNEL_PRIVATE/i.test(msg))
+    return "Channel is private — no access";
+  if (code === "CHANNELS_TOO_MUCH" || /CHANNELS_TOO_MUCH/i.test(msg))
+    return "Account is in too many channels (500 cap)";
+  if (code === "USER_BANNED_IN_CHANNEL" || /USER_BANNED_IN_CHANNEL/i.test(msg))
+    return "This account is banned from the channel";
+  if (code === "USER_RESTRICTED" || /USER_RESTRICTED/i.test(msg))
+    return "This account is restricted by Telegram";
+  if (code === "USERNAME_NOT_OCCUPIED" || /USERNAME_NOT_OCCUPIED/i.test(msg))
+    return "Username does not exist";
+  if (code === "USERNAME_INVALID" || /USERNAME_INVALID/i.test(msg))
+    return "Username is invalid";
+  if (code === "PEER_ID_INVALID" || /PEER_ID_INVALID/i.test(msg))
+    return "Target could not be resolved";
+  if (/JOIN_NOT_VERIFIED/i.test(msg))
+    return "Join attempted but membership could not be verified";
+  if (/JOIN_TIMEOUT/i.test(msg))
+    return "Join timed out";
+  if (/AUTH_KEY_UNREGISTERED|SESSION_REVOKED/i.test(msg))
+    return "Account session revoked — reconnect it";
+  if (/USER_DEACTIVATED/i.test(msg))
+    return "Account was deactivated by Telegram";
+  if (/skipped_cached|already cached/i.test(msg))
+    return "Skipped — already joined in a prior run";
+  if (/skipped_locked|in-flight/i.test(msg))
+    return "Skipped — another worker is joining this channel";
+  return null;
+}
