@@ -795,7 +795,45 @@ function buildOverrideScript(accountId: string, upstreamUrl: string, token: stri
       };
     } catch {}
 
-    // Patch WebSocket / EventSource to upstream host
+    // Patch browser APIs commonly used by verification/security SDKs after
+    // initial boot. Without these, heartbeat / telemetry calls escape the
+    // proxy, lose Telegram/referrer/cookie context, then pages show
+    // "Connection Lost" even though the main document loaded correctly.
+    try {
+      const origBeacon = navigator.sendBeacon && navigator.sendBeacon.bind(navigator);
+      if (origBeacon) {
+        navigator.sendBeacon = function(url, data) {
+          try { url = proxify(url); } catch {}
+          return origBeacon(url, data);
+        };
+      }
+    } catch {}
+
+    try {
+      const OrigEventSource = window.EventSource;
+      if (OrigEventSource) {
+        window.EventSource = function(url, config) {
+          try { url = proxify(url); } catch {}
+          return new OrigEventSource(url, config);
+        };
+        window.EventSource.prototype = OrigEventSource.prototype;
+      }
+    } catch {}
+
+    try {
+      const origSetAttribute = Element.prototype.setAttribute;
+      Element.prototype.setAttribute = function(name, value) {
+        try {
+          const n = String(name || '').toLowerCase();
+          if ((n === 'src' || n === 'href' || n === 'action') && value) {
+            value = proxify(value);
+          }
+        } catch {}
+        return origSetAttribute.call(this, name, value);
+      };
+    } catch {}
+
+    // Patch WebSocket to upstream host
     try {
       const OrigWS = window.WebSocket;
       if (OrigWS && upstreamOrigin) {
