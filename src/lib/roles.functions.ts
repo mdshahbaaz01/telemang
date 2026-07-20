@@ -13,6 +13,7 @@ export const getMyRole = createServerFn({ method: "GET" })
     return {
       userId: context.userId,
       isAdmin: roles.includes("admin"),
+      isOwner: roles.includes("owner"),
       roles,
     };
   });
