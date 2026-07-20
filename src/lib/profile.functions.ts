@@ -6,7 +6,12 @@ const fieldsSchema = z.object({
   firstName: z.string().max(64).optional(),
   lastName: z.string().max(64).optional(),
   bio: z.string().max(70).optional(),
-  username: z.string().max(32).regex(/^[A-Za-z0-9_]+$/).optional().or(z.literal("")),
+  username: z
+    .string()
+    .max(32)
+    .regex(/^[A-Za-z][A-Za-z0-9_]{3,31}$/, "Username must be 4-32 chars, start with a letter, letters/digits/underscore only")
+    .optional()
+    .or(z.literal("")),
   avatarPath: z.string().max(500).optional(),
 });
 
@@ -59,8 +64,42 @@ export const updateProfileBulk = createServerFn({ method: "POST" })
             );
           }
           if (data.fields.username != null) {
+            const desired = data.fields.username || "";
             try {
-              await client.invoke(new Api.account.UpdateUsername({ username: data.fields.username || "" }));
+              if (desired) {
+                // Pre-check availability so we surface a clear reason instead of a raw RPC error.
+                try {
+                  const avail = await client.invoke(new Api.account.CheckUsername({ username: desired }));
+                  if (avail === false) {
+                    // false = taken by someone else (true = free, or already yours in some cases)
+                    const me = await client.getMe().catch(() => null) as { username?: string } | null;
+                    if (me?.username?.toLowerCase() === desired.toLowerCase()) {
+                      // Already ours — skip UpdateUsername (would throw USERNAME_NOT_MODIFIED)
+                    } else {
+                      results.push({ accountId, ok: false, message: `Username @${desired} is already taken` });
+                      return;
+                    }
+                  } else {
+                    await client.invoke(new Api.account.UpdateUsername({ username: desired }));
+                  }
+                } catch (inner) {
+                  const msg = (inner as Error).message || "";
+                  if (/USERNAME_NOT_MODIFIED/i.test(msg)) {
+                    // no-op
+                  } else {
+                    let friendly = msg;
+                    if (/USERNAME_INVALID/i.test(msg)) friendly = "Invalid username (4-32 chars, must start with a letter)";
+                    else if (/USERNAME_OCCUPIED/i.test(msg)) friendly = `Username @${desired} is already taken`;
+                    else if (/USERNAME_PURCHASE_AVAILABLE/i.test(msg)) friendly = `@${desired} is a Fragment auction username — buy it on Fragment first`;
+                    else if (/FLOOD_WAIT_(\d+)/i.test(msg)) friendly = `Flood wait: try again later (${msg})`;
+                    results.push({ accountId, ok: false, message: `Username: ${friendly}` });
+                    return;
+                  }
+                }
+              } else {
+                // Clear the username
+                await client.invoke(new Api.account.UpdateUsername({ username: "" }));
+              }
             } catch (e) {
               results.push({ accountId, ok: false, message: `Username: ${(e as Error).message}` });
               return;
