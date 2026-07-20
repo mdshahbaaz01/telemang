@@ -1944,65 +1944,53 @@ function BulkVerifyFrame({
   url,
   accountId,
   fpSeed,
-  directMode,
-  iframeRef,
-  onLoaded,
+  status,
+  onOpen,
+  onSuccess,
+  onFailed,
+  onCopy,
 }: {
   url: string;
   accountId: string;
   fpSeed: string;
-  directMode: boolean;
-  iframeRef?: (el: HTMLIFrameElement | null) => void;
-  onLoaded?: () => void;
+  status: BulkRowStatus;
+  onOpen: () => void;
+  onSuccess: () => void;
+  onFailed: () => void;
+  onCopy: () => void;
 }) {
-  const localRef = useRef<HTMLIFrameElement | null>(null);
-  const [retrySeed, setRetrySeed] = useState(fpSeed);
-  const [blocked, setBlocked] = useState<{ text?: string } | null>(null);
-  const [slowFallback, setSlowFallback] = useState(false);
-  const { url: proxied } = useMiniAppProxyUrl(url, accountId, { fpSeed: retrySeed });
-  useTelegramWebviewBridge(localRef, { onBlocked: (details) => setBlocked({ text: details.text }) });
-  useEffect(() => {
-    const src = directMode ? url : proxied;
-    if (!src) return;
-    setSlowFallback(false);
-    const t = window.setTimeout(() => setSlowFallback(true), directMode ? 6500 : 8500);
-    return () => window.clearTimeout(t);
-  }, [url, proxied, directMode, retrySeed]);
+  const badge =
+    status === "success" ? "bg-green-500/15 text-green-600 dark:text-green-400"
+    : status === "failed" ? "bg-destructive/15 text-destructive"
+    : status === "opened" ? "bg-blue-500/15 text-blue-600 dark:text-blue-400"
+    : "bg-muted text-muted-foreground";
+  let host = url;
+  try { host = new URL(url).host; } catch {}
   return (
-    <div className="relative h-full w-full flex-1">
-      <iframe
-        key={`${directMode ? "direct" : "proxy"}:${retrySeed}`}
-        ref={(el) => {
-          localRef.current = el;
-          iframeRef?.(el);
-        }}
-        src={directMode ? url : proxied ?? "about:blank"}
-        title="Bulk verification runner"
-        className="h-full w-full flex-1 border-0"
-        allow="clipboard-read; clipboard-write; camera; microphone; geolocation; payment"
-        sandbox="allow-scripts allow-same-origin allow-forms allow-modals allow-popups allow-popups-to-escape-sandbox allow-storage-access-by-user-activation allow-top-navigation-by-user-activation"
-        referrerPolicy="no-referrer-when-downgrade"
-        onLoad={() => { setSlowFallback(false); onLoaded?.(); }}
-      />
-      {slowFallback && !blocked && (
-        <div className="absolute inset-x-2 bottom-2 rounded-lg border border-yellow-500/40 bg-background/95 p-2 text-[11px] shadow-lg backdrop-blur">
-          <div className="mb-1 font-semibold">No response in embedded view</div>
-          <div className="mb-2 text-muted-foreground">Open this row in Telegram/System Browser.</div>
-          <BrowserPickerButton url={url} size="sm" variant="outline" />
+    <div className="flex h-full flex-col justify-between p-3 text-xs">
+      <div className="space-y-3">
+        <div className="flex items-center gap-2">
+          <span className={`rounded px-2 py-1 text-[10px] font-semibold uppercase ${badge}`}>{status}</span>
+          <span className="min-w-0 truncate text-muted-foreground">{host}</span>
         </div>
-      )}
-      {blocked && (
-        <div className="absolute inset-x-2 bottom-2 rounded-lg border border-border bg-background/95 p-2 text-[11px] shadow-lg backdrop-blur">
-          <div className="mb-1 font-semibold">Blocked in embedded view</div>
-          <div className="mb-2 line-clamp-2 text-muted-foreground">{blocked.text || "The verification site rejected this session."}</div>
-          <div className="flex flex-wrap gap-1.5">
-            <Button size="sm" variant="secondary" className="h-7 px-2 text-[11px]" onClick={() => { setBlocked(null); setRetrySeed(`${fpSeed}:${Date.now()}`); }}>
-              <RefreshCw className="mr-1 h-3 w-3" /> Retry
-            </Button>
-            <BrowserPickerButton url={url} size="sm" variant="outline" />
-          </div>
+        <div className="rounded-md border border-yellow-500/40 bg-yellow-500/10 p-3 text-yellow-700 dark:text-yellow-300">
+          Embedded mode is disabled for this provider because it returns Connection Lost / Telegram Required / refused to connect. Open externally and mark the result.
         </div>
-      )}
+        <div className="break-all rounded border bg-muted/20 p-2 font-mono text-[10px] text-muted-foreground">
+          account:{accountId.slice(0, 8)} · fp:{fpSeed.slice(0, 10)} · {url}
+        </div>
+      </div>
+      <div className="mt-3 flex flex-wrap gap-2">
+        <Button size="sm" onClick={onOpen}>
+          <ExternalLink className="mr-1 h-4 w-4" /> Open external
+        </Button>
+        <BrowserPickerButton url={url} size="sm" variant="outline" />
+        <Button size="sm" variant="outline" onClick={() => { copyWithToast(url, toast, "Verification link copied"); onCopy(); }}>
+          <Copy className="mr-1 h-4 w-4" /> Copy
+        </Button>
+        <Button size="sm" variant="secondary" onClick={onSuccess}>Success</Button>
+        <Button size="sm" variant="outline" onClick={onFailed}>Fail</Button>
+      </div>
     </div>
   );
 }
