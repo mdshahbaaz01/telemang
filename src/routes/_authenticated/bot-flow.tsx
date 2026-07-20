@@ -788,6 +788,10 @@ function BotFlowPage() {
               <div className="text-sm font-medium mr-auto">
                 {selectedIds.length} / {allIds.length} accounts selected
               </div>
+              <AccountRangeControls
+                total={accountList.length}
+                onApply={(s, e, order) => setSelectedIds(pickRange(accountList, s, e, order).map((a) => a.id))}
+              />
               <Button type="button" size="sm" variant="outline" onClick={() => setSelectedIds(allIds)}>Select all</Button>
               <Button type="button" size="sm" variant="outline" onClick={() => setSelectedIds([])}>Deselect all</Button>
             </div>
@@ -1296,6 +1300,10 @@ function BotFlowPage() {
               <div className="text-sm font-medium mr-auto">
                 {vxSelected.length} / {allIds.length} accounts selected
               </div>
+              <AccountRangeControls
+                total={accountList.length}
+                onApply={(s, e, order) => setVxSelected(pickRange(accountList, s, e, order).map((a) => a.id))}
+              />
               <Button type="button" size="sm" variant="outline" onClick={() => setVxSelected(allIds)}>Select all</Button>
               <Button type="button" size="sm" variant="outline" onClick={() => setVxSelected([])}>Deselect all</Button>
             </div>
@@ -1401,6 +1409,10 @@ function BotFlowPage() {
               <div className="text-sm font-medium mr-auto">
                 {miniSelected.length} / {allIds.length} accounts selected
               </div>
+              <AccountRangeControls
+                total={accountList.length}
+                onApply={(s, e, order) => setMiniSelected(pickRange(accountList, s, e, order).map((a) => a.id))}
+              />
               <Button type="button" size="sm" variant="outline" onClick={() => setMiniSelected(allIds)}>Select all</Button>
               <Button type="button" size="sm" variant="outline" onClick={() => setMiniSelected([])}>Deselect all</Button>
             </div>

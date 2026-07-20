@@ -221,9 +221,18 @@ function LeaveByLinksPanel() {
       <div className="rounded-lg border border-border bg-card p-4">
         <div className="mb-2 flex items-center justify-between">
           <h2 className="font-semibold">Accounts</h2>
-          <Button variant="outline" size="sm" onClick={toggleAllAccounts}>
-            {accountIds.size === (accountsQ.data?.length ?? 0) && (accountsQ.data?.length ?? 0) > 0 ? "Deselect all" : "Select all"}
-          </Button>
+          <div className="flex flex-wrap items-center gap-2">
+            <AccountRangeControls
+              total={accountsQ.data?.length ?? 0}
+              onApply={(s, e, order) => {
+                const picked = pickRange(accountsQ.data ?? [], s, e, order).map((a) => a.id);
+                setAccountIds(new Set(picked));
+              }}
+            />
+            <Button variant="outline" size="sm" onClick={toggleAllAccounts}>
+              {accountIds.size === (accountsQ.data?.length ?? 0) && (accountsQ.data?.length ?? 0) > 0 ? "Deselect all" : "Select all"}
+            </Button>
+          </div>
         </div>
         <div className="grid grid-cols-2 gap-2 md:grid-cols-4">
           {(accountsQ.data ?? []).map((a, i) => (
@@ -456,11 +465,20 @@ function CleanupPanelInner({ mode, kind }: { mode: "chats" | "personal"; kind?: 
       <div className="rounded-lg border border-border bg-card p-4">
         <div className="mb-2 flex items-center justify-between">
           <h2 className="font-semibold">Accounts</h2>
-          <Button variant="outline" size="sm" onClick={toggleAllAccounts}>
-            {accountIds.size === (accountsQ.data?.length ?? 0) && (accountsQ.data?.length ?? 0) > 0
-              ? "Deselect all"
-              : "Select all"}
-          </Button>
+          <div className="flex flex-wrap items-center gap-2">
+            <AccountRangeControls
+              total={accountsQ.data?.length ?? 0}
+              onApply={(s, e, order) => {
+                const picked = pickRange(accountsQ.data ?? [], s, e, order).map((a) => a.id);
+                setAccountIds(new Set(picked));
+              }}
+            />
+            <Button variant="outline" size="sm" onClick={toggleAllAccounts}>
+              {accountIds.size === (accountsQ.data?.length ?? 0) && (accountsQ.data?.length ?? 0) > 0
+                ? "Deselect all"
+                : "Select all"}
+            </Button>
+          </div>
         </div>
         <div className="grid grid-cols-2 gap-2 md:grid-cols-4">
           {(accountsQ.data ?? []).map((a) => (

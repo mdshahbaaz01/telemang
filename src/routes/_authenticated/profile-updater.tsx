@@ -148,7 +148,16 @@ function ProfileUpdater() {
         <Card>
           <CardHeader className="flex flex-row items-center justify-between">
             <CardTitle className="text-base">Accounts ({selected.size}/{accounts.length})</CardTitle>
-            <Button size="sm" variant="ghost" onClick={toggleAll}>{allChecked ? "Unselect all" : "Select all"}</Button>
+            <div className="flex items-center gap-2">
+              <AccountRangeControls
+                total={accounts.length}
+                onApply={(s, e, order) => {
+                  const picked = pickRange(accounts, s, e, order).map((a) => a.id);
+                  setSelected(new Set(picked));
+                }}
+              />
+              <Button size="sm" variant="ghost" onClick={toggleAll}>{allChecked ? "Unselect all" : "Select all"}</Button>
+            </div>
           </CardHeader>
           <CardContent className="max-h-96 space-y-1 overflow-y-auto">
             {accountsQ.isLoading && <div className="text-sm text-muted-foreground">Loading…</div>}

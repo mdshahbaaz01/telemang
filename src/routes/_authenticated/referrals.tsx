@@ -162,7 +162,16 @@ function JoinsPanel({ linkId }: { linkId: string }) {
       <div className="rounded-lg border border-border bg-card p-4">
         <div className="mb-2 flex items-center justify-between">
           <div className="text-sm font-semibold">Accounts NOT yet joined ({unjoined.length})</div>
-          <Button size="sm" variant="ghost" onClick={() => setIds(new Set(unjoined.map((a: any) => a.id)))}>Select all</Button>
+          <div className="flex items-center gap-2">
+            <AccountRangeControls
+              total={unjoined.length}
+              onApply={(s, e, order) => {
+                const picked = pickRange(unjoined, s, e, order).map((a: any) => a.id);
+                setIds(new Set(picked));
+              }}
+            />
+            <Button size="sm" variant="ghost" onClick={() => setIds(new Set(unjoined.map((a: any) => a.id)))}>Select all</Button>
+          </div>
         </div>
         <div className="flex max-h-40 flex-wrap gap-2 overflow-y-auto">
           {unjoined.map((a: any) => (

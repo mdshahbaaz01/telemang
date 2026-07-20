@@ -143,6 +143,12 @@ function NewTaskPage() {
                 {selectedIds.length} / {accounts.length} accounts selected
               </p>
               <div className="flex gap-2">
+                <AccountRangeControls
+                  total={accounts.length}
+                  onApply={(s, e, order) => {
+                    setSelectedIds(pickRange(accounts, s, e, order).map((a) => a.id));
+                  }}
+                />
                 <Button
                   type="button"
                   variant={allSelected ? "outline" : "default"}

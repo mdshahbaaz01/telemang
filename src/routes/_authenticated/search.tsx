@@ -101,9 +101,18 @@ function SearchPage() {
         <div className="rounded-lg border border-border bg-card p-3">
           <div className="mb-2 flex items-center justify-between">
             <div className="text-sm font-medium">Accounts ({ids.size}/{accountsQ.data?.length ?? 0})</div>
-            <Button size="sm" variant="ghost" onClick={toggleAll} disabled={!accountsQ.data?.length}>
-              {ids.size === (accountsQ.data?.length ?? -1) ? "Deselect all" : "Select all"}
-            </Button>
+            <div className="flex items-center gap-2">
+              <AccountRangeControls
+                total={accountsQ.data?.length ?? 0}
+                onApply={(s, e, order) => {
+                  const picked = pickRange(accountsQ.data ?? [], s, e, order).map((a) => a.id);
+                  setIds(new Set(picked));
+                }}
+              />
+              <Button size="sm" variant="ghost" onClick={toggleAll} disabled={!accountsQ.data?.length}>
+                {ids.size === (accountsQ.data?.length ?? -1) ? "Deselect all" : "Select all"}
+              </Button>
+            </div>
           </div>
           <div className="flex flex-wrap gap-2">
             {(accountsQ.data ?? []).map((a) => (
