@@ -590,6 +590,60 @@ export const Route = createFileRoute("/api/public/bulk-stream")({
               };
 
               const execReadAll = async (accountId: string) => {
+                // placeholder — pollVote executor is inserted right above
+                return execReadAllReal(accountId);
+              };
+              const execPollVote = async (accountId: string) => {
+                let client: any; let ok = 0, fail = 0;
+                try {
+                  if (op.kind !== "pollVote") return { ok, fail };
+                  const parsed = parseMessageLink(op.messageLink);
+                  if (!parsed) throw new Error(`Bad message link: ${op.messageLink}`);
+                  client = await openClientForAccount(supabase, accountId);
+                  const peer = await resolveTargetEntity(client, Api, parsed.chat);
+                  // Fetch the poll message so we can read the answer option bytes.
+                  let msg: any = null;
+                  try {
+                    const res: any = parsed.chat.startsWith("c/")
+                      ? await client.invoke(new Api.channels.GetMessages({ channel: peer, id: [new Api.InputMessageID({ id: parsed.msgId })] } as any))
+                      : await client.invoke(new Api.messages.GetMessages({ id: [new Api.InputMessageID({ id: parsed.msgId })] } as any));
+                    msg = res?.messages?.[0];
+                  } catch {
+                    // Fallback via high-level helper
+                    const list: any[] = await client.getMessages(peer, { ids: [parsed.msgId] });
+                    msg = list?.[0];
+                  }
+                  const media = msg?.media ?? msg?.poll;
+                  const poll = media?.poll ?? media;
+                  const answers = poll?.answers as Array<{ option: Buffer }> | undefined;
+                  if (!answers?.length) throw new Error("Message is not a poll or has no options");
+                  const wanted = op.optionIndexes.filter((i) => i < answers.length);
+                  if (!wanted.length) throw new Error(`Poll has ${answers.length} options; indexes out of range`);
+                  const optionBytes = op.retract ? [] : wanted.map((i) => Buffer.from(answers[i].option as any));
+                  await client.invoke(new Api.messages.SendVote({
+                    peer,
+                    msgId: parsed.msgId,
+                    options: optionBytes,
+                  } as any));
+                  ok = 1;
+                  const label = `${op.retract ? "Retracted" : "Voted"} ${wanted.join(",")}`;
+                  send("log", { accountId, level: "success", target: op.messageLink, message: label });
+                  await logDb(accountId, op.messageLink, "success", label);
+                } catch (e) {
+                  const m = errText(e);
+                  const secs = await pauseFlood(accountId, m);
+                  if (secs) send("log", { accountId, level: "warn", message: `FloodWait ${secs}s` });
+                  fail = 1;
+                  send("log", { accountId, level: "error", target: (op as any).messageLink, message: m });
+                  await logDb(accountId, (op as any).messageLink ?? null, "error", m);
+                } finally {
+                  await client?.disconnect?.().catch(() => {});
+                  send("done", { accountId, ok, fail });
+                }
+                return { ok, fail };
+              };
+
+              const execReadAllReal = async (accountId: string) => {
                 let client: any; let ok = 0, fail = 0;
                 try {
                   if (op.kind !== "readAll") return { ok, fail };
