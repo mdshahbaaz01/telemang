@@ -1098,7 +1098,6 @@ async function handle(request: Request, params: { _splat?: string }) {
   const accountId = proxyReqUrl.searchParams.get("a") || "anon";
   const token = proxyReqUrl.searchParams.get("t") || readTokenCookie(request);
   const captchaEnabled = proxyReqUrl.searchParams.get("cap") === "1";
-  const cookieJar = readCookieJar(request);
   // Optional per-run fingerprint seed. When present, the derived
   // navigator/screen/timezone/UA identity varies even for the same
   // account, so the bot sees a different "device" on each run.
@@ -1122,6 +1121,11 @@ async function handle(request: Request, params: { _splat?: string }) {
   if (isBlockedProxyHost(targetUrlEarly.hostname)) {
     return new Response("Target host is not permitted", { status: 403 });
   }
+  const cookieJarName = scopedCookieJarName(identityKey, targetUrlEarly);
+  const cookieJar = {
+    ...readCookieJar(request),
+    ...readScopedCookieJar(request, cookieJarName),
+  };
 
   const upstreamHeaders = new Headers();
   const fp = deriveMiniAppIdentity(identityKey).fingerprint;
@@ -1261,6 +1265,10 @@ async function handle(request: Request, params: { _splat?: string }) {
   outHeaders.append(
     "set-cookie",
     `${COOKIE_JAR_NAME}=${encodeURIComponent(serializeCookieJar(cookieJar))}; Path=/api/public/miniapp-proxy/; Max-Age=3600; HttpOnly; Secure; SameSite=None`,
+  );
+  outHeaders.append(
+    "set-cookie",
+    `${cookieJarName}=${encodeURIComponent(serializeCookieJar(cookieJar))}; Path=/api/public/miniapp-proxy/; Max-Age=3600; HttpOnly; Secure; SameSite=None`,
   );
 
   const ctype = upstream.headers.get("content-type") || "";
