@@ -1106,11 +1106,14 @@ async function handle(request: Request, params: { _splat?: string }) {
   const upstreamHeaders = new Headers();
   const fp = deriveMiniAppIdentity(identityKey).fingerprint;
   const targetUrl = targetUrlEarly;
+  copyBrowserRequestHeaders(request, upstreamHeaders);
   upstreamHeaders.set("user-agent", toTelegramUserAgent(fp));
   upstreamHeaders.set("x-requested-with", "org.telegram.messenger");
   upstreamHeaders.set("accept-language", fp.languages.join(","));
-  upstreamHeaders.set("origin", targetUrl.origin);
-  upstreamHeaders.set("referer", `${targetUrl.origin}/`);
+  setClientHintHeaders(upstreamHeaders, fp);
+  const referrerUrl = safeHeaderReferrer(proxyReqUrl.searchParams.get("r"), targetUrl.toString());
+  upstreamHeaders.set("origin", referrerUrl.origin);
+  upstreamHeaders.set("referer", referrerUrl.toString());
   const accept = request.headers.get("accept");
   if (accept) upstreamHeaders.set("accept", accept);
   // Some anti-bot / CDN layers serve a placeholder image (rendered as a
@@ -1195,8 +1198,11 @@ async function handle(request: Request, params: { _splat?: string }) {
           return new Response("Redirect target host is not permitted", { status: 403 });
         }
         currentUrl = next.toString();
-        upstreamHeaders.set("origin", next.origin);
-        upstreamHeaders.set("referer", `${next.origin}/`);
+        if (!isDocumentNav) {
+          const hopReferrer = safeHeaderReferrer(currentTargetUrl.toString(), next.toString());
+          upstreamHeaders.set("origin", hopReferrer.origin);
+          upstreamHeaders.set("referer", hopReferrer.toString());
+        }
         continue;
       }
       upstream = resp;
@@ -1242,7 +1248,7 @@ async function handle(request: Request, params: { _splat?: string }) {
     let html = await upstream.text();
     const finalUrl = upstream.url || target;
     const upstreamDir = new URL(".", finalUrl).toString();
-    const script = `<script>${buildOverrideScript(accountId, finalUrl, token!, captchaEnabled)}</script>`;
+    const script = `<script>${buildOverrideScript(accountId, finalUrl, token!, captchaEnabled, fpSeed)}</script>`;
     const base = `<base href="${upstreamDir}">`;
     html = rewriteHtmlUrls(html, finalUrl, accountId, token!, proxyOrigin);
     if (/<head[^>]*>/i.test(html)) {
