@@ -311,7 +311,7 @@ function BulkPlusInner() {
           <div className="rounded-md border border-border p-3 bg-card grid grid-cols-3 gap-2">
             <div><Label className="text-xs">Min delay (s)</Label><Input type="number" min={0} value={minDelay} onChange={(e) => setMinDelay(+e.target.value || 0)} /></div>
             <div><Label className="text-xs">Max delay (s)</Label><Input type="number" min={0} value={maxDelay} onChange={(e) => setMaxDelay(+e.target.value || 0)} /></div>
-            <div><Label className="text-xs">Parallel accts</Label><Input type="number" min={1} max={20} value={concurrency} onChange={(e) => setConcurrency(Math.max(1, +e.target.value || 1))} /></div>
+            <div><Label className="text-xs">Parallel accts (max 20)</Label><Input type="number" min={1} max={20} value={concurrency} onChange={(e) => setConcurrency(Math.min(20, Math.max(1, +e.target.value || 1)))} /></div>
           </div>
 
           {/* Per-kind config */}
