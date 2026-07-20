@@ -805,7 +805,7 @@ function ActionsPageInner() {
       accountIds: [],
       minDelay,
       maxDelay,
-      concurrency,
+      concurrency: clampConcurrency(concurrency),
       op: { kind: "reply", source: src, viaDiscussion: tab === "comment", rows: cleaned },
     });
   };
