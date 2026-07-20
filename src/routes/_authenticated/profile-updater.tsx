@@ -118,9 +118,11 @@ function ProfileUpdater() {
               <Textarea value={bio} onChange={(e) => setBio(e.target.value)} maxLength={70} rows={2} />
             </div>
             <div>
-              <Label>Username (blank = clear, leave field untouched to skip)</Label>
+              <Label>Username</Label>
               <Input value={username} onChange={(e) => setUsername(e.target.value.replace(/^@/, ""))} placeholder="myhandle" />
-              <p className="mt-1 text-xs text-muted-foreground">Only unique usernames succeed; per-account result shown below.</p>
+              <p className="mt-1 text-xs text-muted-foreground">
+                4–32 chars, must start with a letter (letters/digits/underscore). Each username is unique to one Telegram account — if you pick multiple accounts here only the first can claim it. Leave empty and untouched to skip; type spaces then clear to blank-out an existing username.
+              </p>
             </div>
             <div>
               <Label>Avatar</Label>
