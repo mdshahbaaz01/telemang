@@ -590,11 +590,6 @@ export const Route = createFileRoute("/api/public/bulk-stream")({
               };
 
               const execReadAll = async (accountId: string) => {
-                // (moved) — pollVote executor is defined above this
-                void 0;
-                return execReadAllImpl(accountId);
-              };
-              const execReadAllImpl = async (accountId: string) => {
                 let client: any; let ok = 0, fail = 0;
                 try {
                   if (op.kind !== "readAll") return { ok, fail };
