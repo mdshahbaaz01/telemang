@@ -236,7 +236,29 @@ function buildOverrideScript(accountId: string, upstreamUrl: string, token: stri
     })[eventType] || eventType;
     const installTelegramShim = () => {
       try {
+        // Persist the signed tgWebApp* hash so later navigations under the
+        // proxy (redirects to a bot's config page, etc.) still look like a
+        // Telegram launch. Without this, sites downstream of the initial
+        // hop see an empty location.hash and show "Telegram Required".
+        const TG_STORE_KEY = '__lv_tgLaunchHash_v1__';
         const hashParams = new URLSearchParams(String(location.hash || '').replace(/^#/, ''));
+        const hasTg = ['tgWebAppData','tgWebAppPlatform','tgWebAppVersion','tgWebAppThemeParams']
+          .some((k) => hashParams.get(k));
+        try {
+          if (hasTg) {
+            sessionStorage.setItem(TG_STORE_KEY, String(location.hash || '').replace(/^#/, ''));
+          } else {
+            const saved = sessionStorage.getItem(TG_STORE_KEY);
+            if (saved) {
+              const savedParams = new URLSearchParams(saved);
+              savedParams.forEach((v, k) => { if (!hashParams.get(k)) hashParams.set(k, v); });
+              try {
+                const newHash = '#' + hashParams.toString();
+                history.replaceState(history.state, '', location.pathname + location.search + newHash);
+              } catch {}
+            }
+          }
+        } catch {}
         const initData = hashParams.get('tgWebAppData') || '';
         const themeRaw = hashParams.get('tgWebAppThemeParams') || '';
         const themeParams = themeRaw ? (parseMaybeJson(themeRaw) || {}) : {};
