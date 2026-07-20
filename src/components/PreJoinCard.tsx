@@ -4,13 +4,15 @@ import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { toast } from "sonner";
 import { Play, Square, ChevronDown, ChevronUp, History, Trash2 } from "lucide-react";
+import { Link } from "@tanstack/react-router";
+import { friendlyJoinReason } from "@/lib/telegram/errors";
 
 type Account = { id: string; first_name?: string | null; username?: string | null; phone?: string | null };
 
-type PreJoinLog = { level: "info" | "success" | "warn" | "error"; message: string; ts: number; target?: string; accountId?: string };
+type PreJoinLog = { level: "info" | "success" | "warn" | "error"; message: string; ts: number; target?: string; accountId?: string; reason?: string };
 
 type ChStatus = "queued" | "attempting" | "requested" | "succeeded" | "skipped" | "failed";
-type ChCell = { status: ChStatus; ts: number; message?: string };
+type ChCell = { status: ChStatus; ts: number; message?: string; reason?: string; attempts?: number };
 type ChMap = Record<string, Record<string, ChCell>>; // channel -> accountId -> cell
 
 function normalizeTarget(t: string): string {
@@ -114,14 +116,20 @@ export function PreJoinCard({ accounts }: { accounts: Account[] }) {
     if (currentEntryRef.current) currentEntryRef.current.logs.unshift(entry);
   };
 
-  const updateStatus = (channel: string, accountId: string, status: ChStatus, message?: string) => {
+  const updateStatus = (channel: string, accountId: string, status: ChStatus, message?: string, reason?: string, bumpAttempt?: boolean) => {
     const key = normalizeTarget(channel);
     if (!key) return;
     setStatuses((prev) => {
       const row = { ...(prev[key] || {}) };
       const cur = row[accountId];
       if (cur && STATUS_RANK[cur.status] > STATUS_RANK[status]) return prev;
-      row[accountId] = { status, ts: Date.now(), message };
+      row[accountId] = {
+        status,
+        ts: Date.now(),
+        message,
+        reason: reason ?? cur?.reason,
+        attempts: (cur?.attempts ?? 0) + (bumpAttempt ? 1 : 0),
+      };
       return { ...prev, [key]: row };
     });
   };
@@ -219,10 +227,19 @@ export function PreJoinCard({ accounts }: { accounts: Account[] }) {
           try { data = JSON.parse(dataLine.slice(6)); } catch {}
           if (event === "start") addLog({ level: "info", message: "Pre-join started" });
           else if (event === "log") {
-            addLog({ accountId: data.accountId, level: data.level ?? "info", target: data.target, message: data.message ?? "" });
+            addLog({ accountId: data.accountId, level: data.level ?? "info", target: data.target, message: data.message ?? "", reason: data.reason });
             if (data.target && data.accountId) {
-              const s = classify(data.level ?? "info", data.message ?? "");
-              if (s) updateStatus(data.target, data.accountId, s, data.message);
+              // Prefer the server's terminal marker; fall back to text classification.
+              const s: ChStatus | null = data.terminal
+                ? (data.terminal === "joined" ? "succeeded" : data.terminal as ChStatus)
+                : classify(data.level ?? "info", data.message ?? "");
+              const isAttempt = /Attempting join|Retry \d+\//i.test(data.message ?? "");
+              if (s) {
+                const reason = data.reason ?? friendlyJoinReason({ code: data.errorCode, message: data.message, status: data.terminal, floodSeconds: data.floodSeconds }) ?? undefined;
+                updateStatus(data.target, data.accountId, s, data.message, reason, isAttempt);
+              } else if (isAttempt) {
+                updateStatus(data.target, data.accountId, "attempting", data.message, undefined, true);
+              }
             }
           }
           else if (event === "done") {
@@ -280,6 +297,9 @@ export function PreJoinCard({ accounts }: { accounts: Account[] }) {
         <Button size="sm" variant="outline" onClick={() => setHistoryOpen((v) => !v)}>
           <History className="mr-1 h-4 w-4" />
           {historyOpen ? "Hide history" : `History${history.length ? ` (${history.length})` : ""}`}
+        </Button>
+        <Button asChild size="sm" variant="outline">
+          <Link to="/join-pacing">Audit log</Link>
         </Button>
         <Button size="sm" variant="ghost" onClick={() => setHidden((v) => !v)}>
           {hidden ? <ChevronDown className="mr-1 h-4 w-4" /> : <ChevronUp className="mr-1 h-4 w-4" />}
@@ -375,7 +395,7 @@ export function PreJoinCard({ accounts }: { accounts: Account[] }) {
                 <div className="max-h-80 overflow-auto grid grid-cols-1 sm:grid-cols-2 gap-3">
                   {(() => {
                     // Invert: group by account id, each account gets a box with its channel chips.
-                    const perAcct = new Map<string, Array<{ channel: string; status: ChStatus; ts: number; message?: string }>>();
+                    const perAcct = new Map<string, Array<{ channel: string; status: ChStatus; ts: number; message?: string; reason?: string; attempts?: number }>>();
                     for (const [ch, row] of Object.entries(statuses)) {
                       for (const [aid, cell] of Object.entries(row)) {
                         if (!perAcct.has(aid)) perAcct.set(aid, []);
@@ -401,12 +421,29 @@ export function PreJoinCard({ accounts }: { accounts: Account[] }) {
                               <span
                                 key={c.channel}
                                 className={`rounded px-1.5 py-0.5 font-mono text-[11px] ${STATUS_STYLES[c.status]}`}
-                                title={`${c.channel} · ${c.status} · ${new Date(c.ts).toLocaleTimeString()}${c.message ? ` — ${c.message}` : ""}`}
+                                title={`${c.channel} · ${c.status}${c.attempts ? ` · ${c.attempts} attempt${c.attempts > 1 ? "s" : ""}` : ""} · ${new Date(c.ts).toLocaleTimeString()}${c.reason ? `\nReason: ${c.reason}` : ""}${c.message ? `\nLog: ${c.message}` : ""}`}
                               >
                                 {c.channel}
+                                {c.attempts && c.attempts > 1 ? <span className="ml-1 opacity-70">×{c.attempts}</span> : null}
                               </span>
                             ))}
                           </div>
+                          {list.some((c) => c.status === "failed" || c.status === "requested") && (
+                            <ul className="mt-2 space-y-0.5 border-t border-border/50 pt-2 text-[11px]">
+                              {list
+                                .filter((c) => c.status === "failed" || c.status === "requested")
+                                .slice(0, 6)
+                                .map((c) => (
+                                  <li key={`r-${c.channel}`} className="flex items-start gap-2">
+                                    <span className={`shrink-0 rounded px-1 py-px text-[10px] ${STATUS_STYLES[c.status]}`}>{c.status}</span>
+                                    <span className="font-mono text-muted-foreground truncate">{c.channel}</span>
+                                    <span className="min-w-0 flex-1 truncate text-foreground/80" title={c.reason || c.message}>
+                                      {c.reason || c.message || "—"}
+                                    </span>
+                                  </li>
+                                ))}
+                            </ul>
+                          )}
                         </div>
                       );
                     });
