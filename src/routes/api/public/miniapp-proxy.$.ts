@@ -448,6 +448,7 @@ function buildOverrideScript(accountId: string, upstreamUrl: string, token: stri
         };
         window.TelegramWebviewProxyProto = window.TelegramWebviewProxyProto || window.TelegramWebviewProxy;
         window.TelegramWebview = window.TelegramWebview || window.TelegramWebviewProxy;
+        window.Android = window.Android || { postEvent: window.TelegramWebviewProxy.postEvent };
         try {
           window.external = window.external || {};
           window.external.notify = (raw) => {
@@ -455,6 +456,18 @@ function buildOverrideScript(accountId: string, upstreamUrl: string, token: stri
               const msg = JSON.parse(raw);
               if (msg && msg.eventType) hostPost(msg.eventType, msg.eventData || {});
             } catch {}
+          };
+        } catch {}
+        try {
+          window.webkit = window.webkit || {};
+          window.webkit.messageHandlers = window.webkit.messageHandlers || {};
+          window.webkit.messageHandlers.TelegramWebviewProxy = window.webkit.messageHandlers.TelegramWebviewProxy || {
+            postMessage(raw) {
+              try {
+                const msg = typeof raw === 'string' ? JSON.parse(raw) : raw;
+                if (msg && msg.eventType) window.TelegramWebviewProxy.postEvent(msg.eventType, msg.eventData || {});
+              } catch {}
+            },
           };
         } catch {}
         setTimeout(() => {
