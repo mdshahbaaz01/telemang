@@ -115,6 +115,10 @@ const botFlowSchema = z.object({
   publicInviteFallback: z.boolean().optional(),
   forceRejoin: z.boolean().optional(),
   parallel: z.boolean().optional(),
+  // When >0, skip a channel link (within the same task run) if it was
+  // already attempted less than N seconds ago. Prevents thrashing during
+  // flapping / rate-limits without touching the persistent join_cache.
+  dedupeByLinkSeconds: z.number().int().min(0).max(3600).optional(),
 });
 
 const editSchema = z.object({
