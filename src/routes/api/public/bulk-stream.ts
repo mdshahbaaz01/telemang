@@ -97,6 +97,13 @@ const readAllSchema = z.object({
   mode: z.enum(["read", "unread"]).default("read"),
 });
 
+const pollVoteSchema = z.object({
+  kind: z.literal("pollVote"),
+  messageLink: z.string().min(1).max(500),
+  optionIndexes: z.array(z.number().int().min(0).max(9)).min(1).max(10),
+  retract: z.boolean().default(false),
+});
+
 const bodySchema = z.object({
   accountIds: z.array(z.string().uuid()).min(1).max(200),
   minDelay: z.number().int().min(0).max(120).default(1),
@@ -104,7 +111,7 @@ const bodySchema = z.object({
   concurrency: z.number().int().min(1).max(20).default(3),
   op: z.discriminatedUnion("kind", [
     createChatSchema, inviteToChatSchema, dmBlastSchema, editSentSchema,
-    copyCleanSchema, voiceNoteSchema, pollCreateSchema, readAllSchema,
+    copyCleanSchema, voiceNoteSchema, pollCreateSchema, pollVoteSchema, readAllSchema,
   ]),
 });
 
