@@ -861,7 +861,7 @@ async function handle(request: Request, params: { _splat?: string }) {
   const upstreamHeaders = new Headers();
   const fp = deriveMiniAppIdentity(identityKey).fingerprint;
   const targetUrl = targetUrlEarly;
-  upstreamHeaders.set("user-agent", fp.userAgent);
+  upstreamHeaders.set("user-agent", toTelegramUserAgent(fp));
   upstreamHeaders.set("accept-language", fp.languages.join(","));
   upstreamHeaders.set("origin", targetUrl.origin);
   upstreamHeaders.set("referer", `${targetUrl.origin}/`);
