@@ -371,7 +371,7 @@ function BotFlowPage() {
   const [miniLink, setMiniLink] = useState("");
   const [miniSelected, setMiniSelected] = useState<string[]>([]);
   const [miniRuns, setMiniRuns] = useState<
-    { accountId: string; status: "loading" | "ready" | "error"; url?: string; error?: string }[]
+    { accountId: string; status: "loading" | "ready" | "error"; url?: string; launchUrl?: string; error?: string }[]
   >([]);
   // Concurrency cap for mounted mini-app iframes. Each iframe boots a full
   // Telegram WebView proxy + fingerprint bridge; mounting 10+ at once
@@ -432,7 +432,7 @@ function BotFlowPage() {
   const miniToggle = (id: string) =>
     setMiniSelected((ids) => (ids.includes(id) ? ids.filter((x) => x !== id) : [...ids, id]));
 
-  const resolveOne = async (accountId: string, username: string, startParam: string) => {
+  const resolveOne = async (accountId: string, username: string, startParam: string, appShortName?: string) => {
     setMiniRuns((prev) => {
       const others = prev.filter((r) => r.accountId !== accountId);
       return [...others, { accountId, status: "loading" }];
@@ -442,8 +442,9 @@ function BotFlowPage() {
         data: { accountId, botUsername: username, startParam: startParam || undefined },
       });
       if (!res?.url) throw new Error("Telegram returned no URL");
+      const launchUrl = buildTelegramMiniAppLink(username, startParam || undefined, appShortName);
       setMiniRuns((prev) =>
-        prev.map((r) => (r.accountId === accountId ? { ...r, status: "ready", url: res.url } : r)),
+        prev.map((r) => (r.accountId === accountId ? { ...r, status: "ready", url: res.url, launchUrl } : r)),
       );
     } catch (e) {
       setMiniRuns((prev) =>
@@ -461,7 +462,7 @@ function BotFlowPage() {
     const ids = miniSelected.length ? miniSelected : allIds;
     if (!ids.length) return toast.error("Select at least one account");
     setMiniRuns(ids.map((id) => ({ accountId: id, status: "loading" as const })));
-    await Promise.all(ids.map((id) => resolveOne(id, miniParsed.username, miniParsed.startParam)));
+    await Promise.all(ids.map((id) => resolveOne(id, miniParsed.username, miniParsed.startParam, miniParsed.appShortName)));
   };
 
   const closeMini = (accountId: string) =>
@@ -474,7 +475,7 @@ function BotFlowPage() {
   const [vxSelected, setVxSelected] = useState<string[]>([]);
   const [vxRunning, setVxRunning] = useState(false);
   const [vxResults, setVxResults] = useState<
-    { accountId: string; status: "loading" | "ready" | "error"; url?: string; label?: string; kind?: "webview" | "url"; error?: string }[]
+    { accountId: string; status: "loading" | "ready" | "error"; url?: string; launchUrl?: string; label?: string; kind?: "webview" | "url"; error?: string }[]
   >([]);
 
   const vxParsed = useMemo(() => {
@@ -517,7 +518,14 @@ function BotFlowPage() {
           setVxResults((prev) =>
             prev.map((r) =>
               r.accountId === accountId
-                ? { ...r, status: "ready", url: res.url, label: res.label, kind: res.kind }
+                ? {
+                    ...r,
+                    status: "ready",
+                    url: res.url,
+                    launchUrl: buildTelegramMiniAppLink(vxParsed.username, vxParsed.startParam || undefined),
+                    label: res.label,
+                    kind: res.kind,
+                  }
                 : r,
             ),
           );
@@ -1139,7 +1147,7 @@ function BotFlowPage() {
                         >
                           <Copy className="h-3.5 w-3.5" />
                         </button>
-                        <BrowserPickerButton url={r.url} compact />
+                        <BrowserPickerButton url={r.url} telegramUrl={r.launchUrl} compact />
                       </>
                     )}
                   </div>
@@ -1249,7 +1257,7 @@ function BotFlowPage() {
                         className="inline-flex items-center gap-1 rounded border border-border px-2 py-1 text-[11px] hover:bg-muted disabled:opacity-50"
                         title="Resolve and refresh this mini app"
                         disabled={r.status === "loading"}
-                        onClick={() => miniParsed && resolveOne(r.accountId, miniParsed.username, miniParsed.startParam)}
+                        onClick={() => miniParsed && resolveOne(r.accountId, miniParsed.username, miniParsed.startParam, miniParsed.appShortName)}
                       >
                         <RefreshCw className={`h-3.5 w-3.5 ${r.status === "loading" ? "animate-spin" : ""}`} />
                         Refresh
@@ -1284,7 +1292,7 @@ function BotFlowPage() {
                         <div className="p-3 text-xs text-destructive">{r.error}</div>
                       )}
                        {r.status === "ready" && r.url && (miniMounted.has(r.accountId) ? (
-                         <MiniAppFrame url={r.url} title={who} accountId={r.accountId} botUsername={miniParsed?.username ?? ""} />
+                         <MiniAppFrame url={r.url} launchUrl={r.launchUrl} title={who} accountId={r.accountId} botUsername={miniParsed?.username ?? ""} />
                        ) : (
                          <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 bg-muted/30 p-3 text-center text-xs text-muted-foreground">
                            <div>Queued — mini-app not loaded to save resources.</div>
@@ -1404,6 +1412,7 @@ function BotFlowPage() {
               <VerifyFrame
                 key={`${verifyAccountId}-${verifyNonce}`}
                 url={normalizedVerifyLink}
+                telegramUrl={guessTelegramLaunchUrl(normalizedVerifyLink) ?? undefined}
                 accountId={verifyAccountId}
               />
             </div>
@@ -1473,8 +1482,8 @@ function LiveLogsPanel({
   );
 }
 
-function MiniAppFrame({ url, title, accountId, botUsername }: { url: string; title: string; accountId: string; botUsername: string }) {
-  return <MiniAppFrameImpl url={url} title={title} accountId={accountId} botUsername={botUsername} />;
+function MiniAppFrame({ url, launchUrl, title, accountId, botUsername }: { url: string; launchUrl?: string; title: string; accountId: string; botUsername: string }) {
+  return <MiniAppFrameImpl url={url} launchUrl={launchUrl} title={title} accountId={accountId} botUsername={botUsername} />;
 }
 
 function BotFlowCaptchaCard() {
@@ -1522,7 +1531,7 @@ function BotFlowCaptchaCard() {
   );
 }
 
-function VerifyFrame({ url, accountId }: { url: string; accountId: string }) {
+function VerifyFrame({ url, telegramUrl, accountId }: { url: string; telegramUrl?: string; accountId: string }) {
   const [status, setStatus] = useState<"queued" | "opened" | "success" | "failed">("queued");
   const [logs, setLogs] = useState<BulkRowLog[]>([
     { ts: Date.now(), level: "info", msg: `Ready for account ${accountId.slice(0, 8)}` },
@@ -1531,10 +1540,13 @@ function VerifyFrame({ url, accountId }: { url: string; accountId: string }) {
     setLogs((prev) => [...prev.slice(-49), { ts: Date.now(), level, msg }]);
   const openExternal = () => {
     try {
-      const w = window.open(url, "_blank", "noopener,noreferrer");
-      if (!w) window.location.href = url;
+      if (telegramUrl) openTelegramUrl(telegramUrl);
+      else {
+        const w = window.open(url, "_blank", "noopener,noreferrer");
+        if (!w) window.location.href = url;
+      }
       setStatus("opened");
-      add("info", "Opened externally. Complete the verification, then mark the result here.");
+      add("info", telegramUrl ? "Opened in Telegram app. Complete verification there, then mark the result here." : "Opened externally. If it says Telegram Required, paste/open the original t.me startapp link instead.");
     } catch (e) {
       setStatus("failed");
       add("error", (e as Error).message || "Failed to open link");
@@ -1548,14 +1560,14 @@ function VerifyFrame({ url, accountId }: { url: string; accountId: string }) {
   return (
     <div className="space-y-3 p-4 text-sm">
       <div className="rounded-md border border-yellow-500/40 bg-yellow-500/10 p-3 text-xs text-yellow-700 dark:text-yellow-300">
-        This verification provider is blocking iframe/proxy loading. Use the external handoff below, then mark the row as success or failed.
+        This provider needs Telegram WebView. {telegramUrl ? "Open will launch the original Telegram mini-app link instead of the raw verification website." : "Raw verification website links can still show Telegram Required; use the original t.me/startapp link when available."}
       </div>
       <div className="flex flex-wrap items-center gap-2">
         <span className={`rounded px-2 py-1 text-[11px] font-semibold uppercase ${badge}`}>{status}</span>
         <Button size="sm" onClick={openExternal}>
-          <ExternalLink className="mr-1 h-4 w-4" /> Open external
+          <ExternalLink className="mr-1 h-4 w-4" /> {telegramUrl ? "Open in Telegram" : "Open external"}
         </Button>
-        <BrowserPickerButton url={url} size="sm" variant="outline" />
+        <BrowserPickerButton url={url} telegramUrl={telegramUrl} size="sm" variant="outline" />
         <Button size="sm" variant="outline" onClick={() => copyWithToast(url, toast, "Verification link copied")}>
           <Copy className="mr-1 h-4 w-4" /> Copy
         </Button>
