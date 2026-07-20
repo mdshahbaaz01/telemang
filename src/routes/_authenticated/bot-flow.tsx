@@ -1164,6 +1164,20 @@ function BotFlowPage() {
                 Close all
               </Button>
             )}
+            <div className="ml-auto flex items-center gap-2 text-xs">
+              <Label className="text-xs">Max live</Label>
+              <Input
+                type="number"
+                min={1}
+                max={12}
+                value={miniLimit}
+                onChange={(e) => setMiniLimit(Math.max(1, Math.min(12, parseInt(e.target.value, 10) || 1)))}
+                className="h-8 w-16"
+              />
+              <span className="text-muted-foreground">
+                {miniMounted.size} live · {miniRuns.filter((r) => r.status === "ready" && !miniMounted.has(r.accountId)).length} queued
+              </span>
+            </div>
           </div>
 
           {miniRuns.length > 0 && (
@@ -1214,9 +1228,16 @@ function BotFlowPage() {
                       {r.status === "error" && (
                         <div className="p-3 text-xs text-destructive">{r.error}</div>
                       )}
-                       {r.status === "ready" && r.url && (
+                       {r.status === "ready" && r.url && (miniMounted.has(r.accountId) ? (
                          <MiniAppFrame url={r.url} title={who} accountId={r.accountId} botUsername={miniParsed?.username ?? ""} />
-                      )}
+                       ) : (
+                         <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 bg-muted/30 p-3 text-center text-xs text-muted-foreground">
+                           <div>Queued — mini-app not loaded to save resources.</div>
+                           <Button size="sm" variant="outline" onClick={() => toggleMiniMount(r.accountId)}>
+                             <Play className="mr-1 h-3.5 w-3.5" /> Load
+                           </Button>
+                         </div>
+                       ))}
                     </div>
                   </div>
                 );
