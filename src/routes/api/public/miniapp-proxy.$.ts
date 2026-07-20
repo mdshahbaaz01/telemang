@@ -1,4 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
+import { createHash } from "crypto";
 import { deriveMiniAppIdentity } from "@/lib/mini-app-identity.server";
 import { verifyMiniAppProxyToken, isBlockedProxyHost } from "@/lib/miniapp-token.server";
 
@@ -91,6 +92,25 @@ function readCookieValue(request: Request, cookieName: string): string | null {
 
 function readCookieJar(request: Request): CookieJar {
   const raw = readCookieValue(request, COOKIE_JAR_NAME);
+  if (!raw) return {};
+  try {
+    const parsed = JSON.parse(b64urlDecode(raw)) as CookieJar;
+    return parsed && typeof parsed === "object" ? parsed : {};
+  } catch {
+    return {};
+  }
+}
+
+function scopedCookieJarName(accountIdentity: string, targetUrl: URL): string {
+  const key = createHash("sha256")
+    .update(`${accountIdentity}|${targetUrl.hostname.toLowerCase()}`)
+    .digest("base64url")
+    .slice(0, 18);
+  return `${COOKIE_JAR_NAME}_${key}`;
+}
+
+function readScopedCookieJar(request: Request, name: string): CookieJar {
+  const raw = readCookieValue(request, name);
   if (!raw) return {};
   try {
     const parsed = JSON.parse(b64urlDecode(raw)) as CookieJar;
