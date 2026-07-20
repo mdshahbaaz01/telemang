@@ -352,7 +352,7 @@ function BotFlowPage() {
       const s = window.localStorage.getItem("botflow.miniLimit");
       if (s) return Math.max(1, Math.min(12, parseInt(s, 10) || 3));
     } catch {}
-    return window.matchMedia?.("(max-width: 768px)").matches ? 1 : 3;
+    return 3;
   });
   useEffect(() => {
     try { window.localStorage.setItem("botflow.miniLimit", String(miniLimit)); } catch {}
