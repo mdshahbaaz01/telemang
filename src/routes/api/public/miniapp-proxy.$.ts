@@ -798,6 +798,27 @@ async function handle(request: Request, params: { _splat?: string }) {
   upstreamHeaders.set("referer", `${targetUrl.origin}/`);
   const accept = request.headers.get("accept");
   if (accept) upstreamHeaders.set("accept", accept);
+  // Some anti-bot / CDN layers serve a placeholder image (rendered as a
+  // broken-image icon in the iframe) when the request looks non-browser or
+  // when a top-level navigation lacks Sec-Fetch metadata. Force navigation-
+  // shaped Accept + Sec-Fetch headers on the first hop of a document request.
+  const secFetchDest = request.headers.get("sec-fetch-dest");
+  const isDocumentNav = !secFetchDest || secFetchDest === "document" || secFetchDest === "iframe";
+  if (isDocumentNav) {
+    upstreamHeaders.set(
+      "accept",
+      "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8",
+    );
+    upstreamHeaders.set("sec-fetch-mode", "navigate");
+    upstreamHeaders.set("sec-fetch-dest", "document");
+    upstreamHeaders.set("sec-fetch-site", "none");
+    upstreamHeaders.set("sec-fetch-user", "?1");
+    upstreamHeaders.set("upgrade-insecure-requests", "1");
+    // Drop cross-origin origin/referer for a top-level nav — browsers do not
+    // send them and some WAFs 403 when they see a mismatched origin.
+    upstreamHeaders.delete("origin");
+    upstreamHeaders.delete("referer");
+  }
   const contentType = request.headers.get("content-type");
   if (contentType) upstreamHeaders.set("content-type", contentType);
   const requestedWith = request.headers.get("x-requested-with");
