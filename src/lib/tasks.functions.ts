@@ -918,46 +918,11 @@ export const processBatchJoin = createServerFn({ method: "POST" })
       return { done: true, paused: false, processed: 0 };
     }
 
-    // Pull persistent per-account cache & pacing config, then acquire per-item lock.
+    // Join tasks always attempt every pending target. Skipping / cache-based
+    // dedupe has been removed at the user's request — the cache is now only
+    // consulted by bot flow's auto-join loop when that option is on.
     const pacing = await getPacingConfig(supabase, context.userId);
-    const cache = await loadCacheForAccount(supabase, acct.id);
-    const pending: Array<{ id: string; target: string }> = [];
-    for (const it of items) {
-      const key = it.target.trim().toLowerCase();
-      const cached = cache.get(key) || cache.get(key.replace(/^@/, ""));
-      if (cached === "joined" || cached === "requested") {
-        await supabase.from("join_task_items").update({
-          status: cached,
-          error: "skipped — cached",
-          processed_at: new Date().toISOString(),
-        }).eq("id", it.id);
-        await log(task.id, "info", `Skipped @${it.target} — cached (${cached})`);
-        await logJoinAttempt(supabase, {
-          userId: context.userId, accountId: acct.id, target: it.target,
-          source: "batch_join", result: "skipped_cached",
-        });
-        continue;
-      }
-      const lock = await tryAcquireJoinLock(supabase, {
-        userId: context.userId, accountId: acct.id, target: it.target,
-        source: "batch_join", lockTtlSeconds: pacing.lock_ttl_seconds,
-      });
-      if (lock.outcome === "acquired") {
-        pending.push(it);
-      } else {
-        await supabase.from("join_task_items").update({
-          status: "pending",
-          error: `skipped — ${lock.outcome}`,
-          processed_at: new Date().toISOString(),
-        }).eq("id", it.id);
-        await log(task.id, "info", `Skipped @${it.target} — ${lock.outcome}`);
-        await logJoinAttempt(supabase, {
-          userId: context.userId, accountId: acct.id, target: it.target,
-          source: "batch_join",
-          result: lock.outcome === "skipped_cached" ? "skipped_cached" : "skipped_locked",
-        });
-      }
-    }
+    const pending: Array<{ id: string; target: string }> = items.map((it) => ({ id: it.id, target: it.target }));
     if (!pending.length) {
       return { done: false, paused: false, processed: items.length };
     }
