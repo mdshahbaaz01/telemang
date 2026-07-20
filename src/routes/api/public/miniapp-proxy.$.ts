@@ -921,6 +921,28 @@ async function handle(request: Request, params: { _splat?: string }) {
     outHeaders.set("content-type", ctype || "application/javascript; charset=utf-8");
     return new Response(js, { status: upstream.status, headers: outHeaders });
   }
+  // Top-level navigation that came back as an image / octet-stream almost
+  // always means the upstream (or a CDN in front of it) served an anti-bot
+  // placeholder. Chrome would render that as a broken-image icon inside the
+  // iframe — swap it for a readable HTML error so the operator can react.
+  if (
+    isDocumentNav &&
+    (ctype.startsWith("image/") || ctype.includes("octet-stream") || !ctype)
+  ) {
+    const finalUrl = upstream.url || target;
+    const msg = `<!doctype html><meta charset="utf-8"><title>Upstream blocked</title>
+<div style="font:14px system-ui;padding:24px;color:#111;background:#fff8e1;border:1px solid #f3d27a;border-radius:8px;margin:16px">
+  <h2 style="margin:0 0 8px">Upstream returned a non-HTML response</h2>
+  <div><b>Status:</b> ${upstream.status}</div>
+  <div><b>Content-Type:</b> ${ctype || "(none)"}</div>
+  <div style="word-break:break-all"><b>URL:</b> ${finalUrl}</div>
+  <p>The bot's server likely detected the proxy and served a placeholder image
+  instead of the mini-app. Try the original <code>t.me/&hellip;?startapp=</code>
+  link, refresh from your Telegram account, or wait a minute and retry.</p>
+</div>`;
+    outHeaders.set("content-type", "text/html; charset=utf-8");
+    return new Response(msg, { status: 502, headers: outHeaders });
+  }
   return new Response(upstream.body, { status: upstream.status, headers: outHeaders });
 }
 
