@@ -1187,6 +1187,8 @@ export const Route = createFileRoute("/api/public/actions-stream")({
                         path: joinPath,
                         errorCode: joinErrorCode,
                         publicInviteFallback: op.publicInviteFallback !== false,
+                         attempts: attemptCount,
+                         isolated: !!op.preJoinOnly,
                       },
                    });
                    // Only mark as permanently handled if we actually joined
