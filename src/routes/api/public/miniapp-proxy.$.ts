@@ -28,6 +28,29 @@ const STRIP_HEADERS = new Set([
 
 const COOKIE_JAR_NAME = "miniapp_proxy_cj";
 
+const DROP_UPSTREAM_REQUEST_HEADERS = new Set([
+  "host",
+  "connection",
+  "content-length",
+  "accept-encoding",
+  "cookie",
+  "origin",
+  "referer",
+  "referrer",
+  "sec-fetch-dest",
+  "sec-fetch-mode",
+  "sec-fetch-site",
+  "sec-fetch-user",
+  "upgrade-insecure-requests",
+  "cf-connecting-ip",
+  "cf-ipcountry",
+  "cf-ray",
+  "x-forwarded-for",
+  "x-forwarded-host",
+  "x-forwarded-proto",
+  "x-real-ip",
+]);
+
 type StoredCookie = {
   value: string;
   domain: string;
@@ -212,8 +235,36 @@ function toTelegramUserAgent(fp: ReturnType<typeof deriveMiniAppIdentity>["finge
   return `${base} Telegram-Android/11.7.4 (${model}; Android ${androidVersion}; SDK ${sdk}; HIGH)`;
 }
 
-function buildOverrideScript(accountId: string, upstreamUrl: string, token: string, enableCaptcha: boolean) {
-  const identity = deriveMiniAppIdentity(accountId);
+function setClientHintHeaders(headers: Headers, fp: ReturnType<typeof deriveMiniAppIdentity>["fingerprint"]) {
+  const chromeVersion = (fp.userAgent.split("Chrome/")[1] || "").split(".")[0] || "120";
+  const platform = fp.platform.includes("iPhone") ? "iOS" : fp.mobile ? "Android" : fp.platform.includes("Win") ? "Windows" : "Linux";
+  headers.set("sec-ch-ua", `"Chromium";v="${chromeVersion}", "Google Chrome";v="${chromeVersion}", "Not:A-Brand";v="99"`);
+  headers.set("sec-ch-ua-mobile", fp.mobile ? "?1" : "?0");
+  headers.set("sec-ch-ua-platform", `"${platform}"`);
+}
+
+function copyBrowserRequestHeaders(request: Request, upstreamHeaders: Headers) {
+  request.headers.forEach((value, key) => {
+    const lower = key.toLowerCase();
+    if (DROP_UPSTREAM_REQUEST_HEADERS.has(lower)) return;
+    if (lower.startsWith("proxy-")) return;
+    upstreamHeaders.set(key, value);
+  });
+}
+
+function safeHeaderReferrer(raw: string | null, fallback: string): URL {
+  try {
+    const parsed = raw ? new URL(raw) : new URL(fallback);
+    if ((parsed.protocol === "http:" || parsed.protocol === "https:") && !isBlockedProxyHost(parsed.hostname)) {
+      return parsed;
+    }
+  } catch {}
+  return new URL(fallback);
+}
+
+function buildOverrideScript(accountId: string, upstreamUrl: string, token: string, enableCaptcha: boolean, fpSeed: string) {
+  const identityKey = fpSeed ? `${accountId}:${fpSeed}` : accountId;
+  const identity = deriveMiniAppIdentity(identityKey);
   const fp = identity.fingerprint;
   const telegramUserAgent = toTelegramUserAgent(fp);
   const telegramDefaults = {
@@ -382,6 +433,8 @@ function buildOverrideScript(accountId: string, upstreamUrl: string, token: stri
     const fp = ${JSON.stringify(fp)};
     const ACCT = ${JSON.stringify(accountId)};
     const TOKEN = ${JSON.stringify(token)};
+    const FP_SEED = ${JSON.stringify(fpSeed)};
+    const CAP_ENABLED = ${enableCaptcha ? "true" : "false"};
     const UPSTREAM = ${JSON.stringify(upstreamUrl)};
     const TELEGRAM_UA = ${JSON.stringify(telegramUserAgent)};
     const TG_DEFAULTS = ${JSON.stringify(telegramDefaults)};
@@ -665,6 +718,9 @@ function buildOverrideScript(accountId: string, upstreamUrl: string, token: stri
         if (abs.origin === location.origin && abs.pathname.startsWith(PROXY_PREFIX)) {
           if (!abs.searchParams.get('a')) abs.searchParams.set('a', ACCT);
           if (!abs.searchParams.get('t')) abs.searchParams.set('t', TOKEN);
+          if (FP_SEED && !abs.searchParams.get('fp')) abs.searchParams.set('fp', FP_SEED);
+          if (CAP_ENABLED && !abs.searchParams.get('cap')) abs.searchParams.set('cap', '1');
+          if (!abs.searchParams.get('r')) abs.searchParams.set('r', UPSTREAM);
           return abs.toString();
         }
         // Rewrite both same-preview paths and absolute upstream calls through the proxy.
@@ -674,7 +730,7 @@ function buildOverrideScript(accountId: string, upstreamUrl: string, token: stri
         const hashIdx = target.indexOf('#');
         const bare = hashIdx === -1 ? target : target.slice(0, hashIdx);
         const hash = hashIdx === -1 ? '' : target.slice(hashIdx);
-        return location.origin + PROXY_PREFIX + encodeURIComponent(bare) + '?a=' + encodeURIComponent(ACCT) + '&t=' + encodeURIComponent(TOKEN) + hash;
+        return location.origin + PROXY_PREFIX + encodeURIComponent(bare) + '?a=' + encodeURIComponent(ACCT) + '&t=' + encodeURIComponent(TOKEN) + (CAP_ENABLED ? '&cap=1' : '') + (FP_SEED ? '&fp=' + encodeURIComponent(FP_SEED) : '') + '&r=' + encodeURIComponent(UPSTREAM) + hash;
       } catch { return s; }
     };
     const isTgLink = (raw) => {
