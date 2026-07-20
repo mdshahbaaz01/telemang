@@ -1103,11 +1103,42 @@ function BotFlowPage() {
                         size="sm"
                         variant="outline"
                         className="ml-auto"
-                        onClick={refreshBotButtons}
+                        onClick={() => refreshBotButtons()}
                         disabled={botBtnState.loading}
                       >
                         {botBtnState.loading ? "Loading…" : botBtnState.labels.length ? "Refresh buttons" : "Load bot buttons"}
                       </Button>
+                      <div className="flex items-center gap-1">
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          disabled={botBtnState.loading || botBtnOffset === 0}
+                          onClick={() => {
+                            const n = Math.max(0, botBtnOffset - 1);
+                            setBotBtnOffset(n);
+                            refreshBotButtons(n);
+                          }}
+                          title="Newer message"
+                        >
+                          ◀ Newer
+                        </Button>
+                        <span className="text-[10px] text-muted-foreground font-mono">
+                          msg −{botBtnOffset}
+                        </span>
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          disabled={botBtnState.loading}
+                          onClick={() => {
+                            const n = botBtnOffset + 1;
+                            setBotBtnOffset(n);
+                            refreshBotButtons(n);
+                          }}
+                          title="Older message with buttons"
+                        >
+                          Older ▶
+                        </Button>
+                      </div>
                     </div>
                     {botBtnState.labels.length > 0 && (
                       <>
