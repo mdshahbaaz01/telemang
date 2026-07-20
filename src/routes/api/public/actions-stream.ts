@@ -967,12 +967,18 @@ export const Route = createFileRoute("/api/public/actions-stream")({
                    }
                    pacing = { ...pacing, min_delay_ms: adaptive.min_delay_ms, max_delay_ms: adaptive.max_delay_ms };
                  } catch { /* fall back to base pacing */ }
-                 try {
-                   const cache = await loadCacheForAccount(supabase, accountId);
-                   for (const [k, status] of cache.entries()) {
-                      if (!op.forceRejoin && (status === "joined" || status === "requested")) alreadyJoined.add(k);
-                   }
-                 } catch { /* dedupe is best-effort */ }
+                  // Only seed cross-run dedupe when the auto-join loop is on
+                  // (bot flow's "Auto-join required channels" option). Every
+                  // other path — pre-join user links, manual joins, join
+                  // tasks — always attempts fresh at the user's request.
+                  if (op.autoJoinRequired !== false && !op.preJoinOnly && !op.forceRejoin) {
+                    try {
+                      const cache = await loadCacheForAccount(supabase, accountId);
+                      for (const [k, status] of cache.entries()) {
+                        if (status === "joined" || status === "requested") alreadyJoined.add(k);
+                      }
+                    } catch { /* dedupe is best-effort */ }
+                  }
                 const smartJoin = async (rawTarget: string): Promise<"ok" | "requested" | "stop" | "flood" | "skip" | "fail"> => {
                   if (stopRequested) return "stop";
                   const target = extractHandle(rawTarget);
