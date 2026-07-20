@@ -1576,6 +1576,7 @@ function BulkVerifyRunner({
   const [rows, setRows] = useState<BulkRow[]>([]);
   const [openLogs, setOpenLogs] = useState<Record<string, boolean>>({});
   const [stableDevice, setStableDevice] = useState(true);
+  const [handoffIndex, setHandoffIndex] = useState(0);
 
   // Stable fingerprint per account: same seed every run for the same account,
   // so the target site sees a consistent device instead of a brand-new one.
@@ -1629,6 +1630,7 @@ function BulkVerifyRunner({
       logs: [{ ts: Date.now(), level: "info", msg: "Ready for external verification handoff" }] as BulkRowLog[],
     }));
     setRows(built);
+    setHandoffIndex(0);
   };
 
   const rerollAll = () => {
@@ -1654,7 +1656,7 @@ function BulkVerifyRunner({
   };
 
   const removeOne = (id: string) => setRows((prev) => prev.filter((r) => r.id !== id));
-  const clearAll = () => setRows([]);
+  const clearAll = () => { setRows([]); setHandoffIndex(0); };
   const markRow = useCallback((id: string, status: BulkRowStatus, msg: string) => {
     appendLog(id, { ts: Date.now(), level: status === "success" ? "success" : status === "failed" ? "error" : "info", msg }, status);
   }, [appendLog]);
@@ -1667,9 +1669,11 @@ function BulkVerifyRunner({
       markRow(r.id, "failed", (e as Error).message || "Failed to open externally");
     }
   }, [markRow]);
-  const openAllExternal = () => {
-    rows.forEach((r) => openExternalRow(r));
-    toast.success(`Opened ${rows.length} verification link(s)`);
+  const nextHandoffRow = rows[handoffIndex] ?? null;
+  const openNextExternal = () => {
+    if (!nextHandoffRow) return toast.success("All verification links are done");
+    openExternalRow(nextHandoffRow);
+    setHandoffIndex((i) => Math.min(rows.length, i + 1));
   };
 
   return (
@@ -1749,8 +1753,8 @@ function BulkVerifyRunner({
             <Button variant="outline" onClick={rerollAll}>
               <RefreshCw className="mr-1 h-4 w-4" /> Reroll fingerprints
             </Button>
-            <Button variant="secondary" onClick={openAllExternal}>
-              <ExternalLink className="mr-1 h-4 w-4" /> Open all external
+            <Button variant="secondary" onClick={openNextExternal}>
+              <ExternalLink className="mr-1 h-4 w-4" /> Open next external ({Math.min(handoffIndex + 1, rows.length)}/{rows.length})
             </Button>
             <Button variant="outline" onClick={clearAll}>
               <X className="mr-1 h-4 w-4" /> Close all
