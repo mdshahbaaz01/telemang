@@ -609,6 +609,10 @@ function BotFlowPage() {
   };
   const visibleChatIds = chatOpen.slice(0, chatVisibleCount);
   const queuedChatCount = Math.max(0, chatOpen.length - visibleChatIds.length);
+  // Per-account reload nonces so a single "Re-run" only restarts that iframe.
+  const [chatReload, setChatReload] = useState<Record<string, number>>({});
+  const rerunChat = (id: string) =>
+    setChatReload((p) => ({ ...p, [id]: (p[id] ?? 0) + 1 }));
 
   // ─── Broadcast bot button to all open chats ───────────────────────
   const pressInlineButtonAsFn = useServerFn(pressInlineButtonAs);
