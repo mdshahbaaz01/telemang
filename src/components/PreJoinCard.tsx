@@ -90,6 +90,8 @@ export function PreJoinCard({ accounts }: { accounts: Account[] }) {
   const [running, setRunning] = useState(false);
   const [publicInviteFallback, setPublicInviteFallback] = useState(true);
   const [forceRejoin, setForceRejoin] = useState(false);
+  const [dedupeEnabled, setDedupeEnabled] = useState(false);
+  const [dedupeSeconds, setDedupeSeconds] = useState(60);
   const [logs, setLogs] = useState<PreJoinLog[]>([]);
   const [totals, setTotals] = useState<{ ok: number; fail: number } | null>(null);
   const [statuses, setStatuses] = useState<ChMap>({});
@@ -199,6 +201,7 @@ export function PreJoinCard({ accounts }: { accounts: Account[] }) {
             preJoinChannels: channels,
             publicInviteFallback,
             forceRejoin,
+            dedupeByLinkSeconds: dedupeEnabled ? Math.max(1, Math.min(3600, dedupeSeconds || 0)) : 0,
           },
         }),
         signal: ac.signal,
