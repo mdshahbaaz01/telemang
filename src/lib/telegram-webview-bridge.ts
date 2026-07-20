@@ -30,6 +30,7 @@ export function useTelegramWebviewBridge(
     viewportHeight?: number;
     onOpenTgLink?: (url: string) => boolean | void; // return true to intercept
     onClose?: () => boolean | void;
+    onBlocked?: (details: { reason?: string; text?: string; url?: string }) => void;
   } = {},
 ) {
   const theme = opts.theme ?? DEFAULT_THEME;
@@ -40,6 +41,8 @@ export function useTelegramWebviewBridge(
   onOpenTgLinkRef.current = opts.onOpenTgLink;
   const onCloseRef = useRef(opts.onClose);
   onCloseRef.current = opts.onClose;
+  const onBlockedRef = useRef(opts.onBlocked);
+  onBlockedRef.current = opts.onBlocked;
 
   useEffect(() => {
     function post(target: Window, eventType: string, eventData: unknown = {}) {
@@ -137,6 +140,15 @@ export function useTelegramWebviewBridge(
               if (handled !== false) break;
             } catch {}
           }
+          break;
+        case "miniapp_blocked":
+          try {
+            onBlockedRef.current?.({
+              reason: eventData?.reason,
+              text: eventData?.text,
+              url: eventData?.url,
+            });
+          } catch {}
           break;
         case "web_app_request_write_access":
           post(source, "write_access_requested", { status: "allowed" });

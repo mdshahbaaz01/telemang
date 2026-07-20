@@ -1493,18 +1493,35 @@ function BotFlowCaptchaCard() {
 
 function VerifyFrame({ url, accountId }: { url: string; accountId: string }) {
   const iframeRef = useRef<HTMLIFrameElement | null>(null);
-  const { url: proxied } = useMiniAppProxyUrl(url, accountId);
-  useTelegramWebviewBridge(iframeRef);
+  const [retrySeed, setRetrySeed] = useState(0);
+  const [blocked, setBlocked] = useState<{ text?: string } | null>(null);
+  const { url: proxied } = useMiniAppProxyUrl(url, accountId, { fpSeed: retrySeed || undefined });
+  useTelegramWebviewBridge(iframeRef, { onBlocked: (details) => setBlocked({ text: details.text }) });
   return (
-    <iframe
-      ref={iframeRef}
-      src={proxied ?? "about:blank"}
-      title="Verification runner"
-      className="h-full w-full flex-1 border-0"
-      allow="clipboard-read; clipboard-write; camera; microphone; geolocation; payment"
-      sandbox="allow-scripts allow-same-origin allow-forms allow-modals allow-popups allow-popups-to-escape-sandbox allow-storage-access-by-user-activation"
-      referrerPolicy="no-referrer-when-downgrade"
-    />
+    <div className="relative h-full w-full flex-1">
+      <iframe
+        key={retrySeed}
+        ref={iframeRef}
+        src={proxied ?? "about:blank"}
+        title="Verification runner"
+        className="h-full w-full flex-1 border-0"
+        allow="clipboard-read; clipboard-write; camera; microphone; geolocation; payment"
+        sandbox="allow-scripts allow-same-origin allow-forms allow-modals allow-popups allow-popups-to-escape-sandbox allow-storage-access-by-user-activation"
+        referrerPolicy="no-referrer-when-downgrade"
+      />
+      {blocked && (
+        <div className="absolute inset-x-3 bottom-3 rounded-lg border border-border bg-background/95 p-3 text-xs shadow-lg backdrop-blur">
+          <div className="mb-2 font-semibold">Verification blocked in embedded view</div>
+          <div className="mb-3 line-clamp-2 text-muted-foreground">{blocked.text || "The verification site rejected the proxy session."}</div>
+          <div className="flex flex-wrap gap-2">
+            <Button size="sm" variant="secondary" onClick={() => { setBlocked(null); setRetrySeed(Date.now()); }}>
+              <RefreshCw className="mr-1 h-3.5 w-3.5" /> Retry new device
+            </Button>
+            <BrowserPickerButton url={url} size="sm" variant="outline" />
+          </div>
+        </div>
+      )}
+    </div>
   );
 }
 
@@ -1954,22 +1971,39 @@ function BulkVerifyFrame({
   onLoaded?: () => void;
 }) {
   const localRef = useRef<HTMLIFrameElement | null>(null);
-  const { url: proxied } = useMiniAppProxyUrl(url, accountId, { fpSeed });
-  useTelegramWebviewBridge(localRef);
+  const [retrySeed, setRetrySeed] = useState(fpSeed);
+  const [blocked, setBlocked] = useState<{ text?: string } | null>(null);
+  const { url: proxied } = useMiniAppProxyUrl(url, accountId, { fpSeed: retrySeed });
+  useTelegramWebviewBridge(localRef, { onBlocked: (details) => setBlocked({ text: details.text }) });
   return (
-    <iframe
-      ref={(el) => {
-        localRef.current = el;
-        iframeRef?.(el);
-      }}
-      src={proxied ?? "about:blank"}
-      title="Bulk verification runner"
-      className="h-full w-full flex-1 border-0"
-      allow="clipboard-read; clipboard-write; camera; microphone; geolocation; payment"
-      sandbox="allow-scripts allow-same-origin allow-forms allow-modals allow-popups allow-popups-to-escape-sandbox allow-storage-access-by-user-activation"
-      referrerPolicy="no-referrer-when-downgrade"
-      onLoad={onLoaded}
-    />
+    <div className="relative h-full w-full flex-1">
+      <iframe
+        key={retrySeed}
+        ref={(el) => {
+          localRef.current = el;
+          iframeRef?.(el);
+        }}
+        src={proxied ?? "about:blank"}
+        title="Bulk verification runner"
+        className="h-full w-full flex-1 border-0"
+        allow="clipboard-read; clipboard-write; camera; microphone; geolocation; payment"
+        sandbox="allow-scripts allow-same-origin allow-forms allow-modals allow-popups allow-popups-to-escape-sandbox allow-storage-access-by-user-activation"
+        referrerPolicy="no-referrer-when-downgrade"
+        onLoad={onLoaded}
+      />
+      {blocked && (
+        <div className="absolute inset-x-2 bottom-2 rounded-lg border border-border bg-background/95 p-2 text-[11px] shadow-lg backdrop-blur">
+          <div className="mb-1 font-semibold">Blocked in embedded view</div>
+          <div className="mb-2 line-clamp-2 text-muted-foreground">{blocked.text || "The verification site rejected this session."}</div>
+          <div className="flex flex-wrap gap-1.5">
+            <Button size="sm" variant="secondary" className="h-7 px-2 text-[11px]" onClick={() => { setBlocked(null); setRetrySeed(`${fpSeed}:${Date.now()}`); }}>
+              <RefreshCw className="mr-1 h-3 w-3" /> Retry
+            </Button>
+            <BrowserPickerButton url={url} size="sm" variant="outline" />
+          </div>
+        </div>
+      )}
+    </div>
   );
 }
 
@@ -1985,6 +2019,7 @@ function MiniAppFrameImpl({ url, title, accountId, botUsername }: { url: string;
     | null
   >(null);
   useTelegramWebviewBridge(ref, {
+    onBlocked: (details) => setOverlay({ status: "error", url, error: details.text || "Verification blocked in embedded view" }),
     onClose: () => {
       if (!botUsername) return false;
       setOverlay({
