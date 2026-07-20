@@ -466,19 +466,39 @@ export const deleteGroup = createServerFn({ method: "POST" })
 export const clearTaskHistory = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .handler(async ({ context }) => {
-    // Delete all task groups that are not currently running.
+    // Delete every task that is not currently running. Chunk deletes and
+    // wipe dependent rows explicitly so nothing is left behind if a CASCADE
+    // is blocked or the URL length limit is hit with many IDs.
     const { data: tasks, error: selErr } = await context.supabase
       .from("join_tasks")
       .select("id, status");
-    if (selErr) throw new Error(selErr.message);
-    const idsToDelete = (tasks ?? []).filter((t) => t.status !== "running").map((t) => t.id as string);
-    if (!idsToDelete.length) return { deleted: 0 };
-    const { error: delErr } = await context.supabase
-      .from("join_tasks")
-      .delete()
-      .in("id", idsToDelete);
-    if (delErr) throw new Error(delErr.message);
-    return { deleted: idsToDelete.length };
+    if (selErr) throw new Error(`select failed: ${selErr.message}`);
+    const idsToDelete = (tasks ?? [])
+      .filter((t) => t.status !== "running")
+      .map((t) => t.id as string);
+    if (!idsToDelete.length) return { deleted: 0, total: (tasks ?? []).length };
+
+    const CHUNK = 50;
+    let deleted = 0;
+    for (let i = 0; i < idsToDelete.length; i += CHUNK) {
+      const slice = idsToDelete.slice(i, i + CHUNK);
+      // Wipe children first (defensive — CASCADE should handle it).
+      await context.supabase.from("join_task_items").delete().in("task_id", slice);
+      await context.supabase.from("task_logs").delete().in("task_id", slice);
+      const { data: gone, error: delErr } = await context.supabase
+        .from("join_tasks")
+        .delete()
+        .in("id", slice)
+        .select("id");
+      if (delErr) throw new Error(`delete failed: ${delErr.message}`);
+      deleted += gone?.length ?? 0;
+    }
+    if (deleted === 0) {
+      throw new Error(
+        `No rows deleted (matched ${idsToDelete.length}). Check RLS permissions.`,
+      );
+    }
+    return { deleted, total: (tasks ?? []).length };
   });
 
 export const resetGroupItems = createServerFn({ method: "POST" })
