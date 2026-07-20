@@ -14,6 +14,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Loader2, Flag, AlertTriangle } from "lucide-react";
 import { requireAdminBeforeLoad } from "@/lib/access-guard";
+import { AccountRangeControls, pickRange } from "@/components/AccountRangeControls";
 
 export const Route = createFileRoute("/_authenticated/report")({
   beforeLoad: requireAdminBeforeLoad,
@@ -59,8 +60,6 @@ function BulkReportPage() {
   const [message, setMessage] = useState("");
   const [wholePeer, setWholePeer] = useState(true);
   const [delay, setDelay] = useState(1500);
-  const [rangeStart, setRangeStart] = useState<string>("");
-  const [rangeEnd, setRangeEnd] = useState<string>("");
   const [busy, setBusy] = useState(false);
   const [results, setResults] = useState<RunResult[]>([]);
 
@@ -79,13 +78,6 @@ function BulkReportPage() {
     const n = new Set(selected);
     n.has(id) ? n.delete(id) : n.add(id);
     setSelected(n);
-  };
-
-  const applyRange = () => {
-    const s = Math.max(1, Number(rangeStart) || 1);
-    const e = Math.max(s, Number(rangeEnd) || s);
-    const picked = accounts.slice(s - 1, e).map((a) => a.id);
-    setSelected(new Set(picked));
   };
 
   const canRun = selected.size > 0 && targets.length > 0 && !busy;
@@ -240,26 +232,13 @@ function BulkReportPage() {
               <span className="text-muted-foreground">{accounts.length} total</span>
             </div>
 
-            <div className="flex items-center gap-1">
-              <Input
-                type="number"
-                min={1}
-                placeholder="from"
-                value={rangeStart}
-                onChange={(e) => setRangeStart(e.target.value)}
-                className="h-8 w-20 text-xs"
-              />
-              <span className="text-xs">–</span>
-              <Input
-                type="number"
-                min={1}
-                placeholder="to"
-                value={rangeEnd}
-                onChange={(e) => setRangeEnd(e.target.value)}
-                className="h-8 w-20 text-xs"
-              />
-              <Button size="sm" variant="outline" onClick={applyRange}>Apply</Button>
-            </div>
+            <AccountRangeControls
+              total={accounts.length}
+              onApply={(s, e, order) => {
+                const picked = pickRange(accounts, s, e, order).map((a) => a.id);
+                setSelected(new Set(picked));
+              }}
+            />
 
             <div className="max-h-[420px] space-y-1 overflow-auto rounded-md border border-border p-2">
               {accounts.map((a, i) => {
