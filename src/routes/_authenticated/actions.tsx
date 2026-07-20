@@ -1,5 +1,6 @@
 import { Loader } from "@/components/ui/loader";
 import { createFileRoute } from "@tanstack/react-router";
+import { AccountRangeControls, pickRange } from "@/components/AccountRangeControls";
 import { z } from "zod";
 import { useServerFn } from "@tanstack/react-start";
 import { useQuery } from "@tanstack/react-query";
@@ -1703,6 +1704,13 @@ function ActionsPageInner() {
                         Clear
                       </button>
                     </div>
+                    <AccountRangeControls
+                      total={accountList.length}
+                      onApply={(s, e, order) => {
+                        const picked = pickRange(accountList, s, e, order).map((a) => a.id);
+                        setBroadcastSelectedIds(picked);
+                      }}
+                    />
                     <div className="max-h-48 overflow-auto grid grid-cols-1 sm:grid-cols-2 gap-1">
                       {accountList.map((a, i) => {
                         const checked = broadcastSelectedIds.includes(a.id);
@@ -2013,6 +2021,13 @@ function ActionsPageInner() {
                         Clear
                       </button>
                     </div>
+                    <AccountRangeControls
+                      total={accountList.length}
+                      onApply={(s, e, order) => {
+                        const picked = pickRange(accountList, s, e, order).map((a) => a.id);
+                        setReplySelectedIds(picked);
+                      }}
+                    />
                     <div className="max-h-48 overflow-auto grid grid-cols-1 sm:grid-cols-2 gap-1">
                       {accountList.map((a, i) => {
                         const checked = replySelectedIds.includes(a.id);
@@ -2643,6 +2658,13 @@ function AccountMultiPicker({
           Clear
         </button>
       </div>
+      <AccountRangeControls
+        total={accountList.length}
+        onApply={(s, e, order) => {
+          const picked = pickRange(accountList, s, e, order).map((a) => a.id);
+          setSelectedIds(picked);
+        }}
+      />
       <div className="max-h-48 overflow-auto grid grid-cols-1 sm:grid-cols-2 gap-1">
         {accountList.map((a) => {
           const checked = selectedIds.includes(a.id);
@@ -3123,6 +3145,13 @@ function EditRunDialog({
                   Clear
                 </button>
               </div>
+              <AccountRangeControls
+                total={accountList.length}
+                onApply={(s, e, order) => {
+                  const picked = pickRange(accountList, s, e, order).map((a) => a.id);
+                  setSelectedAccounts(picked);
+                }}
+              />
               <div className="grid max-h-48 grid-cols-1 gap-1 overflow-auto sm:grid-cols-2">
                 {accountList.map((a) => (
                   <label key={a.id} className="flex items-center gap-2 rounded px-2 py-1 text-sm hover:bg-muted/40">
