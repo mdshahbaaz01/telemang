@@ -204,6 +204,12 @@ function BulkPlusInner() {
         if (pollQuiz) { payload.correctIndex = Math.min(pollCorrect, options.length - 1); if (pollExplain) payload.explanation = pollExplain; }
         return payload;
       }
+      case "pollVote": {
+        if (!voteLink.includes("t.me/")) throw new Error("Valid poll message link required");
+        const optionIndexes = voteIdx.split(/[\s,]+/).map((s) => parseInt(s, 10)).filter((n) => Number.isFinite(n) && n >= 0 && n <= 9);
+        if (!voteRetract && !optionIndexes.length) throw new Error("At least one option index (0-based) required, e.g. 0 or 0,2");
+        return { kind, messageLink: voteLink.trim(), optionIndexes: optionIndexes.length ? optionIndexes : [0], retract: voteRetract };
+      }
       case "readAll": {
         if (readScope === "targets" && !readTargets.length) throw new Error("Pick targets");
         if (!confirm(`Really ${readMode === "read" ? "mark as read" : "mark as unread"} on ${selectedIds.size} account(s)?`)) throw new Error("Cancelled");
@@ -414,6 +420,32 @@ function BulkPlusInner() {
                   {pollTargets.length > 0 && <Button size="sm" variant="ghost" onClick={() => setPollTargets([])}>Clear</Button>}
                 </div>
                 <Textarea rows={3} value={pollTargets.join("\n")} onChange={(e) => setPollTargets(e.target.value.split(/\s+/).filter(Boolean))} />
+              </>
+            )}
+
+            {kind === "pollVote" && (
+              <>
+                <div className="text-xs text-muted-foreground border border-border rounded p-2 bg-muted/40">
+                  Every selected account will cast a vote on the same poll. Great for boosting a specific option or spinning up quick engagement.
+                  Anonymous polls hide voters; public polls show every voter — pick accordingly.
+                </div>
+                <div><Label className="text-xs">Poll message link</Label>
+                  <Input value={voteLink} onChange={(e) => setVoteLink(e.target.value)} placeholder="https://t.me/channel/123 or t.me/c/12345/67" />
+                </div>
+                <div className="grid grid-cols-2 gap-2">
+                  <div><Label className="text-xs">Option index(es), 0-based</Label>
+                    <Input value={voteIdx} onChange={(e) => setVoteIdx(e.target.value)} placeholder="0  or  0,2 for multi-choice" disabled={voteRetract} />
+                  </div>
+                  <div className="flex items-end">
+                    <label className="flex items-center gap-1 text-xs">
+                      <input type="checkbox" checked={voteRetract} onChange={(e) => setVoteRetract(e.target.checked)} />
+                      Retract vote instead
+                    </label>
+                  </div>
+                </div>
+                <p className="text-[11px] text-muted-foreground">
+                  Tip: quiz polls only accept 1 correct index. Multi-choice polls accept several comma-separated indexes.
+                </p>
               </>
             )}
 
