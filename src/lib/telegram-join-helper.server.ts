@@ -181,7 +181,7 @@ async function joinEntityVerified(
   };
 }
 
-async function findPublicUsernameByInvitePreview(
+export async function findPublicUsernameByInvitePreview(
   client: any,
   Api: any,
   inviteInfo: any,
