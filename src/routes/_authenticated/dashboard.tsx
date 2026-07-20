@@ -1,4 +1,5 @@
 import { Loader } from "@/components/ui/loader";
+import { AccountRangeControls, pickRange } from "@/components/AccountRangeControls";
 import { FloodWaitBadge } from "@/components/FloodWaitBadge";
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useServerFn } from "@tanstack/react-start";
@@ -587,6 +588,14 @@ function EditGroupDialog({
                   </button>
                 </div>
               </div>
+              <AccountRangeControls
+                total={(accountsQ.data ?? []).length}
+                onApply={(s, e, order) => {
+                  const picked = pickRange(accountsQ.data ?? [], s, e, order).map((a) => a.id);
+                  setAccountIds(new Set(picked));
+                }}
+                className="mb-2"
+              />
               <AccountIdPaste
                 accounts={accountsQ.data ?? []}
                 onSelect={(ids) =>

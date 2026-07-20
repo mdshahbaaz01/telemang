@@ -15,6 +15,7 @@ import { Loader } from "@/components/ui/loader";
 import {
   Users, UserPlus, MessagesSquare, Pencil, Copy, Mic, ListChecks, CheckCheck, Square, Play, Rocket, Vote,
 } from "lucide-react";
+import { AccountRangeControls, pickRange } from "@/components/AccountRangeControls";
 import { requireAdminBeforeLoad } from "@/lib/access-guard";
 
 export const Route = createFileRoute("/_authenticated/bulk-plus")({
@@ -286,6 +287,13 @@ function BulkPlusInner() {
                 <Button size="sm" variant="ghost" onClick={selectNone}>None</Button>
               </div>
             </div>
+            <AccountRangeControls
+              total={accounts.length}
+              onApply={(s, e, order) => {
+                const picked = pickRange(accounts, s, e, order).map((a) => a.id);
+                setSelectedIds(new Set(picked));
+              }}
+            />
             {accountsQ.isLoading ? <Loader /> : (
               <div className="max-h-40 overflow-y-auto grid grid-cols-1 sm:grid-cols-2 gap-1">
                 {accounts.map((a, i) => (
