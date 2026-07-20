@@ -25,8 +25,28 @@ const STRIP_HEADERS = new Set([
   "connection",
 ]);
 
+function toTelegramUserAgent(fp: ReturnType<typeof deriveMiniAppIdentity>["fingerprint"]) {
+  const base = fp.userAgent;
+  if (/Telegram-(Android|iOS)\//i.test(base)) return base;
+  if (fp.platform.includes("iPhone")) {
+    return `${base} Telegram-iOS/11.7`;
+  }
+  const androidVersion = /Android\s+([\d.]+)/i.exec(base)?.[1] || "14";
+  const model = /;\s*([^;)]+)\)\s*AppleWebKit/i.exec(base)?.[1]?.trim() || "Pixel 7";
+  const sdk = androidVersion.startsWith("12") ? "31" : androidVersion.startsWith("13") ? "33" : "34";
+  return `${base} Telegram-Android/11.7.4 (${model}; Android ${androidVersion}; SDK ${sdk}; HIGH)`;
+}
+
 function buildOverrideScript(accountId: string, upstreamUrl: string, token: string, enableCaptcha: boolean) {
-  const fp = deriveMiniAppIdentity(accountId).fingerprint;
+  const identity = deriveMiniAppIdentity(accountId);
+  const fp = identity.fingerprint;
+  const telegramUserAgent = toTelegramUserAgent(fp);
+  const telegramDefaults = {
+    platform: identity.platform,
+    colorScheme: identity.colorScheme,
+    themeParams: identity.themeParams,
+    version: "8.0",
+  };
   const captchaBridge = enableCaptcha ? `
   // ---------- Captcha auto-detect + solver bridge ----------
   try {
@@ -188,6 +208,9 @@ function buildOverrideScript(accountId: string, upstreamUrl: string, token: stri
     const ACCT = ${JSON.stringify(accountId)};
     const TOKEN = ${JSON.stringify(token)};
     const UPSTREAM = ${JSON.stringify(upstreamUrl)};
+    const TELEGRAM_UA = ${JSON.stringify(telegramUserAgent)};
+    const TG_DEFAULTS = ${JSON.stringify(telegramDefaults)};
+    const TG_PLATFORM = TG_DEFAULTS.platform || (String(fp.platform || '').includes('iPhone') ? 'ios' : 'android');
     const PROXY_PREFIX = '/api/public/miniapp-proxy/';
     const upstreamOrigin = (() => { try { return new URL(UPSTREAM).origin; } catch { return null; } })();
     try {
@@ -252,9 +275,9 @@ function buildOverrideScript(accountId: string, upstreamUrl: string, token: stri
             if (/^tgWebApp/i.test(k) && !hashParams.get(k)) hashParams.set(k, v);
           });
         } catch {}
-        const hasTg = Array.from(hashParams.keys()).some((k) => /^tgWebApp/i.test(k));
+        const hasSignedTg = Array.from(hashParams.keys()).some((k) => /^tgWebApp/i.test(k));
         try {
-          if (hasTg) {
+          if (hasSignedTg) {
             const mergedHash = hashParams.toString();
             sessionStorage.setItem(TG_STORE_KEY, mergedHash);
             if (mergedHash && String(location.hash || '').replace(/^#/, '') !== mergedHash) {
@@ -272,9 +295,21 @@ function buildOverrideScript(accountId: string, upstreamUrl: string, token: stri
             }
           }
         } catch {}
+        try {
+          if (!hashParams.get('tgWebAppVersion')) hashParams.set('tgWebAppVersion', TG_DEFAULTS.version || '8.0');
+          if (!hashParams.get('tgWebAppPlatform')) hashParams.set('tgWebAppPlatform', TG_PLATFORM);
+          if (!hashParams.get('tgWebAppThemeParams')) hashParams.set('tgWebAppThemeParams', JSON.stringify(TG_DEFAULTS.themeParams || {}));
+          if (!hashParams.get('tgWebAppFullscreen')) hashParams.set('tgWebAppFullscreen', '1');
+          if (!hashParams.get('tgWebAppShowSettings')) hashParams.set('tgWebAppShowSettings', '0');
+          const mergedHashWithDefaults = hashParams.toString();
+          if (mergedHashWithDefaults && String(location.hash || '').replace(/^#/, '') !== mergedHashWithDefaults) {
+            try { history.replaceState(history.state, '', location.pathname + location.search + '#' + mergedHashWithDefaults); } catch {}
+          }
+        } catch {}
         const initData = hashParams.get('tgWebAppData') || '';
         const themeRaw = hashParams.get('tgWebAppThemeParams') || '';
-        const themeParams = themeRaw ? (parseMaybeJson(themeRaw) || {}) : {};
+        const parsedTheme = themeRaw ? parseMaybeJson(themeRaw) : null;
+        const themeParams = parsedTheme && typeof parsedTheme === 'object' ? parsedTheme : (TG_DEFAULTS.themeParams || {});
         const callbacks = {};
         const emit = (eventType, eventData) => {
           const names = [eventType, toWebAppEvent(eventType)];
@@ -318,11 +353,13 @@ function buildOverrideScript(accountId: string, upstreamUrl: string, token: stri
         const WebApp = {
           initData,
           initDataUnsafe: parseInitDataUnsafe(initData),
-          version: hashParams.get('tgWebAppVersion') || '8.0',
-          platform: hashParams.get('tgWebAppPlatform') || 'web',
-          colorScheme: Object.keys(themeParams).length && String(themeParams.bg_color || '').toLowerCase() !== '#ffffff' ? 'dark' : 'light',
+          version: hashParams.get('tgWebAppVersion') || TG_DEFAULTS.version || '8.0',
+          platform: hashParams.get('tgWebAppPlatform') || TG_PLATFORM,
+          colorScheme: TG_DEFAULTS.colorScheme || (Object.keys(themeParams).length && String(themeParams.bg_color || '').toLowerCase() !== '#ffffff' ? 'dark' : 'light'),
           themeParams,
           isExpanded: true,
+          isFullscreen: hashParams.get('tgWebAppFullscreen') === '1',
+          isActive: true,
           viewportHeight: window.innerHeight,
           viewportStableHeight: window.innerHeight,
           safeAreaInset: { top: 0, bottom: 0, left: 0, right: 0 },
@@ -355,6 +392,22 @@ function buildOverrideScript(accountId: string, upstreamUrl: string, token: stri
           requestViewport() { hostPost('web_app_request_viewport', {}); },
           requestWriteAccess(cb) { if (cb) setTimeout(() => cb(true), 0); hostPost('web_app_request_write_access', {}); },
           requestContact(cb) { if (cb) setTimeout(() => cb(false), 0); hostPost('web_app_request_phone', {}); },
+          requestFullscreen() { this.isFullscreen = true; hostPost('web_app_request_fullscreen', {}); },
+          exitFullscreen() { this.isFullscreen = false; hostPost('web_app_exit_fullscreen', {}); },
+          lockOrientation() { hostPost('web_app_lock_orientation', {}); },
+          unlockOrientation() { hostPost('web_app_unlock_orientation', {}); },
+          addToHomeScreen() { hostPost('web_app_add_to_home_screen', {}); },
+          checkHomeScreenStatus(cb) { if (cb) setTimeout(() => cb('unsupported'), 0); hostPost('web_app_check_home_screen', {}); },
+          shareToStory(_mediaUrl, params) { hostPost('web_app_share_to_story', params || {}); },
+          isVersionAtLeast(version) {
+            const a = String(this.version || '0').split('.').map((x) => parseInt(x, 10) || 0);
+            const b = String(version || '0').split('.').map((x) => parseInt(x, 10) || 0);
+            for (let i = 0; i < Math.max(a.length, b.length); i++) {
+              if ((a[i] || 0) > (b[i] || 0)) return true;
+              if ((a[i] || 0) < (b[i] || 0)) return false;
+            }
+            return true;
+          },
           setHeaderColor(color) { this.headerColor = color; hostPost('web_app_set_header_color', { color }); },
           setBackgroundColor(color) { this.backgroundColor = color; hostPost('web_app_set_background_color', { color }); },
           setBottomBarColor(color) { this.bottomBarColor = color; hostPost('web_app_set_bottom_bar_color', { color }); },
@@ -391,7 +444,11 @@ function buildOverrideScript(accountId: string, upstreamUrl: string, token: stri
             if (typeof data === 'string') { try { data = JSON.parse(data); } catch {} }
             hostPost(eventType, data || {});
           },
+          receiveEvent: emit,
         };
+        window.TelegramWebviewProxyProto = window.TelegramWebviewProxyProto || window.TelegramWebviewProxy;
+        window.TelegramWebview = window.TelegramWebview || window.TelegramWebviewProxy;
+        window.Android = window.Android || { postEvent: window.TelegramWebviewProxy.postEvent };
         try {
           window.external = window.external || {};
           window.external.notify = (raw) => {
@@ -399,6 +456,18 @@ function buildOverrideScript(accountId: string, upstreamUrl: string, token: stri
               const msg = JSON.parse(raw);
               if (msg && msg.eventType) hostPost(msg.eventType, msg.eventData || {});
             } catch {}
+          };
+        } catch {}
+        try {
+          window.webkit = window.webkit || {};
+          window.webkit.messageHandlers = window.webkit.messageHandlers || {};
+          window.webkit.messageHandlers.TelegramWebviewProxy = window.webkit.messageHandlers.TelegramWebviewProxy || {
+            postMessage(raw) {
+              try {
+                const msg = typeof raw === 'string' ? JSON.parse(raw) : raw;
+                if (msg && msg.eventType) window.TelegramWebviewProxy.postEvent(msg.eventType, msg.eventData || {});
+              } catch {}
+            },
           };
         } catch {}
         setTimeout(() => {
@@ -589,8 +658,8 @@ function buildOverrideScript(accountId: string, upstreamUrl: string, token: stri
       toJSON() { return { brands, mobile: fp.mobile, platform: platformName }; },
     };
     ['userAgent', 'appVersion', 'platform', 'language', 'languages', 'hardwareConcurrency', 'deviceMemory', 'maxTouchPoints', 'vendor', 'webdriver', 'userAgentData'].forEach((key) => {
-      const val = key === 'userAgent' ? fp.userAgent
-        : key === 'appVersion' ? fp.userAgent.replace(/^Mozilla\\//, '')
+      const val = key === 'userAgent' ? TELEGRAM_UA
+        : key === 'appVersion' ? TELEGRAM_UA.replace(/^Mozilla\\//, '')
         : key === 'platform' ? fp.platform
         : key === 'language' ? fp.languages[0]
         : key === 'languages' ? Object.freeze(fp.languages.slice())
@@ -805,7 +874,8 @@ async function handle(request: Request, params: { _splat?: string }) {
   const upstreamHeaders = new Headers();
   const fp = deriveMiniAppIdentity(identityKey).fingerprint;
   const targetUrl = targetUrlEarly;
-  upstreamHeaders.set("user-agent", fp.userAgent);
+  upstreamHeaders.set("user-agent", toTelegramUserAgent(fp));
+  upstreamHeaders.set("x-requested-with", "org.telegram.messenger");
   upstreamHeaders.set("accept-language", fp.languages.join(","));
   upstreamHeaders.set("origin", targetUrl.origin);
   upstreamHeaders.set("referer", `${targetUrl.origin}/`);
@@ -835,7 +905,7 @@ async function handle(request: Request, params: { _splat?: string }) {
   const contentType = request.headers.get("content-type");
   if (contentType) upstreamHeaders.set("content-type", contentType);
   const requestedWith = request.headers.get("x-requested-with");
-  if (requestedWith) upstreamHeaders.set("x-requested-with", requestedWith);
+  if (requestedWith && requestedWith.toLowerCase().includes("telegram")) upstreamHeaders.set("x-requested-with", requestedWith);
 
   let upstream: Response;
   try {
