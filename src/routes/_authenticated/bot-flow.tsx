@@ -545,6 +545,19 @@ function BotFlowPage() {
     verifySession.userId && verifyAccountTelegramId && verifySession.userId !== verifyAccountTelegramId,
   );
 
+  // Auto-select the matching website account when the verification link is
+  // already signed for a specific Telegram user id.
+  useEffect(() => {
+    if (!verifySession.userId) return;
+    if (selectedVerifyAccount && String(selectedVerifyAccount.telegram_user_id ?? "") === verifySession.userId) return;
+    const match = accountList.find(
+      (a) => a.telegram_user_id != null && String(a.telegram_user_id) === verifySession.userId,
+    );
+    if (match && match.id !== verifyAccountId) {
+      setVerifyAccountId(match.id);
+    }
+  }, [verifySession.userId, accountList, selectedVerifyAccount, verifyAccountId]);
+
   const openVerification = () => {
     if (!normalizedVerifyLink) return toast.error("Paste the verification link");
     if (!verifyAccountId) return toast.error("Select one account");
