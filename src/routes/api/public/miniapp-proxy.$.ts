@@ -1022,6 +1022,7 @@ async function handle(request: Request, params: { _splat?: string }) {
   const accountId = proxyReqUrl.searchParams.get("a") || "anon";
   const token = proxyReqUrl.searchParams.get("t") || readTokenCookie(request);
   const captchaEnabled = proxyReqUrl.searchParams.get("cap") === "1";
+  const cookieJar = readCookieJar(request);
   // Optional per-run fingerprint seed. When present, the derived
   // navigator/screen/timezone/UA identity varies even for the same
   // account, so the bot sees a different "device" on each run.
@@ -1107,12 +1108,17 @@ async function handle(request: Request, params: { _splat?: string }) {
     const MAX_REDIRECTS = 5;
     let hop = 0;
     while (true) {
+      const currentTargetUrl = new URL(currentUrl);
+      const upstreamCookie = cookieHeaderForTarget(cookieJar, currentTargetUrl);
+      if (upstreamCookie) upstreamHeaders.set("cookie", upstreamCookie);
+      else upstreamHeaders.delete("cookie");
       const resp = await fetch(viaProxy(currentUrl), {
         method,
         headers: upstreamHeaders,
         body: bodyBuf,
         redirect: "manual",
       });
+      mergeSetCookies(cookieJar, currentTargetUrl, getSetCookieHeaders(resp.headers));
       if (resp.status >= 300 && resp.status < 400 && resp.headers.get("location")) {
         if (++hop > MAX_REDIRECTS) {
           return new Response("Too many redirects", { status: 502 });
@@ -1167,6 +1173,10 @@ async function handle(request: Request, params: { _splat?: string }) {
     "set-cookie",
     `miniapp_proxy_t=${encodeURIComponent(token!)}; Path=/api/public/miniapp-proxy/; Max-Age=3600; HttpOnly; Secure; SameSite=None`,
   );
+  outHeaders.append(
+    "set-cookie",
+    `${COOKIE_JAR_NAME}=${encodeURIComponent(serializeCookieJar(cookieJar))}; Path=/api/public/miniapp-proxy/; Max-Age=3600; HttpOnly; Secure; SameSite=None`,
+  );
 
   const ctype = upstream.headers.get("content-type") || "";
   if (ctype.includes("text/html")) {
@@ -1220,21 +1230,7 @@ async function handle(request: Request, params: { _splat?: string }) {
 }
 
 function readTokenCookie(request: Request): string | null {
-  const cookie = request.headers.get("cookie");
-  if (!cookie) return null;
-  for (const part of cookie.split(";")) {
-    const eq = part.indexOf("=");
-    if (eq === -1) continue;
-    const name = part.slice(0, eq).trim();
-    if (name === "miniapp_proxy_t") {
-      try {
-        return decodeURIComponent(part.slice(eq + 1).trim());
-      } catch {
-        return part.slice(eq + 1).trim();
-      }
-    }
-  }
-  return null;
+  return readCookieValue(request, "miniapp_proxy_t");
 }
 
 export const Route = createFileRoute("/api/public/miniapp-proxy/$")({
