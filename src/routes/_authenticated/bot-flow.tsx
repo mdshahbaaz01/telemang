@@ -1672,16 +1672,69 @@ function BulkVerifyRunner({
     return () => window.removeEventListener("message", onMsg);
   }, [appendLog]);
 
-  const parsedLinks = useMemo(() => {
-    return text
-      .split(/\r?\n/)
-      .map((l) => l.trim())
-      .filter(Boolean)
-      .map((l) => (/^https?:\/\//i.test(l) ? l : `https://${l}`))
-      .filter((l) => {
-        try { new URL(l); return true; } catch { return false; }
-      });
-  }, [text]);
+  const normalizeUrl = (raw: string) => {
+    const s = raw.trim();
+    if (!s) return "";
+    const withProto = /^https?:\/\//i.test(s) ? s : `https://${s}`;
+    try { new URL(withProto); return withProto; } catch { return ""; }
+  };
+  const parsedEntries = useMemo(
+    () =>
+      entries
+        .map((e) => ({ ...e, normalized: normalizeUrl(e.url) }))
+        .filter((e) => !!e.normalized),
+    [entries],
+  );
+  const parsedLinks = useMemo(() => parsedEntries.map((e) => e.normalized), [parsedEntries]);
+
+  const updateEntry = (id: string, patch: Partial<LinkEntry>) => {
+    setEntries((prev) => {
+      const next = prev.map((e) => (e.id === id ? { ...e, ...patch } : e));
+      const trimmed: LinkEntry[] = [];
+      for (let i = 0; i < next.length; i++) {
+        const cur = next[i];
+        const isLast = i === next.length - 1;
+        if (!cur.url.trim() && !isLast) continue;
+        trimmed.push(cur);
+      }
+      if (!trimmed.length || trimmed[trimmed.length - 1].url.trim() !== "") {
+        trimmed.push(mkEntry());
+      }
+      return trimmed;
+    });
+  };
+  const removeEntry = (id: string) => {
+    setEntries((prev) => {
+      const next = prev.filter((e) => e.id !== id);
+      if (!next.length || next[next.length - 1].url.trim() !== "") next.push(mkEntry());
+      return next;
+    });
+  };
+  const clearEntries = () => setEntries([mkEntry()]);
+  const pasteMany = (raw: string, targetId: string) => {
+    const lines = raw.split(/\r?\n/).map((l) => l.trim()).filter(Boolean);
+    if (lines.length <= 1) return false;
+    setEntries((prev) => {
+      const idx = prev.findIndex((e) => e.id === targetId);
+      const insertion = lines.map((u) => mkEntry(u));
+      const before = idx >= 0 ? prev.slice(0, idx) : prev;
+      const afterRaw = idx >= 0 ? prev.slice(idx + 1) : [];
+      const after = afterRaw.filter((e) => e.url.trim() !== "");
+      const merged = [...before, ...insertion, ...after];
+      if (!merged.length || merged[merged.length - 1].url.trim() !== "") merged.push(mkEntry());
+      return merged;
+    });
+    return true;
+  };
+
+  const entryAccountFor = (normalized: string): string | null => {
+    const s = parseVerifyLinkSession(normalized);
+    if (!s.userId) return null;
+    const m = accountList.find(
+      (a) => a.telegram_user_id != null && String(a.telegram_user_id) === s.userId,
+    );
+    return m ? m.id : null;
+  };
 
   const toggleAcc = (id: string) =>
     setSelected((prev) => (prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]));
