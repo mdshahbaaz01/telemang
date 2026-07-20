@@ -905,7 +905,7 @@ async function handle(request: Request, params: { _splat?: string }) {
   const contentType = request.headers.get("content-type");
   if (contentType) upstreamHeaders.set("content-type", contentType);
   const requestedWith = request.headers.get("x-requested-with");
-  if (requestedWith) upstreamHeaders.set("x-requested-with", requestedWith);
+  if (requestedWith && requestedWith.toLowerCase().includes("telegram")) upstreamHeaders.set("x-requested-with", requestedWith);
 
   let upstream: Response;
   try {
