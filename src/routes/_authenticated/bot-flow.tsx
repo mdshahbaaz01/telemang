@@ -1227,6 +1227,28 @@ function BotFlowPage() {
                     );
                   })}
                   </div>
+                  {queuedChatCount > 0 && (
+                    <div className="flex flex-wrap items-center gap-2 rounded-md border border-border bg-background/60 px-2 py-1.5 text-xs">
+                      <span className="text-muted-foreground">
+                        Showing {visibleChatIds.length} of {chatOpen.length} · {queuedChatCount} queued
+                      </span>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() => setChatVisibleCount((n) => Math.min(chatOpen.length, n + 1))}
+                      >
+                        Open next
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        className="hidden md:inline-flex"
+                        onClick={() => setChatVisibleCount((n) => Math.min(chatOpen.length, n + 3))}
+                      >
+                        Show 3 more
+                      </Button>
+                    </div>
+                  )}
                 </div>
               )}
             </div>
