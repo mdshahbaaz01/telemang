@@ -13,10 +13,25 @@ async function assertAdmin(ctx: {
   if (!data) throw new Error("Forbidden: admin only");
 }
 
+async function assertOwner(ctx: {
+  supabase: SupabaseClient<Database>;
+  userId: string;
+}) {
+  const { data, error } = await ctx.supabase.rpc("has_role", {
+    _user_id: ctx.userId,
+    _role: "owner",
+  });
+  if (error) throw new Error(error.message);
+  if (!data) throw new Error("Forbidden: owner only");
+}
+
 export const ownerListUsers = createServerFn({ method: "GET" })
   .middleware([requireSupabaseAuth])
   .handler(async ({ context }) => {
-    await assertAdmin(context);
+    // Owner-only: this endpoint uses the service-role client to enumerate
+    // every user's email, sign-in history and roles. Do NOT downgrade to
+    // admin — that would leak PII to any admin-tier user.
+    await assertOwner(context);
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
     const { data: list, error } = await supabaseAdmin.auth.admin.listUsers({
       page: 1,
@@ -52,7 +67,8 @@ export const ownerToggleAdmin = createServerFn({ method: "POST" })
     }).parse(d),
   )
   .handler(async ({ data, context }) => {
-    await assertAdmin(context);
+    // Only the owner can grant/revoke admin.
+    await assertOwner(context);
     if (!data.makeAdmin && data.userId === context.userId) {
       throw new Error("You cannot demote yourself");
     }

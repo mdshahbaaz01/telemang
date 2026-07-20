@@ -90,6 +90,8 @@ export function PreJoinCard({ accounts }: { accounts: Account[] }) {
   const [running, setRunning] = useState(false);
   const [publicInviteFallback, setPublicInviteFallback] = useState(true);
   const [forceRejoin, setForceRejoin] = useState(false);
+  const [dedupeEnabled, setDedupeEnabled] = useState(false);
+  const [dedupeSeconds, setDedupeSeconds] = useState(60);
   const [logs, setLogs] = useState<PreJoinLog[]>([]);
   const [totals, setTotals] = useState<{ ok: number; fail: number } | null>(null);
   const [statuses, setStatuses] = useState<ChMap>({});
@@ -199,6 +201,7 @@ export function PreJoinCard({ accounts }: { accounts: Account[] }) {
             preJoinChannels: channels,
             publicInviteFallback,
             forceRejoin,
+            dedupeByLinkSeconds: dedupeEnabled ? Math.max(1, Math.min(3600, dedupeSeconds || 0)) : 0,
           },
         }),
         signal: ac.signal,
@@ -375,6 +378,27 @@ export function PreJoinCard({ accounts }: { accounts: Account[] }) {
                 onChange={(e) => setForceRejoin(e.target.checked)}
               />
               Force re-join (ignore cache)
+            </label>
+            <label
+              className="flex items-center gap-2 self-center text-xs text-muted-foreground"
+              title="Within this task run, skip a channel link that was already attempted less than N seconds ago. Prevents thrashing during flapping or rate limits."
+            >
+              <input
+                type="checkbox"
+                checked={dedupeEnabled}
+                onChange={(e) => setDedupeEnabled(e.target.checked)}
+              />
+              Dedupe by link
+              <input
+                type="number"
+                min={1}
+                max={3600}
+                value={dedupeSeconds}
+                onChange={(e) => setDedupeSeconds(parseInt(e.target.value) || 0)}
+                disabled={!dedupeEnabled}
+                className="w-16 rounded border border-border bg-background px-1 py-0.5 text-xs disabled:opacity-50"
+              />
+              <span>s</span>
             </label>
             {totals && (
               <div className="ml-auto self-center text-sm text-muted-foreground">
