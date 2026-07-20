@@ -1062,7 +1062,10 @@ async function handle(request: Request, params: { _splat?: string }) {
   // when a top-level navigation lacks Sec-Fetch metadata. Force navigation-
   // shaped Accept + Sec-Fetch headers on the first hop of a document request.
   const secFetchDest = request.headers.get("sec-fetch-dest");
-  const isDocumentNav = !secFetchDest || secFetchDest === "document" || secFetchDest === "iframe";
+  const isDocumentNav =
+    secFetchDest === "document" ||
+    secFetchDest === "iframe" ||
+    (request.method === "GET" && !!accept?.toLowerCase().includes("text/html"));
   if (isDocumentNav) {
     upstreamHeaders.set(
       "accept",

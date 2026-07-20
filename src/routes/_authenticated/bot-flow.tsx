@@ -1492,9 +1492,12 @@ function BotFlowCaptchaCard() {
 }
 
 function VerifyFrame({ url, accountId }: { url: string; accountId: string }) {
+  const iframeRef = useRef<HTMLIFrameElement | null>(null);
   const { url: proxied } = useMiniAppProxyUrl(url, accountId);
+  useTelegramWebviewBridge(iframeRef);
   return (
     <iframe
+      ref={iframeRef}
       src={proxied ?? "about:blank"}
       title="Verification runner"
       className="h-full w-full flex-1 border-0"
@@ -1950,10 +1953,15 @@ function BulkVerifyFrame({
   iframeRef?: (el: HTMLIFrameElement | null) => void;
   onLoaded?: () => void;
 }) {
+  const localRef = useRef<HTMLIFrameElement | null>(null);
   const { url: proxied } = useMiniAppProxyUrl(url, accountId, { fpSeed });
+  useTelegramWebviewBridge(localRef);
   return (
     <iframe
-      ref={iframeRef}
+      ref={(el) => {
+        localRef.current = el;
+        iframeRef?.(el);
+      }}
       src={proxied ?? "about:blank"}
       title="Bulk verification runner"
       className="h-full w-full flex-1 border-0"
