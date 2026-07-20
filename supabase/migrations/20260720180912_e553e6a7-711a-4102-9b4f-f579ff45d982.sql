@@ -1,0 +1,2 @@
+ALTER TABLE public.telegram_accounts ADD COLUMN IF NOT EXISTS proxy_enc text;
+COMMENT ON COLUMN public.telegram_accounts.proxy_enc IS 'Encrypted JSON: {type:"socks5"|"socks4"|"mtproxy", host, port, user?, pass?, secret?}';
