@@ -1643,7 +1643,7 @@ function ActionsPageInner() {
                               {a.text}
                               {a.chosen && <span className="ml-1 text-xs text-primary">✓ your vote</span>}
                             </span>
-                            {(showResults || pollInfo.alreadyVoted) && (
+                            {(showResults || pollInfo.alreadyVoted || pollInfo.closed || (!pollInfo.resultsHidden && pollInfo.totalVoters > 0)) && (
                               <span className="ml-2 flex items-center gap-2 text-xs text-muted-foreground shrink-0">
                                 <span className="w-16 h-1.5 rounded bg-muted overflow-hidden">
                                   <span className="block h-full bg-primary" style={{ width: `${pct}%` }} />
