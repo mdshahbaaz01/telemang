@@ -798,6 +798,27 @@ async function handle(request: Request, params: { _splat?: string }) {
   upstreamHeaders.set("referer", `${targetUrl.origin}/`);
   const accept = request.headers.get("accept");
   if (accept) upstreamHeaders.set("accept", accept);
+  // Some anti-bot / CDN layers serve a placeholder image (rendered as a
+  // broken-image icon in the iframe) when the request looks non-browser or
+  // when a top-level navigation lacks Sec-Fetch metadata. Force navigation-
+  // shaped Accept + Sec-Fetch headers on the first hop of a document request.
+  const secFetchDest = request.headers.get("sec-fetch-dest");
+  const isDocumentNav = !secFetchDest || secFetchDest === "document" || secFetchDest === "iframe";
+  if (isDocumentNav) {
+    upstreamHeaders.set(
+      "accept",
+      "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8",
+    );
+    upstreamHeaders.set("sec-fetch-mode", "navigate");
+    upstreamHeaders.set("sec-fetch-dest", "document");
+    upstreamHeaders.set("sec-fetch-site", "none");
+    upstreamHeaders.set("sec-fetch-user", "?1");
+    upstreamHeaders.set("upgrade-insecure-requests", "1");
+    // Drop cross-origin origin/referer for a top-level nav — browsers do not
+    // send them and some WAFs 403 when they see a mismatched origin.
+    upstreamHeaders.delete("origin");
+    upstreamHeaders.delete("referer");
+  }
   const contentType = request.headers.get("content-type");
   if (contentType) upstreamHeaders.set("content-type", contentType);
   const requestedWith = request.headers.get("x-requested-with");
@@ -899,6 +920,28 @@ async function handle(request: Request, params: { _splat?: string }) {
     const js = rewriteJsUrls(await upstream.text(), upstream.url || target, accountId, token!, proxyOrigin);
     outHeaders.set("content-type", ctype || "application/javascript; charset=utf-8");
     return new Response(js, { status: upstream.status, headers: outHeaders });
+  }
+  // Top-level navigation that came back as an image / octet-stream almost
+  // always means the upstream (or a CDN in front of it) served an anti-bot
+  // placeholder. Chrome would render that as a broken-image icon inside the
+  // iframe — swap it for a readable HTML error so the operator can react.
+  if (
+    isDocumentNav &&
+    (ctype.startsWith("image/") || ctype.includes("octet-stream") || !ctype)
+  ) {
+    const finalUrl = upstream.url || target;
+    const msg = `<!doctype html><meta charset="utf-8"><title>Upstream blocked</title>
+<div style="font:14px system-ui;padding:24px;color:#111;background:#fff8e1;border:1px solid #f3d27a;border-radius:8px;margin:16px">
+  <h2 style="margin:0 0 8px">Upstream returned a non-HTML response</h2>
+  <div><b>Status:</b> ${upstream.status}</div>
+  <div><b>Content-Type:</b> ${ctype || "(none)"}</div>
+  <div style="word-break:break-all"><b>URL:</b> ${finalUrl}</div>
+  <p>The bot's server likely detected the proxy and served a placeholder image
+  instead of the mini-app. Try the original <code>t.me/&hellip;?startapp=</code>
+  link, refresh from your Telegram account, or wait a minute and retry.</p>
+</div>`;
+    outHeaders.set("content-type", "text/html; charset=utf-8");
+    return new Response(msg, { status: 502, headers: outHeaders });
   }
   return new Response(upstream.body, { status: upstream.status, headers: outHeaders });
 }
