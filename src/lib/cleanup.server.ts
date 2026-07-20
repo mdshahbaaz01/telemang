@@ -7,7 +7,7 @@ export async function openClientForAccount(
   const { createTgClient } = await import("./telegram-client.server");
   const q = supabase
     .from("telegram_accounts")
-    .select("id, user_id, api_id, api_hash_enc, session_enc, status")
+    .select("id, user_id, api_id, api_hash_enc, session_enc, status, proxy_enc")
     .eq("id", accountId);
   if (opts.requireOwnerId) q.eq("user_id", opts.requireOwnerId);
   const { data: acct, error } = await q.single();
@@ -16,5 +16,9 @@ export async function openClientForAccount(
   if (!acct.session_enc) throw new Error("Account not logged in");
   const apiHash = await decryptString(acct.api_hash_enc);
   const sessionStr = await decryptString(acct.session_enc);
-  return createTgClient(acct.api_id, apiHash, sessionStr, acct.id);
+  let proxy: any = null;
+  if (acct.proxy_enc) {
+    try { proxy = JSON.parse(await decryptString(acct.proxy_enc)); } catch { proxy = null; }
+  }
+  return createTgClient(acct.api_id, apiHash, sessionStr, acct.id, proxy);
 }

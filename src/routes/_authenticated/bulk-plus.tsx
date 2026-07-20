@@ -13,7 +13,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { toast } from "sonner";
 import { Loader } from "@/components/ui/loader";
 import {
-  Users, UserPlus, MessagesSquare, Pencil, Copy, Mic, ListChecks, CheckCheck, Square, Play, Rocket,
+  Users, UserPlus, MessagesSquare, Pencil, Copy, Mic, ListChecks, CheckCheck, Square, Play, Rocket, Vote,
 } from "lucide-react";
 import { requireAdminBeforeLoad } from "@/lib/access-guard";
 
@@ -23,7 +23,7 @@ export const Route = createFileRoute("/_authenticated/bulk-plus")({
   component: BulkPlusPage,
 });
 
-type Kind = "createChat" | "inviteToChat" | "dmBlast" | "editSent" | "copyClean" | "voiceNote" | "pollCreate" | "readAll";
+type Kind = "createChat" | "inviteToChat" | "dmBlast" | "editSent" | "copyClean" | "voiceNote" | "pollCreate" | "pollVote" | "readAll";
 type LogEntry = { ts: number; accountId?: string; level: "info"|"success"|"warn"|"error"; target?: string; message: string };
 
 const KINDS: { key: Kind; label: string; desc: string; icon: any }[] = [
@@ -34,6 +34,7 @@ const KINDS: { key: Kind; label: string; desc: string; icon: any }[] = [
   { key: "copyClean",    label: "Copy-Clean Forward",desc: "Copy a post without \"forwarded from\" tag",       icon: Copy },
   { key: "voiceNote",    label: "Voice / Video Note",desc: "Send a voice bubble or round video note",          icon: Mic },
   { key: "pollCreate",   label: "Poll / Quiz",       desc: "Create polls or quizzes in bulk",                  icon: ListChecks },
+  { key: "pollVote",     label: "Poll Vote",         desc: "Vote on an existing poll from every account",      icon: Vote },
   { key: "readAll",      label: "Read-All / Unread", desc: "Mark all dialogs as read or unread",               icon: CheckCheck },
 ];
 
@@ -94,6 +95,11 @@ function BulkPlusInner() {
   const [pollQuiz, setPollQuiz] = useState(false);
   const [pollCorrect, setPollCorrect] = useState(0);
   const [pollExplain, setPollExplain] = useState("");
+
+  // Poll Vote state
+  const [voteLink, setVoteLink] = useState("");
+  const [voteIdx, setVoteIdx] = useState("0");
+  const [voteRetract, setVoteRetract] = useState(false);
 
   const [readScope, setReadScope] = useState<"all"|"targets">("all");
   const [readTargets, setReadTargets] = useState<string[]>([]);
@@ -197,6 +203,12 @@ function BulkPlusInner() {
         const payload: any = { kind, question: pollQ, options, targets: pollTargets, multiple: pollMulti, anonymous: pollAnon, quiz: pollQuiz };
         if (pollQuiz) { payload.correctIndex = Math.min(pollCorrect, options.length - 1); if (pollExplain) payload.explanation = pollExplain; }
         return payload;
+      }
+      case "pollVote": {
+        if (!voteLink.includes("t.me/")) throw new Error("Valid poll message link required");
+        const optionIndexes = voteIdx.split(/[\s,]+/).map((s) => parseInt(s, 10)).filter((n) => Number.isFinite(n) && n >= 0 && n <= 9);
+        if (!voteRetract && !optionIndexes.length) throw new Error("At least one option index (0-based) required, e.g. 0 or 0,2");
+        return { kind, messageLink: voteLink.trim(), optionIndexes: optionIndexes.length ? optionIndexes : [0], retract: voteRetract };
       }
       case "readAll": {
         if (readScope === "targets" && !readTargets.length) throw new Error("Pick targets");
@@ -408,6 +420,32 @@ function BulkPlusInner() {
                   {pollTargets.length > 0 && <Button size="sm" variant="ghost" onClick={() => setPollTargets([])}>Clear</Button>}
                 </div>
                 <Textarea rows={3} value={pollTargets.join("\n")} onChange={(e) => setPollTargets(e.target.value.split(/\s+/).filter(Boolean))} />
+              </>
+            )}
+
+            {kind === "pollVote" && (
+              <>
+                <div className="text-xs text-muted-foreground border border-border rounded p-2 bg-muted/40">
+                  Every selected account will cast a vote on the same poll. Great for boosting a specific option or spinning up quick engagement.
+                  Anonymous polls hide voters; public polls show every voter — pick accordingly.
+                </div>
+                <div><Label className="text-xs">Poll message link</Label>
+                  <Input value={voteLink} onChange={(e) => setVoteLink(e.target.value)} placeholder="https://t.me/channel/123 or t.me/c/12345/67" />
+                </div>
+                <div className="grid grid-cols-2 gap-2">
+                  <div><Label className="text-xs">Option index(es), 0-based</Label>
+                    <Input value={voteIdx} onChange={(e) => setVoteIdx(e.target.value)} placeholder="0  or  0,2 for multi-choice" disabled={voteRetract} />
+                  </div>
+                  <div className="flex items-end">
+                    <label className="flex items-center gap-1 text-xs">
+                      <input type="checkbox" checked={voteRetract} onChange={(e) => setVoteRetract(e.target.checked)} />
+                      Retract vote instead
+                    </label>
+                  </div>
+                </div>
+                <p className="text-[11px] text-muted-foreground">
+                  Tip: quiz polls only accept 1 correct index. Multi-choice polls accept several comma-separated indexes.
+                </p>
               </>
             )}
 

@@ -1,6 +1,10 @@
 import { TelegramClient } from "telegram";
 import { StringSession } from "telegram/sessions";
 
+export type AccountProxy =
+  | { type: "socks5" | "socks4"; host: string; port: number; user?: string; pass?: string }
+  | { type: "mtproxy"; host: string; port: number; secret: string };
+
 // Deterministic per-account device identity so Telegram treats every account
 // as a distinct physical device (separate entry in "Active sessions").
 function deriveDevice(key: string) {
@@ -45,15 +49,29 @@ export async function createTgClient(
   apiHash: string,
   sessionStr = "",
   deviceKey?: string,
+  proxy?: AccountProxy | null,
 ): Promise<TelegramClient> {
   const device = deviceKey ? deriveDevice(deviceKey) : {};
+  const proxyOpt = proxy
+    ? proxy.type === "mtproxy"
+      ? { ip: proxy.host, port: proxy.port, secret: proxy.secret, MTProxy: true as const }
+      : {
+          ip: proxy.host,
+          port: proxy.port,
+          socksType: proxy.type === "socks4" ? (4 as const) : (5 as const),
+          username: proxy.user,
+          password: proxy.pass,
+        }
+    : undefined;
   const client = new TelegramClient(
     new StringSession(sessionStr),
     apiId,
     apiHash,
     {
       connectionRetries: 2,
-      useWSS: true,
+      // WSS is incompatible with raw TCP through a SOCKS/MTProxy tunnel.
+      useWSS: proxyOpt ? false : true,
+      ...(proxyOpt ? { proxy: proxyOpt as any } : {}),
       // Never let GramJS sleep inside a request on FloodWait; surface it so the UI can pause/skip cleanly.
       floodSleepThreshold: 0,
       // Suppress internal chatty logs

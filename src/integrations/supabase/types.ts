@@ -1390,6 +1390,7 @@ export type Database = {
           last_name: string | null
           paused_until: string | null
           phone: string
+          proxy_enc: string | null
           session_enc: string | null
           signature: string | null
           status: string
@@ -1408,6 +1409,7 @@ export type Database = {
           last_name?: string | null
           paused_until?: string | null
           phone: string
+          proxy_enc?: string | null
           session_enc?: string | null
           signature?: string | null
           status?: string
@@ -1426,6 +1428,7 @@ export type Database = {
           last_name?: string | null
           paused_until?: string | null
           phone?: string
+          proxy_enc?: string | null
           session_enc?: string | null
           signature?: string | null
           status?: string

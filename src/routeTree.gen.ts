@@ -20,6 +20,7 @@ import { Route as AuthenticatedSearchRouteImport } from './routes/_authenticated
 import { Route as AuthenticatedReportRouteImport } from './routes/_authenticated/report'
 import { Route as AuthenticatedReferralsRouteImport } from './routes/_authenticated/referrals'
 import { Route as AuthenticatedRecipesRouteImport } from './routes/_authenticated/recipes'
+import { Route as AuthenticatedProxiesRouteImport } from './routes/_authenticated/proxies'
 import { Route as AuthenticatedProfileUpdaterRouteImport } from './routes/_authenticated/profile-updater'
 import { Route as AuthenticatedOwnerRouteImport } from './routes/_authenticated/owner'
 import { Route as AuthenticatedJoinPacingRouteImport } from './routes/_authenticated/join-pacing'
@@ -99,6 +100,11 @@ const AuthenticatedReferralsRoute = AuthenticatedReferralsRouteImport.update({
 const AuthenticatedRecipesRoute = AuthenticatedRecipesRouteImport.update({
   id: '/recipes',
   path: '/recipes',
+  getParentRoute: () => AuthenticatedRouteRoute,
+} as any)
+const AuthenticatedProxiesRoute = AuthenticatedProxiesRouteImport.update({
+  id: '/proxies',
+  path: '/proxies',
   getParentRoute: () => AuthenticatedRouteRoute,
 } as any)
 const AuthenticatedProfileUpdaterRoute =
@@ -254,6 +260,7 @@ export interface FileRoutesByFullPath {
   '/join-pacing': typeof AuthenticatedJoinPacingRoute
   '/owner': typeof AuthenticatedOwnerRoute
   '/profile-updater': typeof AuthenticatedProfileUpdaterRoute
+  '/proxies': typeof AuthenticatedProxiesRoute
   '/recipes': typeof AuthenticatedRecipesRoute
   '/referrals': typeof AuthenticatedReferralsRoute
   '/report': typeof AuthenticatedReportRoute
@@ -292,6 +299,7 @@ export interface FileRoutesByTo {
   '/join-pacing': typeof AuthenticatedJoinPacingRoute
   '/owner': typeof AuthenticatedOwnerRoute
   '/profile-updater': typeof AuthenticatedProfileUpdaterRoute
+  '/proxies': typeof AuthenticatedProxiesRoute
   '/recipes': typeof AuthenticatedRecipesRoute
   '/referrals': typeof AuthenticatedReferralsRoute
   '/report': typeof AuthenticatedReportRoute
@@ -332,6 +340,7 @@ export interface FileRoutesById {
   '/_authenticated/join-pacing': typeof AuthenticatedJoinPacingRoute
   '/_authenticated/owner': typeof AuthenticatedOwnerRoute
   '/_authenticated/profile-updater': typeof AuthenticatedProfileUpdaterRoute
+  '/_authenticated/proxies': typeof AuthenticatedProxiesRoute
   '/_authenticated/recipes': typeof AuthenticatedRecipesRoute
   '/_authenticated/referrals': typeof AuthenticatedReferralsRoute
   '/_authenticated/report': typeof AuthenticatedReportRoute
@@ -372,6 +381,7 @@ export interface FileRouteTypes {
     | '/join-pacing'
     | '/owner'
     | '/profile-updater'
+    | '/proxies'
     | '/recipes'
     | '/referrals'
     | '/report'
@@ -410,6 +420,7 @@ export interface FileRouteTypes {
     | '/join-pacing'
     | '/owner'
     | '/profile-updater'
+    | '/proxies'
     | '/recipes'
     | '/referrals'
     | '/report'
@@ -449,6 +460,7 @@ export interface FileRouteTypes {
     | '/_authenticated/join-pacing'
     | '/_authenticated/owner'
     | '/_authenticated/profile-updater'
+    | '/_authenticated/proxies'
     | '/_authenticated/recipes'
     | '/_authenticated/referrals'
     | '/_authenticated/report'
@@ -564,6 +576,13 @@ declare module '@tanstack/react-router' {
       path: '/recipes'
       fullPath: '/recipes'
       preLoaderRoute: typeof AuthenticatedRecipesRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
+    '/_authenticated/proxies': {
+      id: '/_authenticated/proxies'
+      path: '/proxies'
+      fullPath: '/proxies'
+      preLoaderRoute: typeof AuthenticatedProxiesRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
     '/_authenticated/profile-updater': {
@@ -765,6 +784,7 @@ interface AuthenticatedRouteRouteChildren {
   AuthenticatedJoinPacingRoute: typeof AuthenticatedJoinPacingRoute
   AuthenticatedOwnerRoute: typeof AuthenticatedOwnerRoute
   AuthenticatedProfileUpdaterRoute: typeof AuthenticatedProfileUpdaterRoute
+  AuthenticatedProxiesRoute: typeof AuthenticatedProxiesRoute
   AuthenticatedRecipesRoute: typeof AuthenticatedRecipesRoute
   AuthenticatedReferralsRoute: typeof AuthenticatedReferralsRoute
   AuthenticatedReportRoute: typeof AuthenticatedReportRoute
@@ -792,6 +812,7 @@ const AuthenticatedRouteRouteChildren: AuthenticatedRouteRouteChildren = {
   AuthenticatedJoinPacingRoute: AuthenticatedJoinPacingRoute,
   AuthenticatedOwnerRoute: AuthenticatedOwnerRoute,
   AuthenticatedProfileUpdaterRoute: AuthenticatedProfileUpdaterRoute,
+  AuthenticatedProxiesRoute: AuthenticatedProxiesRoute,
   AuthenticatedRecipesRoute: AuthenticatedRecipesRoute,
   AuthenticatedReferralsRoute: AuthenticatedReferralsRoute,
   AuthenticatedReportRoute: AuthenticatedReportRoute,
