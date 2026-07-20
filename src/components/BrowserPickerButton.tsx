@@ -2,6 +2,7 @@ import { Copy, Globe } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { copyWithToast } from "@/lib/clipboard";
+import { toast } from "sonner";
 
 type BrowserOption = { id: string; label: string; build: (url: string) => string };
 
@@ -82,7 +83,7 @@ export function BrowserPickerButton({
         <button
           type="button"
           className="flex w-full items-center gap-2 rounded px-2 py-1.5 text-left text-xs hover:bg-muted"
-          onClick={() => copyWithToast(url, "Link copied")}
+          onClick={() => copyWithToast(url, toast, "Link copied")}
         >
           <Copy className="h-3.5 w-3.5" /> Copy link
         </button>
