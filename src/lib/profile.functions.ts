@@ -20,6 +20,39 @@ const bulkSchema = z.object({
   fields: fieldsSchema,
 });
 
+const singleSchema = z.object({ accountId: z.string().uuid() });
+
+export const getAccountProfile = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((d: unknown) => singleSchema.parse(d))
+  .handler(async ({ data, context }) => {
+    const { openClientForAccount } = await import("./cleanup.server");
+    const { Api } = await import("telegram");
+    const client = await openClientForAccount(context.supabase, data.accountId, { requireOwnerId: context.userId });
+    try {
+      const full = await client.invoke(new Api.users.GetFullUser({ id: "me" }));
+      const users = (full as { users?: unknown[] }).users ?? [];
+      const me = (users[0] ?? {}) as { firstName?: string; lastName?: string; username?: string };
+      const fullUser = (full as { fullUser?: { about?: string } }).fullUser;
+      let avatarDataUrl: string | null = null;
+      try {
+        const buf = await client.downloadProfilePhoto("me", { isBig: false });
+        if (buf && (buf as Buffer).length) {
+          avatarDataUrl = `data:image/jpeg;base64,${(buf as Buffer).toString("base64")}`;
+        }
+      } catch { /* no photo */ }
+      return {
+        firstName: me.firstName ?? "",
+        lastName: me.lastName ?? "",
+        username: me.username ?? "",
+        bio: fullUser?.about ?? "",
+        avatarDataUrl,
+      };
+    } finally {
+      await client.disconnect().catch(() => {});
+    }
+  });
+
 export const updateProfileBulk = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .inputValidator((d: unknown) => bulkSchema.parse(d))
