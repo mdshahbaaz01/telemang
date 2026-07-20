@@ -1,5 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { forwardRef, useEffect, useImperativeHandle, useMemo, useRef, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
 import { toast } from "sonner";
@@ -14,7 +14,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Loader2, UserCog, RefreshCw } from "lucide-react";
+import { Loader2, UserCog, RefreshCw, Plus, ChevronDown, ChevronUp, X, PlayCircle } from "lucide-react";
 import { requireAdminBeforeLoad } from "@/lib/access-guard";
 
 export const Route = createFileRoute("/_authenticated/profile-updater")({
@@ -112,7 +112,7 @@ function ProfileUpdater() {
         </TabsList>
 
         <TabsContent value="single">
-          <SingleEditor accounts={accounts} getProfileFn={getProfileFn} runFn={runFn} />
+          <SlotsEditor accounts={accounts} getProfileFn={getProfileFn} runFn={runFn} />
         </TabsContent>
 
         <TabsContent value="bulk" className="space-y-4">
@@ -195,15 +195,105 @@ function ProfileUpdater() {
 
 type AccountLite = { id: string; first_name?: string | null; phone?: string | null; username?: string | null; status?: string | null };
 
-function SingleEditor({
+type GetProfileFn = (args: { data: { accountId: string } }) => Promise<{ firstName: string; lastName: string; username: string; bio: string; avatarDataUrl: string | null }>;
+type RunFn = (args: { data: { accountIds: string[]; fields: Record<string, unknown> } }) => Promise<{ results: Array<{ accountId: string; ok: boolean; message: string }> }>;
+
+type SlotHandle = { save: () => Promise<{ ok: boolean; message: string } | null> };
+
+function SlotsEditor({
   accounts,
   getProfileFn,
   runFn,
 }: {
   accounts: AccountLite[];
-  getProfileFn: (args: { data: { accountId: string } }) => Promise<{ firstName: string; lastName: string; username: string; bio: string; avatarDataUrl: string | null }>;
-  runFn: (args: { data: { accountIds: string[]; fields: Record<string, unknown> } }) => Promise<{ results: Array<{ accountId: string; ok: boolean; message: string }> }>;
+  getProfileFn: GetProfileFn;
+  runFn: RunFn;
 }) {
+  const [slots, setSlots] = useState<Array<{ key: string; minimized: boolean }>>([
+    { key: `s-${Date.now()}`, minimized: false },
+  ]);
+  const refs = useRef<Record<string, SlotHandle | null>>({});
+  const [busyAll, setBusyAll] = useState(false);
+
+  const addSlot = () =>
+    setSlots((prev) => [
+      ...prev.map((s) => ({ ...s, minimized: true })),
+      { key: `s-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`, minimized: false },
+    ]);
+
+  const removeSlot = (key: string) => {
+    delete refs.current[key];
+    setSlots((prev) => prev.filter((s) => s.key !== key));
+  };
+
+  const toggleMin = (key: string) =>
+    setSlots((prev) => prev.map((s) => (s.key === key ? { ...s, minimized: !s.minimized } : s)));
+
+  const proceedAll = async () => {
+    setBusyAll(true);
+    try {
+      const entries = slots.map((s) => refs.current[s.key]).filter(Boolean) as SlotHandle[];
+      const results = await Promise.all(entries.map((h) => h.save().catch(() => null)));
+      const ok = results.filter((r) => r?.ok).length;
+      const total = results.length;
+      if (ok === total) toast.success(`All ${total} account(s) updated`);
+      else toast.error(`Updated ${ok}/${total} — check per-slot results`);
+    } finally {
+      setBusyAll(false);
+    }
+  };
+
+  return (
+    <div className="space-y-3">
+      <div className="flex flex-wrap items-center gap-2">
+        <Button size="sm" variant="outline" onClick={addSlot}>
+          <Plus className="mr-1 h-4 w-4" /> New slot
+        </Button>
+        <Button size="sm" onClick={proceedAll} disabled={busyAll || slots.length === 0}>
+          {busyAll ? <Loader2 className="mr-1 h-4 w-4 animate-spin" /> : <PlayCircle className="mr-1 h-4 w-4" />}
+          Proceed all ({slots.length})
+        </Button>
+        <span className="text-xs text-muted-foreground">Queue multiple accounts and run every edit in parallel.</span>
+      </div>
+
+      <div className="space-y-3">
+        {slots.map((s, idx) => (
+          <SlotCard
+            key={s.key}
+            ref={(h) => {
+              refs.current[s.key] = h;
+            }}
+            index={idx + 1}
+            minimized={s.minimized}
+            onToggleMin={() => toggleMin(s.key)}
+            onRemove={() => removeSlot(s.key)}
+            accounts={accounts}
+            getProfileFn={getProfileFn}
+            runFn={runFn}
+          />
+        ))}
+        {slots.length === 0 && (
+          <div className="rounded border border-dashed p-6 text-center text-sm text-muted-foreground">
+            No slots. Click <span className="font-medium">New slot</span> to add one.
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+const SlotCard = forwardRef<
+  SlotHandle,
+  {
+    index: number;
+    minimized: boolean;
+    onToggleMin: () => void;
+    onRemove: () => void;
+    accounts: AccountLite[];
+    getProfileFn: GetProfileFn;
+    runFn: RunFn;
+  }
+>(function SlotCard({ index, minimized, onToggleMin, onRemove, accounts, getProfileFn, runFn }, ref) {
   const [accountId, setAccountId] = useState<string>("");
   const [firstName, setFirst] = useState("");
   const [lastName, setLast] = useState("");
@@ -244,7 +334,7 @@ function SingleEditor({
   const selected = accounts.find((a) => a.id === accountId);
 
   const save = async () => {
-    if (!accountId) return;
+    if (!accountId) return null;
     setSaving(true);
     setResult(null);
     try {
@@ -274,25 +364,42 @@ function SingleEditor({
         },
       });
       const r = out.results[0];
-      setResult(r);
-      if (r?.ok) {
-        toast.success("Profile updated");
-        loadProfile(accountId);
-      } else {
-        toast.error(r?.message ?? "Update failed");
-      }
+      setResult(r ?? null);
+      return r ?? null;
     } catch (e) {
-      toast.error((e as Error).message);
+      const msg = (e as Error).message;
+      setResult({ ok: false, message: msg });
+      return { ok: false, message: msg };
     } finally {
       setSaving(false);
     }
   };
 
+  useImperativeHandle(ref, () => ({ save }));
+
+  const title = accountId
+    ? `#${index} · ${selected?.first_name ?? selected?.phone ?? accountId.slice(0, 8)}${selected?.username ? ` @${selected.username}` : ""}`
+    : `#${index} · (no account)`;
+
   return (
     <Card>
-      <CardHeader>
-        <CardTitle className="text-base">Edit a single account</CardTitle>
+      <CardHeader className="flex flex-row items-center justify-between gap-2 py-3">
+        <CardTitle className="flex-1 truncate text-sm">
+          {title}
+          {result && (
+            <span className={`ml-2 text-xs ${result.ok ? "text-green-600" : "text-red-600"}`}>• {result.message}</span>
+          )}
+        </CardTitle>
+        <div className="flex shrink-0 items-center gap-1">
+          <Button size="icon" variant="ghost" onClick={onToggleMin} title={minimized ? "Expand" : "Minimize"}>
+            {minimized ? <ChevronDown className="h-4 w-4" /> : <ChevronUp className="h-4 w-4" />}
+          </Button>
+          <Button size="icon" variant="ghost" onClick={onRemove} title="Remove slot">
+            <X className="h-4 w-4" />
+          </Button>
+        </div>
       </CardHeader>
+      {!minimized && (
       <CardContent className="space-y-4">
         <div className="flex items-end gap-2">
           <div className="flex-1">
@@ -348,7 +455,18 @@ function SingleEditor({
             </div>
 
             <div className="flex items-center gap-2">
-              <Button onClick={save} disabled={saving || loading}>
+              <Button
+                onClick={async () => {
+                  const r = await save();
+                  if (r?.ok) {
+                    toast.success("Profile updated");
+                    loadProfile(accountId);
+                  } else if (r) {
+                    toast.error(r.message);
+                  }
+                }}
+                disabled={saving || loading}
+              >
                 {saving ? <Loader2 className="mr-1 h-4 w-4 animate-spin" /> : <UserCog className="mr-1 h-4 w-4" />}
                 Save changes
               </Button>
@@ -359,6 +477,7 @@ function SingleEditor({
           </>
         )}
       </CardContent>
+      )}
     </Card>
   );
-}
+});
