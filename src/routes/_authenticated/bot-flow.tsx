@@ -1495,14 +1495,25 @@ function VerifyFrame({ url, accountId }: { url: string; accountId: string }) {
   const iframeRef = useRef<HTMLIFrameElement | null>(null);
   const [retrySeed, setRetrySeed] = useState(0);
   const [blocked, setBlocked] = useState<{ text?: string } | null>(null);
+  const [directMode, setDirectMode] = useState(false);
   const { url: proxied } = useMiniAppProxyUrl(url, accountId, { fpSeed: retrySeed || undefined });
   useTelegramWebviewBridge(iframeRef, { onBlocked: (details) => setBlocked({ text: details.text }) });
   return (
     <div className="relative h-full w-full flex-1">
+      <div className="absolute right-2 top-2 z-10 rounded-md border border-border bg-background/95 p-1 shadow-sm backdrop-blur">
+        <Button
+          size="sm"
+          variant={directMode ? "secondary" : "outline"}
+          className="h-7 px-2 text-[11px]"
+          onClick={() => { setDirectMode((v) => !v); setBlocked(null); setRetrySeed(Date.now()); }}
+        >
+          {directMode ? "Direct device" : "Proxy mode"}
+        </Button>
+      </div>
       <iframe
-        key={retrySeed}
+        key={`${directMode ? "direct" : "proxy"}:${retrySeed}`}
         ref={iframeRef}
-        src={proxied ?? "about:blank"}
+        src={directMode ? url : proxied ?? "about:blank"}
         title="Verification runner"
         className="h-full w-full flex-1 border-0"
         allow="clipboard-read; clipboard-write; camera; microphone; geolocation; payment"
@@ -1517,6 +1528,11 @@ function VerifyFrame({ url, accountId }: { url: string; accountId: string }) {
             <Button size="sm" variant="secondary" onClick={() => { setBlocked(null); setRetrySeed(Date.now()); }}>
               <RefreshCw className="mr-1 h-3.5 w-3.5" /> Retry new device
             </Button>
+            {!directMode && (
+              <Button size="sm" variant="outline" onClick={() => { setDirectMode(true); setBlocked(null); setRetrySeed(Date.now()); }}>
+                Direct device mode
+              </Button>
+            )}
             <BrowserPickerButton url={url} size="sm" variant="outline" />
           </div>
         </div>
@@ -1554,6 +1570,7 @@ function BulkVerifyRunner({
   const [runNonce, setRunNonce] = useState(0);
   const [openLogs, setOpenLogs] = useState<Record<string, boolean>>({});
   const [stableDevice, setStableDevice] = useState(true);
+  const [directMode, setDirectMode] = useState(false);
   const iframeRefs = useRef<Record<string, HTMLIFrameElement | null>>({});
 
   // Stable fingerprint per account: same seed every run for the same account,
@@ -1710,6 +1727,21 @@ function BulkVerifyRunner({
           <span className="text-muted-foreground">
             (recommended) — reuse the same fingerprint for each account across runs instead of a fresh one.
             Sites that block repeat / same-device attempts are flagged as <em>manual</em> instead of faked as success.
+          </span>
+        </span>
+      </label>
+
+      <label className="flex items-start gap-2 rounded-md border border-border bg-muted/20 p-2 text-xs">
+        <input
+          type="checkbox"
+          className="mt-0.5"
+          checked={directMode}
+          onChange={(e) => setDirectMode(e.target.checked)}
+        />
+        <span>
+          <span className="font-medium">Direct device mode</span>{" "}
+          <span className="text-muted-foreground">
+            Opens verification URLs from your browser/IP instead of the server proxy for sites that show “Telegram Required” or “Connection Lost”.
           </span>
         </span>
       </label>
@@ -1894,6 +1926,7 @@ function BulkVerifyRunner({
                   url={r.url}
                   accountId={r.accountId}
                   fpSeed={r.fpSeed}
+                  directMode={directMode}
                   iframeRef={(el) => { iframeRefs.current[r.id] = el; }}
                   onLoaded={() =>
                     appendLog(r.id, { ts: Date.now(), level: "info", msg: "iframe loaded" }, "running")
@@ -1961,12 +1994,14 @@ function BulkVerifyFrame({
   url,
   accountId,
   fpSeed,
+  directMode,
   iframeRef,
   onLoaded,
 }: {
   url: string;
   accountId: string;
   fpSeed: string;
+  directMode: boolean;
   iframeRef?: (el: HTMLIFrameElement | null) => void;
   onLoaded?: () => void;
 }) {
@@ -1978,12 +2013,12 @@ function BulkVerifyFrame({
   return (
     <div className="relative h-full w-full flex-1">
       <iframe
-        key={retrySeed}
+        key={`${directMode ? "direct" : "proxy"}:${retrySeed}`}
         ref={(el) => {
           localRef.current = el;
           iframeRef?.(el);
         }}
-        src={proxied ?? "about:blank"}
+        src={directMode ? url : proxied ?? "about:blank"}
         title="Bulk verification runner"
         className="h-full w-full flex-1 border-0"
         allow="clipboard-read; clipboard-write; camera; microphone; geolocation; payment"
@@ -2012,6 +2047,7 @@ function MiniAppFrameImpl({ url, title, accountId, botUsername }: { url: string;
   const joinFn = useServerFn(joinFromLink);
   const { url: proxiedUrl } = useMiniAppProxyUrl(url, accountId);
   const [nonce, setNonce] = useState(0);
+  const [directMode, setDirectMode] = useState(false);
   const [overlay, setOverlay] = useState<
     | { status: "loading"; url: string }
     | { status: "ready"; url: string; peerKey: string; title: string; note: string }
@@ -2059,7 +2095,7 @@ function MiniAppFrameImpl({ url, title, accountId, botUsername }: { url: string;
       <iframe
         key={`${url}#${nonce}`}
         ref={ref}
-        src={proxiedUrl ?? "about:blank"}
+        src={directMode ? url : proxiedUrl ?? "about:blank"}
         title={title}
         name={`tgminiapp-${accountId}`}
         className="h-full w-full border-0"
@@ -2094,7 +2130,17 @@ function MiniAppFrameImpl({ url, title, accountId, botUsername }: { url: string;
               </div>
             )}
             {overlay.status === "error" && (
-              <div className="p-3 text-xs text-destructive">{overlay.error}</div>
+              <div className="space-y-3 p-3 text-xs">
+                <div className="text-destructive">{overlay.error}</div>
+                <div className="flex flex-wrap gap-2">
+                  {!directMode && (
+                    <Button size="sm" variant="outline" onClick={() => { setDirectMode(true); setOverlay(null); setNonce((n) => n + 1); }}>
+                      Direct device mode
+                    </Button>
+                  )}
+                  <BrowserPickerButton url={overlay.url} size="sm" variant="outline" />
+                </div>
+              </div>
             )}
             {overlay.status === "ready" && (
               <iframe
