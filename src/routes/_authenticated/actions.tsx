@@ -169,6 +169,18 @@ function formatIst(d: Date): string {
   return `${IST_FORMATTER.format(d)} IST`;
 }
 
+function clampConcurrency(value: unknown, fallback = 5): number {
+  const n = Number(value);
+  if (!Number.isFinite(n)) return fallback;
+  return Math.max(1, Math.min(20, Math.floor(n)));
+}
+
+function sanitizeRunPayload(payload: unknown): unknown {
+  if (!payload || typeof payload !== "object") return payload;
+  const p = payload as Record<string, unknown>;
+  return { ...p, concurrency: clampConcurrency(p.concurrency) };
+}
+
 // Convert a Date to an IST wall-clock string suitable for <input type="datetime-local" step="1">.
 function dateToIstInput(d: Date): string {
   const parts = new Intl.DateTimeFormat("en-CA", {
@@ -440,10 +452,10 @@ function ActionsPageInner() {
   const [concurrency, setConcurrency] = useState<number>(() => {
     if (typeof window === "undefined") return 5;
     const v = Number(window.localStorage.getItem("tmpro:concurrency") || 5);
-    return Number.isFinite(v) && v >= 1 && v <= 50 ? v : 5;
+    return clampConcurrency(v);
   });
   useEffect(() => {
-    try { window.localStorage.setItem("tmpro:concurrency", String(concurrency)); } catch {}
+    try { window.localStorage.setItem("tmpro:concurrency", String(clampConcurrency(concurrency))); } catch {}
   }, [concurrency]);
   const [rows, setRows] = useState<BroadcastRow[]>([
     { id: "broadcast-row-1", message: "", targets: "" },
@@ -674,7 +686,7 @@ function ActionsPageInner() {
           accountIds: runAccountIds,
           minDelay,
           maxDelay,
-          concurrency,
+          concurrency: clampConcurrency(concurrency),
           op,
         }),
         signal: ac.signal,
@@ -738,7 +750,7 @@ function ActionsPageInner() {
       const res = await fetch("/api/public/actions-stream", {
         method: "POST",
         headers: { "content-type": "application/json", authorization: `Bearer ${token}` },
-        body: JSON.stringify(payload),
+        body: JSON.stringify(sanitizeRunPayload(payload)),
         signal: ac.signal,
       });
       await readStream(res);
@@ -793,7 +805,7 @@ function ActionsPageInner() {
       accountIds: [],
       minDelay,
       maxDelay,
-      concurrency,
+      concurrency: clampConcurrency(concurrency),
       op: { kind: "reply", source: src, viaDiscussion: tab === "comment", rows: cleaned },
     });
   };
@@ -878,7 +890,7 @@ function ActionsPageInner() {
           accountIds: [],
           minDelay,
           maxDelay,
-          concurrency,
+          concurrency: clampConcurrency(concurrency),
           op: { kind: "broadcast", rows: cleaned },
         }),
         signal: ac.signal,
@@ -1081,11 +1093,11 @@ function ActionsPageInner() {
             <Input
               type="number"
               min={1}
-              max={50}
+                max={20}
               value={concurrency}
               onChange={(e) => {
                 const v = Number(e.target.value);
-                setConcurrency(Number.isFinite(v) ? Math.max(1, Math.min(50, v)) : 5);
+                  setConcurrency(clampConcurrency(v));
               }}
               className="h-7 w-14"
             />

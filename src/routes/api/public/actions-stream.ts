@@ -139,7 +139,7 @@ const bodySchema = z.object({
   accountIds: z.array(z.string().uuid()).min(0).max(200).default([]),
   minDelay: z.number().int().min(0).max(60).default(1),
   maxDelay: z.number().int().min(0).max(60).default(2),
-  concurrency: z.number().int().min(1).max(20).default(5),
+  concurrency: z.coerce.number().int().min(1).max(20).catch(20).default(5),
   op: z.discriminatedUnion("kind", [reactSchema, forwardSchema, voteSchema, broadcastSchema, replySchema, botFlowSchema, editSchema, deleteMessagesSchema]),
 });
 
