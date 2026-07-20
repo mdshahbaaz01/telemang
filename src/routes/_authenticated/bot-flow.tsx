@@ -1587,9 +1587,20 @@ type BulkRow = {
 function BulkVerifyRunner({
   accountList,
 }: {
-  accountList: Array<{ id: string; first_name?: string | null; username?: string | null; phone?: string | null }>;
+  accountList: Array<{
+    id: string;
+    first_name?: string | null;
+    username?: string | null;
+    phone?: string | null;
+    telegram_user_id?: string | number | null;
+  }>;
 }) {
-  const [text, setText] = useState("");
+  type LinkEntry = { id: string; url: string; accountOverride?: string | null };
+  const mkEntry = (url = ""): LinkEntry => ({
+    id: `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`,
+    url,
+  });
+  const [entries, setEntries] = useState<LinkEntry[]>([mkEntry()]);
   const [selected, setSelected] = useState<string[]>([]);
   const [rows, setRows] = useState<BulkRow[]>([]);
   const [runNonce, setRunNonce] = useState(0);
@@ -1667,16 +1678,69 @@ function BulkVerifyRunner({
     return () => window.removeEventListener("message", onMsg);
   }, [appendLog]);
 
-  const parsedLinks = useMemo(() => {
-    return text
-      .split(/\r?\n/)
-      .map((l) => l.trim())
-      .filter(Boolean)
-      .map((l) => (/^https?:\/\//i.test(l) ? l : `https://${l}`))
-      .filter((l) => {
-        try { new URL(l); return true; } catch { return false; }
-      });
-  }, [text]);
+  const normalizeUrl = (raw: string) => {
+    const s = raw.trim();
+    if (!s) return "";
+    const withProto = /^https?:\/\//i.test(s) ? s : `https://${s}`;
+    try { new URL(withProto); return withProto; } catch { return ""; }
+  };
+  const parsedEntries = useMemo(
+    () =>
+      entries
+        .map((e) => ({ ...e, normalized: normalizeUrl(e.url) }))
+        .filter((e) => !!e.normalized),
+    [entries],
+  );
+  const parsedLinks = useMemo(() => parsedEntries.map((e) => e.normalized), [parsedEntries]);
+
+  const updateEntry = (id: string, patch: Partial<LinkEntry>) => {
+    setEntries((prev) => {
+      const next = prev.map((e) => (e.id === id ? { ...e, ...patch } : e));
+      const trimmed: LinkEntry[] = [];
+      for (let i = 0; i < next.length; i++) {
+        const cur = next[i];
+        const isLast = i === next.length - 1;
+        if (!cur.url.trim() && !isLast) continue;
+        trimmed.push(cur);
+      }
+      if (!trimmed.length || trimmed[trimmed.length - 1].url.trim() !== "") {
+        trimmed.push(mkEntry());
+      }
+      return trimmed;
+    });
+  };
+  const removeEntry = (id: string) => {
+    setEntries((prev) => {
+      const next = prev.filter((e) => e.id !== id);
+      if (!next.length || next[next.length - 1].url.trim() !== "") next.push(mkEntry());
+      return next;
+    });
+  };
+  const clearEntries = () => setEntries([mkEntry()]);
+  const pasteMany = (raw: string, targetId: string) => {
+    const lines = raw.split(/\r?\n/).map((l) => l.trim()).filter(Boolean);
+    if (lines.length <= 1) return false;
+    setEntries((prev) => {
+      const idx = prev.findIndex((e) => e.id === targetId);
+      const insertion = lines.map((u) => mkEntry(u));
+      const before = idx >= 0 ? prev.slice(0, idx) : prev;
+      const afterRaw = idx >= 0 ? prev.slice(idx + 1) : [];
+      const after = afterRaw.filter((e) => e.url.trim() !== "");
+      const merged = [...before, ...insertion, ...after];
+      if (!merged.length || merged[merged.length - 1].url.trim() !== "") merged.push(mkEntry());
+      return merged;
+    });
+    return true;
+  };
+
+  const entryAccountFor = (normalized: string): string | null => {
+    const s = parseVerifyLinkSession(normalized);
+    if (!s.userId) return null;
+    const m = accountList.find(
+      (a) => a.telegram_user_id != null && String(a.telegram_user_id) === s.userId,
+    );
+    return m ? m.id : null;
+  };
 
   const toggleAcc = (id: string) =>
     setSelected((prev) => (prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]));
@@ -1684,22 +1748,30 @@ function BulkVerifyRunner({
   const selectNone = () => setSelected([]);
 
   const buildRows = () => {
-    if (!parsedLinks.length) return toast.error("Paste at least one verification link");
-    const accs = selected.length ? selected : accountList.map((a) => a.id);
-    if (!accs.length) return toast.error("Select at least one account");
+    if (!parsedEntries.length) return toast.error("Add at least one verification link");
+    const pool = selected.length ? selected : accountList.map((a) => a.id);
     const salt = Date.now().toString(36);
-    const built: BulkRow[] = parsedLinks.map((url, i) => ({
-      id: `${salt}-${i}`,
-      url,
-      accountId: accs[i % accs.length],
-      // Stable per-account seed by default → same device is presented every
-      // time for that account. Turn off "Stable device" to use a fresh one.
-      fpSeed: stableDevice
-        ? stableSeedFor(accs[i % accs.length])
-        : `${salt}-${i}-${Math.random().toString(36).slice(2, 8)}`,
-      status: "queued" as BulkRowStatus,
-      logs: [] as BulkRowLog[],
-    }));
+    let rr = 0;
+    const built: BulkRow[] = [];
+    for (let i = 0; i < parsedEntries.length; i++) {
+      const e = parsedEntries[i];
+      const auto = entryAccountFor(e.normalized);
+      const accountId =
+        e.accountOverride || auto || (pool.length ? pool[rr++ % pool.length] : "");
+      if (!accountId) {
+        return toast.error("Select accounts, or use links with an embedded Telegram user id");
+      }
+      built.push({
+        id: `${salt}-${i}`,
+        url: e.normalized,
+        accountId,
+        fpSeed: stableDevice
+          ? stableSeedFor(accountId)
+          : `${salt}-${i}-${Math.random().toString(36).slice(2, 8)}`,
+        status: "queued" as BulkRowStatus,
+        logs: [] as BulkRowLog[],
+      });
+    }
     setRows(built);
     setRunNonce((n) => n + 1);
   };
@@ -1773,16 +1845,97 @@ function BulkVerifyRunner({
 
       <div className="grid gap-3 md:grid-cols-[1fr_260px]">
         <div>
-          <Label>Verification URLs (one per line)</Label>
-          <textarea
-            value={text}
-            onChange={(e) => setText(e.target.value)}
-            rows={6}
-            className="mt-1 w-full rounded-md border border-input bg-background p-2 font-mono text-xs"
-            placeholder={"https://bots.example.com/verify/xyz#tgWebAppData=...\nhttps://bots.example.com/verify/abc#tgWebAppData=..."}
-          />
+          <div className="flex items-center justify-between">
+            <Label>Verification links</Label>
+            {entries.some((e) => e.url.trim()) && (
+              <button
+                type="button"
+                className="text-[11px] underline text-muted-foreground"
+                onClick={clearEntries}
+              >
+                Clear all
+              </button>
+            )}
+          </div>
+          <div className="mt-1 space-y-2">
+            {entries.map((e, idx) => {
+              const normalized = normalizeUrl(e.url);
+              const auto = normalized ? entryAccountFor(normalized) : null;
+              const chosenId = e.accountOverride || auto || "";
+              const chosen = chosenId ? accountList.find((a) => a.id === chosenId) : null;
+              const chosenLabel = chosen
+                ? (chosen.first_name || chosen.username || chosen.phone || chosen.id.slice(0, 8))
+                : "";
+              const isLastEmpty = idx === entries.length - 1 && !e.url.trim();
+              return (
+                <div key={e.id} className="rounded-md border border-border bg-background p-2">
+                  <div className="flex items-start gap-2">
+                    <span className="mt-1.5 w-5 shrink-0 text-center text-[10px] text-muted-foreground">
+                      {idx + 1}
+                    </span>
+                    <div className="flex-1">
+                      <Input
+                        value={e.url}
+                        onChange={(ev) => updateEntry(e.id, { url: ev.target.value })}
+                        onPaste={(ev) => {
+                          const raw = ev.clipboardData.getData("text");
+                          if (pasteMany(raw, e.id)) ev.preventDefault();
+                        }}
+                        placeholder={
+                          idx === 0
+                            ? "https://bots.example.com/verify/xyz#tgWebAppData=..."
+                            : "Paste another link…"
+                        }
+                        className="font-mono text-xs"
+                      />
+                      {normalized && (
+                        <div className="mt-1 flex flex-wrap items-center gap-2 text-[10px] text-muted-foreground">
+                          {auto ? (
+                            <span className="rounded bg-green-500/15 px-1.5 py-0.5 text-green-600 dark:text-green-400">
+                              auto → {chosenLabel}
+                            </span>
+                          ) : (
+                            <span className="rounded bg-muted px-1.5 py-0.5">
+                              round-robin{chosenLabel ? ` → ${chosenLabel}` : ""}
+                            </span>
+                          )}
+                          <select
+                            className="rounded border border-input bg-background px-1 py-0.5 text-[10px]"
+                            value={e.accountOverride || ""}
+                            onChange={(ev) =>
+                              updateEntry(e.id, { accountOverride: ev.target.value || null })
+                            }
+                          >
+                            <option value="">
+                              {auto ? `keep auto (${chosenLabel})` : "auto / round-robin"}
+                            </option>
+                            {accountList.map((a) => (
+                              <option key={a.id} value={a.id}>
+                                {a.first_name || a.username || a.phone || a.id.slice(0, 8)}
+                              </option>
+                            ))}
+                          </select>
+                        </div>
+                      )}
+                    </div>
+                    {!isLastEmpty && (
+                      <button
+                        type="button"
+                        className="rounded p-1.5 text-muted-foreground hover:bg-muted"
+                        title="Remove"
+                        onClick={() => removeEntry(e.id)}
+                      >
+                        <X className="h-3.5 w-3.5" />
+                      </button>
+                    )}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
           <div className="mt-1 text-[11px] text-muted-foreground">
-            {parsedLinks.length} valid link(s) parsed.
+            {parsedLinks.length} valid link(s) ·{" "}
+            {parsedEntries.filter((e) => entryAccountFor(e.normalized)).length} auto-matched
           </div>
         </div>
         <div>
