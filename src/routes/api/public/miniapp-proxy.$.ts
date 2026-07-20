@@ -23,7 +23,182 @@ const STRIP_HEADERS = new Set([
   "content-encoding",
   "transfer-encoding",
   "connection",
+  "set-cookie",
 ]);
+
+const COOKIE_JAR_NAME = "miniapp_proxy_cj";
+
+type StoredCookie = {
+  value: string;
+  domain: string;
+  path: string;
+  expires?: number;
+  secure?: boolean;
+  created: number;
+};
+
+type CookieJar = Record<string, Record<string, StoredCookie>>;
+
+function b64urlEncode(value: string): string {
+  return Buffer.from(value, "utf8").toString("base64").replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+}
+
+function b64urlDecode(value: string): string {
+  const padded = value.replace(/-/g, "+").replace(/_/g, "/") + "===".slice((value.length + 3) % 4);
+  return Buffer.from(padded, "base64").toString("utf8");
+}
+
+function readCookieValue(request: Request, cookieName: string): string | null {
+  const cookie = request.headers.get("cookie");
+  if (!cookie) return null;
+  for (const part of cookie.split(";")) {
+    const eq = part.indexOf("=");
+    if (eq === -1) continue;
+    const name = part.slice(0, eq).trim();
+    if (name === cookieName) {
+      try {
+        return decodeURIComponent(part.slice(eq + 1).trim());
+      } catch {
+        return part.slice(eq + 1).trim();
+      }
+    }
+  }
+  return null;
+}
+
+function readCookieJar(request: Request): CookieJar {
+  const raw = readCookieValue(request, COOKIE_JAR_NAME);
+  if (!raw) return {};
+  try {
+    const parsed = JSON.parse(b64urlDecode(raw)) as CookieJar;
+    return parsed && typeof parsed === "object" ? parsed : {};
+  } catch {
+    return {};
+  }
+}
+
+function serializeCookieJar(jar: CookieJar): string {
+  pruneExpiredCookies(jar);
+  let encoded = b64urlEncode(JSON.stringify(jar));
+  if (encoded.length <= 3600) return encoded;
+
+  const all = Object.entries(jar).flatMap(([domain, cookies]) =>
+    Object.entries(cookies).map(([name, cookie]) => ({ domain, name, created: cookie.created || 0 })),
+  );
+  all.sort((a, b) => a.created - b.created);
+  for (const item of all) {
+    delete jar[item.domain]?.[item.name];
+    if (jar[item.domain] && Object.keys(jar[item.domain]).length === 0) delete jar[item.domain];
+    encoded = b64urlEncode(JSON.stringify(jar));
+    if (encoded.length <= 3600) return encoded;
+  }
+  return b64urlEncode("{}");
+}
+
+function defaultCookiePath(pathname: string): string {
+  if (!pathname || !pathname.startsWith("/")) return "/";
+  const slash = pathname.lastIndexOf("/");
+  return slash <= 0 ? "/" : pathname.slice(0, slash + 1);
+}
+
+function splitSetCookieHeader(value: string): string[] {
+  return value.split(/,(?=\s*[^;,\s=]+=)/g).map((part) => part.trim()).filter(Boolean);
+}
+
+function getSetCookieHeaders(headers: Headers): string[] {
+  const withGetter = headers as Headers & { getSetCookie?: () => string[] };
+  const values = typeof withGetter.getSetCookie === "function" ? withGetter.getSetCookie() : [];
+  if (values.length) return values;
+  const single = headers.get("set-cookie");
+  return single ? splitSetCookieHeader(single) : [];
+}
+
+function parseSetCookie(raw: string, url: URL): { name: string; cookie: StoredCookie | null; domain: string } | null {
+  const parts = raw.split(";").map((part) => part.trim()).filter(Boolean);
+  const first = parts.shift();
+  if (!first) return null;
+  const eq = first.indexOf("=");
+  if (eq <= 0) return null;
+  const name = first.slice(0, eq).trim();
+  const value = first.slice(eq + 1);
+  let domain = url.hostname.toLowerCase();
+  let path = defaultCookiePath(url.pathname);
+  let expires: number | undefined;
+  let secure = false;
+  let deleteCookie = false;
+
+  for (const attrRaw of parts) {
+    const attrEq = attrRaw.indexOf("=");
+    const key = (attrEq === -1 ? attrRaw : attrRaw.slice(0, attrEq)).trim().toLowerCase();
+    const attrValue = attrEq === -1 ? "" : attrRaw.slice(attrEq + 1).trim();
+    if (key === "domain" && attrValue) domain = attrValue.replace(/^\./, "").toLowerCase();
+    if (key === "path" && attrValue.startsWith("/")) path = attrValue;
+    if (key === "secure") secure = true;
+    if (key === "max-age") {
+      const seconds = Number(attrValue);
+      if (Number.isFinite(seconds)) {
+        if (seconds <= 0) deleteCookie = true;
+        else expires = Date.now() + seconds * 1000;
+      }
+    }
+    if (key === "expires") {
+      const ts = Date.parse(attrValue);
+      if (Number.isFinite(ts)) {
+        if (ts <= Date.now()) deleteCookie = true;
+        else expires = ts;
+      }
+    }
+  }
+
+  if (deleteCookie) return { name, domain, cookie: null };
+  return { name, domain, cookie: { value, domain, path, expires, secure, created: Date.now() } };
+}
+
+function domainMatches(hostname: string, domain: string): boolean {
+  const host = hostname.toLowerCase();
+  const d = domain.replace(/^\./, "").toLowerCase();
+  return host === d || host.endsWith(`.${d}`);
+}
+
+function pathMatches(pathname: string, cookiePath: string): boolean {
+  return pathname === cookiePath || pathname.startsWith(cookiePath.endsWith("/") ? cookiePath : `${cookiePath}/`);
+}
+
+function pruneExpiredCookies(jar: CookieJar) {
+  const now = Date.now();
+  for (const [domain, cookies] of Object.entries(jar)) {
+    for (const [name, cookie] of Object.entries(cookies)) {
+      if (cookie.expires && cookie.expires <= now) delete cookies[name];
+    }
+    if (Object.keys(cookies).length === 0) delete jar[domain];
+  }
+}
+
+function mergeSetCookies(jar: CookieJar, url: URL, rawSetCookies: string[]) {
+  if (!rawSetCookies.length) return;
+  for (const raw of rawSetCookies) {
+    const parsed = parseSetCookie(raw, url);
+    if (!parsed) continue;
+    jar[parsed.domain] = jar[parsed.domain] || {};
+    if (parsed.cookie) jar[parsed.domain][parsed.name] = parsed.cookie;
+    else delete jar[parsed.domain][parsed.name];
+    if (Object.keys(jar[parsed.domain]).length === 0) delete jar[parsed.domain];
+  }
+}
+
+function cookieHeaderForTarget(jar: CookieJar, url: URL): string {
+  pruneExpiredCookies(jar);
+  const pairs: string[] = [];
+  for (const [domain, cookies] of Object.entries(jar)) {
+    if (!domainMatches(url.hostname, domain)) continue;
+    for (const [name, cookie] of Object.entries(cookies)) {
+      if (cookie.secure && url.protocol !== "https:") continue;
+      if (!pathMatches(url.pathname || "/", cookie.path || "/")) continue;
+      pairs.push(`${name}=${cookie.value}`);
+    }
+  }
+  return pairs.join("; ");
+}
 
 function toTelegramUserAgent(fp: ReturnType<typeof deriveMiniAppIdentity>["fingerprint"]) {
   const base = fp.userAgent;
@@ -847,6 +1022,7 @@ async function handle(request: Request, params: { _splat?: string }) {
   const accountId = proxyReqUrl.searchParams.get("a") || "anon";
   const token = proxyReqUrl.searchParams.get("t") || readTokenCookie(request);
   const captchaEnabled = proxyReqUrl.searchParams.get("cap") === "1";
+  const cookieJar = readCookieJar(request);
   // Optional per-run fingerprint seed. When present, the derived
   // navigator/screen/timezone/UA identity varies even for the same
   // account, so the bot sees a different "device" on each run.
@@ -932,12 +1108,17 @@ async function handle(request: Request, params: { _splat?: string }) {
     const MAX_REDIRECTS = 5;
     let hop = 0;
     while (true) {
+      const currentTargetUrl = new URL(currentUrl);
+      const upstreamCookie = cookieHeaderForTarget(cookieJar, currentTargetUrl);
+      if (upstreamCookie) upstreamHeaders.set("cookie", upstreamCookie);
+      else upstreamHeaders.delete("cookie");
       const resp = await fetch(viaProxy(currentUrl), {
         method,
         headers: upstreamHeaders,
         body: bodyBuf,
         redirect: "manual",
       });
+      mergeSetCookies(cookieJar, currentTargetUrl, getSetCookieHeaders(resp.headers));
       if (resp.status >= 300 && resp.status < 400 && resp.headers.get("location")) {
         if (++hop > MAX_REDIRECTS) {
           return new Response("Too many redirects", { status: 502 });
@@ -992,6 +1173,10 @@ async function handle(request: Request, params: { _splat?: string }) {
     "set-cookie",
     `miniapp_proxy_t=${encodeURIComponent(token!)}; Path=/api/public/miniapp-proxy/; Max-Age=3600; HttpOnly; Secure; SameSite=None`,
   );
+  outHeaders.append(
+    "set-cookie",
+    `${COOKIE_JAR_NAME}=${encodeURIComponent(serializeCookieJar(cookieJar))}; Path=/api/public/miniapp-proxy/; Max-Age=3600; HttpOnly; Secure; SameSite=None`,
+  );
 
   const ctype = upstream.headers.get("content-type") || "";
   if (ctype.includes("text/html")) {
@@ -1045,21 +1230,7 @@ async function handle(request: Request, params: { _splat?: string }) {
 }
 
 function readTokenCookie(request: Request): string | null {
-  const cookie = request.headers.get("cookie");
-  if (!cookie) return null;
-  for (const part of cookie.split(";")) {
-    const eq = part.indexOf("=");
-    if (eq === -1) continue;
-    const name = part.slice(0, eq).trim();
-    if (name === "miniapp_proxy_t") {
-      try {
-        return decodeURIComponent(part.slice(eq + 1).trim());
-      } catch {
-        return part.slice(eq + 1).trim();
-      }
-    }
-  }
-  return null;
+  return readCookieValue(request, "miniapp_proxy_t");
 }
 
 export const Route = createFileRoute("/api/public/miniapp-proxy/$")({
