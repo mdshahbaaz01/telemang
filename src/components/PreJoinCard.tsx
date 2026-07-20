@@ -298,6 +298,9 @@ export function PreJoinCard({ accounts }: { accounts: Account[] }) {
           <History className="mr-1 h-4 w-4" />
           {historyOpen ? "Hide history" : `History${history.length ? ` (${history.length})` : ""}`}
         </Button>
+        <Button asChild size="sm" variant="outline">
+          <Link to="/join-pacing">Audit log</Link>
+        </Button>
         <Button size="sm" variant="ghost" onClick={() => setHidden((v) => !v)}>
           {hidden ? <ChevronDown className="mr-1 h-4 w-4" /> : <ChevronUp className="mr-1 h-4 w-4" />}
           {hidden ? "Show" : "Hide"}
@@ -418,12 +421,29 @@ export function PreJoinCard({ accounts }: { accounts: Account[] }) {
                               <span
                                 key={c.channel}
                                 className={`rounded px-1.5 py-0.5 font-mono text-[11px] ${STATUS_STYLES[c.status]}`}
-                                title={`${c.channel} · ${c.status} · ${new Date(c.ts).toLocaleTimeString()}${c.message ? ` — ${c.message}` : ""}`}
+                                title={`${c.channel} · ${c.status}${c.attempts ? ` · ${c.attempts} attempt${c.attempts > 1 ? "s" : ""}` : ""} · ${new Date(c.ts).toLocaleTimeString()}${c.reason ? `\nReason: ${c.reason}` : ""}${c.message ? `\nLog: ${c.message}` : ""}`}
                               >
                                 {c.channel}
+                                {c.attempts && c.attempts > 1 ? <span className="ml-1 opacity-70">×{c.attempts}</span> : null}
                               </span>
                             ))}
                           </div>
+                          {list.some((c) => c.status === "failed" || c.status === "requested") && (
+                            <ul className="mt-2 space-y-0.5 border-t border-border/50 pt-2 text-[11px]">
+                              {list
+                                .filter((c) => c.status === "failed" || c.status === "requested")
+                                .slice(0, 6)
+                                .map((c) => (
+                                  <li key={`r-${c.channel}`} className="flex items-start gap-2">
+                                    <span className={`shrink-0 rounded px-1 py-px text-[10px] ${STATUS_STYLES[c.status]}`}>{c.status}</span>
+                                    <span className="font-mono text-muted-foreground truncate">{c.channel}</span>
+                                    <span className="min-w-0 flex-1 truncate text-foreground/80" title={c.reason || c.message}>
+                                      {c.reason || c.message || "—"}
+                                    </span>
+                                  </li>
+                                ))}
+                            </ul>
+                          )}
                         </div>
                       );
                     });
