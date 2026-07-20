@@ -33,6 +33,7 @@ export function MiniAppDrawer({
   const [error, setError] = useState<string | null>(null);
   const [reloadNonce, setReloadNonce] = useState(0);
   const [blocked, setBlocked] = useState<{ text?: string } | null>(null);
+  const [directMode, setDirectMode] = useState(false);
   const iframeRef = useRef<HTMLIFrameElement | null>(null);
   useTelegramWebviewBridge(iframeRef, { onBlocked: (details) => setBlocked({ text: details.text }) });
   const solve = useServerFn(solveCaptcha);
@@ -100,13 +101,15 @@ export function MiniAppDrawer({
     return () => window.removeEventListener("message", handler);
   }, [solve, request?.accountId]);
 
-  const { url: iframeUrl } = useMiniAppProxyUrl(resolvedUrl, request?.accountId ?? "anon", { captcha: true });
+  const { url: proxiedUrl } = useMiniAppProxyUrl(resolvedUrl, request?.accountId ?? "anon", { captcha: true });
+  const iframeUrl = directMode ? resolvedUrl : proxiedUrl;
 
   useEffect(() => {
     if (!open || !request) {
       setResolvedUrl(null);
       setError(null);
       setReloadNonce(0);
+        setDirectMode(false);
       setCapLogs([]);
       return;
     }
@@ -114,6 +117,7 @@ export function MiniAppDrawer({
     setLoading(true);
     setError(null);
     setBlocked(null);
+    setDirectMode(false);
     resolver(request)
       .then((res) => {
         if (cancelled) return;
@@ -149,6 +153,18 @@ export function MiniAppDrawer({
               {resolvedUrl ? new URL(resolvedUrl).host : "resolving…"}
             </div>
           </div>
+          {resolvedUrl && (
+            <Button
+              type="button"
+              variant={directMode ? "secondary" : "outline"}
+              size="sm"
+              className="h-8 gap-1 px-2 text-xs"
+              onClick={() => { setDirectMode((v) => !v); setBlocked(null); setReloadNonce((n) => n + 1); }}
+              title="Load from your device instead of the server proxy"
+            >
+              {directMode ? "Direct" : "Proxy"}
+            </Button>
+          )}
           {resolvedUrl && (
             <Button
               type="button"
@@ -205,6 +221,11 @@ export function MiniAppDrawer({
                     <Button size="sm" variant="secondary" onClick={() => { setBlocked(null); setReloadNonce((n) => n + 1); }}>
                       <RefreshCw className="mr-1 h-3.5 w-3.5" /> Retry
                     </Button>
+                    {!directMode && (
+                      <Button size="sm" variant="outline" onClick={() => { setDirectMode(true); setBlocked(null); setReloadNonce((n) => n + 1); }}>
+                        Direct device mode
+                      </Button>
+                    )}
                     <BrowserPickerButton url={resolvedUrl} size="sm" variant="outline" />
                   </div>
                 </div>

@@ -38,7 +38,7 @@ const SECURITY_HEADERS: Record<string, string> = {
     "img-src 'self' data: blob: https:",
     "media-src 'self' data: blob: https:",
     "connect-src 'self' https://*.supabase.co wss://*.supabase.co https://api.telegram.org https://*.lovable.app https://*.lovable.dev https://ai.gateway.lovable.dev",
-    "frame-src 'self' https://telegram.org https://*.telegram.org https://t.me https://*.t.me https://*.lovable.app https://*.lovable.dev https://*.lovableproject.com",
+    "frame-src 'self' https: blob:",
     "worker-src 'self' blob:",
     "frame-ancestors 'self' https://*.lovable.app https://*.lovable.dev https://*.lovableproject.com",
     "base-uri 'self'",
