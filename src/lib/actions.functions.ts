@@ -172,7 +172,7 @@ export const loadPoll = createServerFn({ method: "POST" })
         const firstOpt = p.answers?.[0]?.option;
         if (firstOpt) {
           try {
-            await client.invoke(new Api.messages.SendVote({ peer, msgId: data.msgId, options: [firstOpt] }));
+            await client.invoke(new Api.messages.SendVote({ peer, msgId: data.msgId, options: [Buffer.from(firstOpt)] }));
             // Immediately retract by sending an empty options array.
             await client.invoke(new Api.messages.SendVote({ peer, msgId: data.msgId, options: [] }));
           } catch {
