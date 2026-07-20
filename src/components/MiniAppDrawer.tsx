@@ -189,7 +189,7 @@ export function MiniAppDrawer({
                 name={`tgminiapp-${request?.accountId ?? "drawer"}`}
                 className="h-full w-full border-0"
                 allow="clipboard-read; clipboard-write; camera; microphone; geolocation; payment"
-                sandbox="allow-scripts allow-same-origin allow-forms allow-modals allow-popups allow-popups-to-escape-sandbox allow-storage-access-by-user-activation"
+                sandbox="allow-scripts allow-same-origin allow-forms allow-modals allow-popups allow-popups-to-escape-sandbox allow-storage-access-by-user-activation allow-top-navigation-by-user-activation"
                 referrerPolicy="no-referrer-when-downgrade"
                 onError={() =>
                   setError(

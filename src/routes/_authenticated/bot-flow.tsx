@@ -1506,7 +1506,7 @@ function VerifyFrame({ url, accountId }: { url: string; accountId: string }) {
         title="Verification runner"
         className="h-full w-full flex-1 border-0"
         allow="clipboard-read; clipboard-write; camera; microphone; geolocation; payment"
-        sandbox="allow-scripts allow-same-origin allow-forms allow-modals allow-popups allow-popups-to-escape-sandbox allow-storage-access-by-user-activation"
+        sandbox="allow-scripts allow-same-origin allow-forms allow-modals allow-popups allow-popups-to-escape-sandbox allow-storage-access-by-user-activation allow-top-navigation-by-user-activation"
         referrerPolicy="no-referrer-when-downgrade"
       />
       {blocked && (
@@ -1987,7 +1987,7 @@ function BulkVerifyFrame({
         title="Bulk verification runner"
         className="h-full w-full flex-1 border-0"
         allow="clipboard-read; clipboard-write; camera; microphone; geolocation; payment"
-        sandbox="allow-scripts allow-same-origin allow-forms allow-modals allow-popups allow-popups-to-escape-sandbox allow-storage-access-by-user-activation"
+        sandbox="allow-scripts allow-same-origin allow-forms allow-modals allow-popups allow-popups-to-escape-sandbox allow-storage-access-by-user-activation allow-top-navigation-by-user-activation"
         referrerPolicy="no-referrer-when-downgrade"
         onLoad={onLoaded}
       />
@@ -2064,7 +2064,7 @@ function MiniAppFrameImpl({ url, title, accountId, botUsername }: { url: string;
         name={`tgminiapp-${accountId}`}
         className="h-full w-full border-0"
         allow="clipboard-read; clipboard-write; camera; microphone; geolocation; payment"
-        sandbox="allow-scripts allow-same-origin allow-forms allow-modals allow-popups allow-popups-to-escape-sandbox allow-storage-access-by-user-activation"
+        sandbox="allow-scripts allow-same-origin allow-forms allow-modals allow-popups allow-popups-to-escape-sandbox allow-storage-access-by-user-activation allow-top-navigation-by-user-activation"
         referrerPolicy="no-referrer-when-downgrade"
       />
       {overlay && (
