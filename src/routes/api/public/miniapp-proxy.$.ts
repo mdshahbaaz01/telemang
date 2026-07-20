@@ -25,8 +25,28 @@ const STRIP_HEADERS = new Set([
   "connection",
 ]);
 
+function toTelegramUserAgent(fp: ReturnType<typeof deriveMiniAppIdentity>["fingerprint"]) {
+  const base = fp.userAgent;
+  if (/Telegram-(Android|iOS)\//i.test(base)) return base;
+  if (fp.platform.includes("iPhone")) {
+    return `${base} Telegram-iOS/11.7`;
+  }
+  const androidVersion = /Android\s+([\d.]+)/i.exec(base)?.[1] || "14";
+  const model = /;\s*([^;)]+)\)\s*AppleWebKit/i.exec(base)?.[1]?.trim() || "Pixel 7";
+  const sdk = androidVersion.startsWith("12") ? "31" : androidVersion.startsWith("13") ? "33" : "34";
+  return `${base} Telegram-Android/11.7.4 (${model}; Android ${androidVersion}; SDK ${sdk}; HIGH)`;
+}
+
 function buildOverrideScript(accountId: string, upstreamUrl: string, token: string, enableCaptcha: boolean) {
-  const fp = deriveMiniAppIdentity(accountId).fingerprint;
+  const identity = deriveMiniAppIdentity(accountId);
+  const fp = identity.fingerprint;
+  const telegramUserAgent = toTelegramUserAgent(fp);
+  const telegramDefaults = {
+    platform: identity.platform,
+    colorScheme: identity.colorScheme,
+    themeParams: identity.themeParams,
+    version: "8.0",
+  };
   const captchaBridge = enableCaptcha ? `
   // ---------- Captcha auto-detect + solver bridge ----------
   try {
@@ -188,6 +208,9 @@ function buildOverrideScript(accountId: string, upstreamUrl: string, token: stri
     const ACCT = ${JSON.stringify(accountId)};
     const TOKEN = ${JSON.stringify(token)};
     const UPSTREAM = ${JSON.stringify(upstreamUrl)};
+    const TELEGRAM_UA = ${JSON.stringify(telegramUserAgent)};
+    const TG_DEFAULTS = ${JSON.stringify(telegramDefaults)};
+    const TG_PLATFORM = TG_DEFAULTS.platform || (String(fp.platform || '').includes('iPhone') ? 'ios' : 'android');
     const PROXY_PREFIX = '/api/public/miniapp-proxy/';
     const upstreamOrigin = (() => { try { return new URL(UPSTREAM).origin; } catch { return null; } })();
     try {
