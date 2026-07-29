@@ -756,16 +756,56 @@ export const joinFromLink = createServerFn({ method: "POST" })
       let entity: any = null;
       let joined = false;
       let alreadyMember = false;
+      let requested = false;
       if (inviteMatch) {
         const hash = inviteMatch[1];
         try {
-          const upd: any = await client.invoke(new Api.messages.ImportChatInvite({ hash }));
-          joined = true;
-          const chat = upd?.chats?.[0];
-          if (chat) entity = chat;
+          const { joinTelegramTargetVerified } = await import("./telegram-join-helper.server");
+          const res = await joinTelegramTargetVerified({
+            client,
+            Api,
+            target: `+${hash}`,
+            publicInviteFallback: true,
+          });
+          requested = res.status === "requested";
+          joined = res.status === "joined";
+          alreadyMember = res.status === "already";
+          if (requested) {
+            let title = `Invite +${hash.slice(0, 8)}…`;
+            try {
+              const info: any = await client.invoke(new Api.messages.CheckChatInvite({ hash }));
+              title = String(info?.title ?? title);
+            } catch {}
+            return {
+              peerKey: "",
+              title,
+              joined: false,
+              alreadyMember: false,
+              requested: true,
+            };
+          }
+          try {
+            const info: any = await client.invoke(new Api.messages.CheckChatInvite({ hash }));
+            entity = info?.chat ?? info?.channel ?? null;
+          } catch {}
+          if (!entity && res.canonicalTarget) entity = await client.getEntity(res.canonicalTarget);
         } catch (e) {
           const em = (e as Error).message || "";
-          if (em.includes("USER_ALREADY_PARTICIPANT")) {
+          if (/INVITE_REQUEST_SENT|INVITE_REQUEST_ALREADY_SENT|REQUEST_SENT/i.test(em)) {
+            requested = true;
+            let title = `Invite +${hash.slice(0, 8)}…`;
+            try {
+              const info: any = await client.invoke(new Api.messages.CheckChatInvite({ hash }));
+              title = String(info?.title ?? title);
+            } catch {}
+            return {
+              peerKey: "",
+              title,
+              joined: false,
+              alreadyMember: false,
+              requested,
+            };
+          } else if (em.includes("USER_ALREADY_PARTICIPANT")) {
             alreadyMember = true;
             try {
               const info: any = await client.invoke(new Api.messages.CheckChatInvite({ hash }));
