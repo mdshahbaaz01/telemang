@@ -2506,6 +2506,7 @@ function MiniAppFrameImpl({ url, title, accountId, botUsername }: { url: string;
   const [overlay, setOverlay] = useState<
     | { status: "loading"; url: string }
     | { status: "ready"; url: string; peerKey: string; title: string; note: string }
+    | { status: "requested"; url: string; title: string; note: string }
     | { status: "error"; url: string; error: string }
     | null
   >(null);
@@ -2527,6 +2528,15 @@ function MiniAppFrameImpl({ url, title, accountId, botUsername }: { url: string;
       setOverlay({ status: "loading", url: link });
       joinFn({ data: { accountId, url: link } })
         .then((res) => {
+          if (res.requested) {
+            setOverlay({
+              status: "requested",
+              url: link,
+              title: res.title,
+              note: "Join request sent — waiting for admin approval",
+            });
+            return;
+          }
           setOverlay({
             status: "ready",
             url: link,
@@ -2571,10 +2581,10 @@ function MiniAppFrameImpl({ url, title, accountId, botUsername }: { url: string;
             </button>
             <div className="min-w-0 flex-1">
               <div className="truncate font-semibold">
-                {overlay.status === "ready" ? overlay.title : "Opening…"}
+                {overlay.status === "ready" || overlay.status === "requested" ? overlay.title : "Opening…"}
               </div>
               <div className="truncate text-[10px] text-muted-foreground">
-                {overlay.status === "ready" ? overlay.note : overlay.url}
+                {overlay.status === "ready" || overlay.status === "requested" ? overlay.note : overlay.url}
               </div>
             </div>
           </div>
@@ -2595,6 +2605,16 @@ function MiniAppFrameImpl({ url, title, accountId, botUsername }: { url: string;
                   )}
                   <BrowserPickerButton url={overlay.url} size="sm" variant="outline" />
                 </div>
+              </div>
+            )}
+            {overlay.status === "requested" && (
+              <div className="flex h-full flex-col items-center justify-center gap-3 p-4 text-center text-xs">
+                <UserPlus className="h-8 w-8 text-primary" />
+                <div className="text-sm font-semibold">Join request sent</div>
+                <div className="max-w-xs text-muted-foreground">{overlay.note}</div>
+                <Button size="sm" variant="outline" onClick={() => setOverlay(null)}>
+                  Back to verification
+                </Button>
               </div>
             )}
             {overlay.status === "ready" && (
