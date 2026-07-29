@@ -26,12 +26,12 @@ export const listFeatureRequests = createServerFn({ method: "GET" })
     const owner = !!isOwner;
     const { data, error } = await context.supabase
       .from("feature_requests")
-      .select("*")
+      .select("id,user_id,title,description,category,status,priority,votes_count,created_at,updated_at")
       .order("votes_count", { ascending: false })
       .order("created_at", { ascending: false })
       .limit(300);
     if (error) throw new Error(error.message);
-    const rows = (data ?? []) as FeatureRequestRow[];
+    const rows = ((data ?? []) as any[]).map((r) => ({ ...r, owner_note: null })) as FeatureRequestRow[];
     const ids = rows.map((r) => r.id);
     let voted = new Set<string>();
     if (ids.length) {
@@ -44,17 +44,25 @@ export const listFeatureRequests = createServerFn({ method: "GET" })
     }
     // Emails are owner-only to prevent PII harvesting by regular users.
     const emails = new Map<string, string>();
+    const ownerNotes = new Map<string, string | null>();
     if (owner) {
       const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
       const { data: list } = await supabaseAdmin.auth.admin.listUsers({ page: 1, perPage: 200 });
       for (const u of list?.users ?? []) if (u.email) emails.set(u.id, u.email);
+      if (ids.length) {
+        const { data: notes } = await supabaseAdmin
+          .from("feature_requests")
+          .select("id,owner_note")
+          .in("id", ids);
+        for (const n of notes ?? []) ownerNotes.set((n as any).id, (n as any).owner_note ?? null);
+      }
     }
     return rows.map((r) => {
       const mine = r.user_id === context.userId;
       return {
         ...r,
         // Private triage field — hide from non-owners
-        owner_note: owner ? r.owner_note : null,
+        owner_note: owner ? (ownerNotes.get(r.id) ?? null) : null,
         email: owner ? (emails.get(r.user_id) ?? "") : "",
         voted: voted.has(r.id),
         mine,
