@@ -35,6 +35,7 @@ import { Route as AuthenticatedBotSuccessRouteImport } from './routes/_authentic
 import { Route as AuthenticatedBotFlowRouteImport } from './routes/_authenticated/bot-flow'
 import { Route as AuthenticatedAnalyticsRouteImport } from './routes/_authenticated/analytics'
 import { Route as AuthenticatedActionsRouteImport } from './routes/_authenticated/actions'
+import { Route as ApiPublicForwardRangeStreamRouteImport } from './routes/api/public/forward-range-stream'
 import { Route as ApiPublicCleanupStreamRouteImport } from './routes/api/public/cleanup-stream'
 import { Route as ApiPublicBulkStreamRouteImport } from './routes/api/public/bulk-stream'
 import { Route as ApiPublicActionsStreamRouteImport } from './routes/api/public/actions-stream'
@@ -180,6 +181,12 @@ const AuthenticatedActionsRoute = AuthenticatedActionsRouteImport.update({
   path: '/actions',
   getParentRoute: () => AuthenticatedRouteRoute,
 } as any)
+const ApiPublicForwardRangeStreamRoute =
+  ApiPublicForwardRangeStreamRouteImport.update({
+    id: '/api/public/forward-range-stream',
+    path: '/api/public/forward-range-stream',
+    getParentRoute: () => rootRouteImport,
+  } as any)
 const ApiPublicCleanupStreamRoute = ApiPublicCleanupStreamRouteImport.update({
   id: '/api/public/cleanup-stream',
   path: '/api/public/cleanup-stream',
@@ -283,6 +290,7 @@ export interface FileRoutesByFullPath {
   '/api/public/actions-stream': typeof ApiPublicActionsStreamRoute
   '/api/public/bulk-stream': typeof ApiPublicBulkStreamRoute
   '/api/public/cleanup-stream': typeof ApiPublicCleanupStreamRoute
+  '/api/public/forward-range-stream': typeof ApiPublicForwardRangeStreamRoute
   '/api/public/hooks/auto-leave': typeof ApiPublicHooksAutoLeaveRoute
   '/api/public/hooks/daily-summary': typeof ApiPublicHooksDailySummaryRoute
   '/api/public/hooks/resume-stuck': typeof ApiPublicHooksResumeStuckRoute
@@ -323,6 +331,7 @@ export interface FileRoutesByTo {
   '/api/public/actions-stream': typeof ApiPublicActionsStreamRoute
   '/api/public/bulk-stream': typeof ApiPublicBulkStreamRoute
   '/api/public/cleanup-stream': typeof ApiPublicCleanupStreamRoute
+  '/api/public/forward-range-stream': typeof ApiPublicForwardRangeStreamRoute
   '/api/public/hooks/auto-leave': typeof ApiPublicHooksAutoLeaveRoute
   '/api/public/hooks/daily-summary': typeof ApiPublicHooksDailySummaryRoute
   '/api/public/hooks/resume-stuck': typeof ApiPublicHooksResumeStuckRoute
@@ -365,6 +374,7 @@ export interface FileRoutesById {
   '/api/public/actions-stream': typeof ApiPublicActionsStreamRoute
   '/api/public/bulk-stream': typeof ApiPublicBulkStreamRoute
   '/api/public/cleanup-stream': typeof ApiPublicCleanupStreamRoute
+  '/api/public/forward-range-stream': typeof ApiPublicForwardRangeStreamRoute
   '/api/public/hooks/auto-leave': typeof ApiPublicHooksAutoLeaveRoute
   '/api/public/hooks/daily-summary': typeof ApiPublicHooksDailySummaryRoute
   '/api/public/hooks/resume-stuck': typeof ApiPublicHooksResumeStuckRoute
@@ -407,6 +417,7 @@ export interface FileRouteTypes {
     | '/api/public/actions-stream'
     | '/api/public/bulk-stream'
     | '/api/public/cleanup-stream'
+    | '/api/public/forward-range-stream'
     | '/api/public/hooks/auto-leave'
     | '/api/public/hooks/daily-summary'
     | '/api/public/hooks/resume-stuck'
@@ -447,6 +458,7 @@ export interface FileRouteTypes {
     | '/api/public/actions-stream'
     | '/api/public/bulk-stream'
     | '/api/public/cleanup-stream'
+    | '/api/public/forward-range-stream'
     | '/api/public/hooks/auto-leave'
     | '/api/public/hooks/daily-summary'
     | '/api/public/hooks/resume-stuck'
@@ -488,6 +500,7 @@ export interface FileRouteTypes {
     | '/api/public/actions-stream'
     | '/api/public/bulk-stream'
     | '/api/public/cleanup-stream'
+    | '/api/public/forward-range-stream'
     | '/api/public/hooks/auto-leave'
     | '/api/public/hooks/daily-summary'
     | '/api/public/hooks/resume-stuck'
@@ -504,6 +517,7 @@ export interface RootRouteChildren {
   ApiPublicActionsStreamRoute: typeof ApiPublicActionsStreamRoute
   ApiPublicBulkStreamRoute: typeof ApiPublicBulkStreamRoute
   ApiPublicCleanupStreamRoute: typeof ApiPublicCleanupStreamRoute
+  ApiPublicForwardRangeStreamRoute: typeof ApiPublicForwardRangeStreamRoute
   ApiPublicHooksAutoLeaveRoute: typeof ApiPublicHooksAutoLeaveRoute
   ApiPublicHooksDailySummaryRoute: typeof ApiPublicHooksDailySummaryRoute
   ApiPublicHooksResumeStuckRoute: typeof ApiPublicHooksResumeStuckRoute
@@ -696,6 +710,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedActionsRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
+    '/api/public/forward-range-stream': {
+      id: '/api/public/forward-range-stream'
+      path: '/api/public/forward-range-stream'
+      fullPath: '/api/public/forward-range-stream'
+      preLoaderRoute: typeof ApiPublicForwardRangeStreamRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/api/public/cleanup-stream': {
       id: '/api/public/cleanup-stream'
       path: '/api/public/cleanup-stream'
@@ -859,6 +880,7 @@ const rootRouteChildren: RootRouteChildren = {
   ApiPublicActionsStreamRoute: ApiPublicActionsStreamRoute,
   ApiPublicBulkStreamRoute: ApiPublicBulkStreamRoute,
   ApiPublicCleanupStreamRoute: ApiPublicCleanupStreamRoute,
+  ApiPublicForwardRangeStreamRoute: ApiPublicForwardRangeStreamRoute,
   ApiPublicHooksAutoLeaveRoute: ApiPublicHooksAutoLeaveRoute,
   ApiPublicHooksDailySummaryRoute: ApiPublicHooksDailySummaryRoute,
   ApiPublicHooksResumeStuckRoute: ApiPublicHooksResumeStuckRoute,
