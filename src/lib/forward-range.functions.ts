@@ -33,6 +33,80 @@ async function resolvePeer(client: any, Api: any, key: string) {
   }
 }
 
+function messageKind(m: any): string {
+  if (!m) return "empty";
+  if (m.media?.className === "MessageMediaPhoto") return "photo";
+  if (m.media?.className === "MessageMediaDocument") {
+    const attrs = m.media?.document?.attributes ?? [];
+    if (attrs.some((a: any) => a.className === "DocumentAttributeVideo")) return "video";
+    if (attrs.some((a: any) => a.className === "DocumentAttributeAudio")) return "audio";
+    if (attrs.some((a: any) => a.className === "DocumentAttributeSticker")) return "sticker";
+    return "document";
+  }
+  if (m.media?.className === "MessageMediaWebPage") return "link";
+  if (m.message) return "text";
+  return "service";
+}
+
+function messageExcerpt(m: any): string {
+  const txt = String(m?.message ?? m?.caption ?? "").replace(/\s+/g, " ").trim();
+  if (txt) return txt.length > 90 ? txt.slice(0, 87) + "…" : txt;
+  const k = messageKind(m);
+  return k === "text" ? "(empty)" : `[${k}]`;
+}
+
+const PreviewSchema = z.object({
+  accountId: z.string().uuid(),
+  sourcePeerKey: z.string().min(1),
+  fromMsgId: z.number().int().min(1),
+  toMsgId: z.number().int().min(1),
+  sample: z.number().int().min(1).max(200).default(60),
+});
+
+export const previewMessageRange = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((d: unknown) => PreviewSchema.parse(d))
+  .handler(async ({ data, context }) => {
+    const lo = Math.min(data.fromMsgId, data.toMsgId);
+    const hi = Math.max(data.fromMsgId, data.toMsgId);
+    if (hi - lo > 5000) throw new Error("Range too large (max 5000 messages).");
+
+    const { openClientForAccount } = await import("./cleanup.server");
+    const { Api } = await import("telegram");
+    const client = await openClientForAccount(context.supabase, data.accountId);
+    try {
+      const src = await resolvePeer(client, Api, data.sourcePeerKey);
+      const allIds: number[] = [];
+      for (let i = lo; i <= hi; i++) allIds.push(i);
+      const items: Array<{ id: number; kind: string; excerpt: string }> = [];
+      let existingCount = 0;
+      for (let i = 0; i < allIds.length; i += 200) {
+        const chunk = allIds.slice(i, i + 200);
+        try {
+          const res: any = await client.getMessages(src, { ids: chunk });
+          const arr = Array.isArray(res) ? res : [res];
+          for (const m of arr) {
+            if (!m || (m.className ?? "").includes("Empty") || !m.id) continue;
+            existingCount++;
+            items.push({ id: Number(m.id), kind: messageKind(m), excerpt: messageExcerpt(m) });
+          }
+        } catch {}
+      }
+      items.sort((a, b) => a.id - b.id);
+      const sample = items.slice(0, data.sample);
+      return {
+        total: hi - lo + 1,
+        existing: existingCount,
+        missing: (hi - lo + 1) - existingCount,
+        firstId: items[0]?.id ?? null,
+        lastId: items[items.length - 1]?.id ?? null,
+        sample,
+      };
+    } finally {
+      await client.disconnect().catch(() => {});
+    }
+  });
+
 export const forwardMessageRange = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .inputValidator((d: unknown) => InputSchema.parse(d))
