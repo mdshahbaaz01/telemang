@@ -25,6 +25,7 @@ import { Route as AuthenticatedProfileUpdaterRouteImport } from './routes/_authe
 import { Route as AuthenticatedOwnerRouteImport } from './routes/_authenticated/owner'
 import { Route as AuthenticatedJoinPacingRouteImport } from './routes/_authenticated/join-pacing'
 import { Route as AuthenticatedHealthRouteImport } from './routes/_authenticated/health'
+import { Route as AuthenticatedForwardRangeRouteImport } from './routes/_authenticated/forward-range'
 import { Route as AuthenticatedDashboardRouteImport } from './routes/_authenticated/dashboard'
 import { Route as AuthenticatedCleanupRouteImport } from './routes/_authenticated/cleanup'
 import { Route as AuthenticatedCaptchaRouteImport } from './routes/_authenticated/captcha'
@@ -128,6 +129,12 @@ const AuthenticatedHealthRoute = AuthenticatedHealthRouteImport.update({
   path: '/health',
   getParentRoute: () => AuthenticatedRouteRoute,
 } as any)
+const AuthenticatedForwardRangeRoute =
+  AuthenticatedForwardRangeRouteImport.update({
+    id: '/forward-range',
+    path: '/forward-range',
+    getParentRoute: () => AuthenticatedRouteRoute,
+  } as any)
 const AuthenticatedDashboardRoute = AuthenticatedDashboardRouteImport.update({
   id: '/dashboard',
   path: '/dashboard',
@@ -256,6 +263,7 @@ export interface FileRoutesByFullPath {
   '/captcha': typeof AuthenticatedCaptchaRoute
   '/cleanup': typeof AuthenticatedCleanupRoute
   '/dashboard': typeof AuthenticatedDashboardRoute
+  '/forward-range': typeof AuthenticatedForwardRangeRoute
   '/health': typeof AuthenticatedHealthRoute
   '/join-pacing': typeof AuthenticatedJoinPacingRoute
   '/owner': typeof AuthenticatedOwnerRoute
@@ -295,6 +303,7 @@ export interface FileRoutesByTo {
   '/captcha': typeof AuthenticatedCaptchaRoute
   '/cleanup': typeof AuthenticatedCleanupRoute
   '/dashboard': typeof AuthenticatedDashboardRoute
+  '/forward-range': typeof AuthenticatedForwardRangeRoute
   '/health': typeof AuthenticatedHealthRoute
   '/join-pacing': typeof AuthenticatedJoinPacingRoute
   '/owner': typeof AuthenticatedOwnerRoute
@@ -336,6 +345,7 @@ export interface FileRoutesById {
   '/_authenticated/captcha': typeof AuthenticatedCaptchaRoute
   '/_authenticated/cleanup': typeof AuthenticatedCleanupRoute
   '/_authenticated/dashboard': typeof AuthenticatedDashboardRoute
+  '/_authenticated/forward-range': typeof AuthenticatedForwardRangeRoute
   '/_authenticated/health': typeof AuthenticatedHealthRoute
   '/_authenticated/join-pacing': typeof AuthenticatedJoinPacingRoute
   '/_authenticated/owner': typeof AuthenticatedOwnerRoute
@@ -377,6 +387,7 @@ export interface FileRouteTypes {
     | '/captcha'
     | '/cleanup'
     | '/dashboard'
+    | '/forward-range'
     | '/health'
     | '/join-pacing'
     | '/owner'
@@ -416,6 +427,7 @@ export interface FileRouteTypes {
     | '/captcha'
     | '/cleanup'
     | '/dashboard'
+    | '/forward-range'
     | '/health'
     | '/join-pacing'
     | '/owner'
@@ -456,6 +468,7 @@ export interface FileRouteTypes {
     | '/_authenticated/captcha'
     | '/_authenticated/cleanup'
     | '/_authenticated/dashboard'
+    | '/_authenticated/forward-range'
     | '/_authenticated/health'
     | '/_authenticated/join-pacing'
     | '/_authenticated/owner'
@@ -611,6 +624,13 @@ declare module '@tanstack/react-router' {
       path: '/health'
       fullPath: '/health'
       preLoaderRoute: typeof AuthenticatedHealthRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
+    '/_authenticated/forward-range': {
+      id: '/_authenticated/forward-range'
+      path: '/forward-range'
+      fullPath: '/forward-range'
+      preLoaderRoute: typeof AuthenticatedForwardRangeRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
     '/_authenticated/dashboard': {
@@ -780,6 +800,7 @@ interface AuthenticatedRouteRouteChildren {
   AuthenticatedCaptchaRoute: typeof AuthenticatedCaptchaRoute
   AuthenticatedCleanupRoute: typeof AuthenticatedCleanupRoute
   AuthenticatedDashboardRoute: typeof AuthenticatedDashboardRoute
+  AuthenticatedForwardRangeRoute: typeof AuthenticatedForwardRangeRoute
   AuthenticatedHealthRoute: typeof AuthenticatedHealthRoute
   AuthenticatedJoinPacingRoute: typeof AuthenticatedJoinPacingRoute
   AuthenticatedOwnerRoute: typeof AuthenticatedOwnerRoute
@@ -808,6 +829,7 @@ const AuthenticatedRouteRouteChildren: AuthenticatedRouteRouteChildren = {
   AuthenticatedCaptchaRoute: AuthenticatedCaptchaRoute,
   AuthenticatedCleanupRoute: AuthenticatedCleanupRoute,
   AuthenticatedDashboardRoute: AuthenticatedDashboardRoute,
+  AuthenticatedForwardRangeRoute: AuthenticatedForwardRangeRoute,
   AuthenticatedHealthRoute: AuthenticatedHealthRoute,
   AuthenticatedJoinPacingRoute: AuthenticatedJoinPacingRoute,
   AuthenticatedOwnerRoute: AuthenticatedOwnerRoute,
