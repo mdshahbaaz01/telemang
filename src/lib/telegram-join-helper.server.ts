@@ -309,25 +309,35 @@ export async function joinTelegramTargetVerified(args: {
         };
       }
 
-      if (!requestNeeded && chat?.username) {
-        const entity = await client.getEntity(chat.username);
-        return joinEntityVerified(client, Api, entity, `@${chat.username}`, "peek_username", log);
+      // If the invite peek already exposes a public username, join that
+      // directly — works for both open and approval-flagged invites when the
+      // channel itself is public.
+      if (chat?.username) {
+        try {
+          const entity = await client.getEntity(chat.username);
+          return await joinEntityVerified(client, Api, entity, `@${chat.username}`, "peek_username", log);
+        } catch (error) {
+          log?.("info", `Direct public join via @${chat.username} failed (${extractTelegramErrorCode(textOf(error)) ?? "err"}); trying search fallback…`);
+        }
       }
 
-      // Some bots save an approval-required +invite link even though the
-      // channel/group itself is public. In that case Telegram may return
-      // INVITE_REQUEST_SENT when joining through the invite hash, while joining
-      // the public username works immediately. Search by the invite preview
-      // title first and join the verified public match before falling back to
-      // the private/request flow.
-      if (!requestNeeded) {
-        const searched = await findPublicUsernameByInvitePreview(client, Api, peekInfo, log);
-        if (searched?.username) {
+      // Many bots store an approval-required +invite link for a channel that
+      // is actually public with a searchable username. Always try to resolve
+      // the public username from the invite preview title (regardless of the
+      // requestNeeded flag) and join it directly before falling back to the
+      // private request flow.
+      const searched = await findPublicUsernameByInvitePreview(client, Api, peekInfo, log);
+      if (searched?.username) {
+        try {
           const entity = await client.getEntity(searched.username);
-          return joinEntityVerified(client, Api, entity, `@${searched.username}`, "peek_search_username", log);
+          return await joinEntityVerified(client, Api, entity, `@${searched.username}`, "peek_search_username", log);
+        } catch (error) {
+          log?.("info", `Public search join via @${searched.username} failed (${extractTelegramErrorCode(textOf(error)) ?? "err"}); falling back to invite import…`);
         }
-      } else {
-        log?.("info", `Invite +${inviteHash.slice(0, 8)}… requires admin approval; sending real join request through invite import`);
+      }
+
+      if (requestNeeded) {
+        log?.("info", `Invite +${inviteHash.slice(0, 8)}… requires admin approval and no public username matched; sending real join request through invite import`);
       }
 
       if (!requestNeeded && chat && cn === "ChatInvitePeek") {
