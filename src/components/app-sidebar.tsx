@@ -111,6 +111,7 @@ const items: Item[] = [
   { id: "report", title: "Bulk Report", to: "/report", icon: Flag },
   { id: "proxies", title: "Proxies", to: "/proxies", icon: Globe },
   { id: "forward-range", title: "Forward Range", to: "/forward-range", icon: Forward },
+  { id: "join-requests", title: "Join Requests", to: "/join-requests", icon: Send },
 ];
 
 // Owner-only items — always hidden from non-owner regardless of features.
