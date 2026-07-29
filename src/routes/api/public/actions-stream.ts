@@ -947,8 +947,12 @@ export const Route = createFileRoute("/api/public/actions-stream")({
                 const extractHandle = (raw: string): string | null => {
                   const s = raw.trim();
                   if (!s) return null;
-                  if (s.startsWith("@")) return s.slice(1);
-                  const m = s.match(/(?:t(?:elegram)?\.me\/)?(\+[A-Za-z0-9_-]+|joinchat\/[A-Za-z0-9_-]+|[A-Za-z0-9_]{4,})/i);
+                  const normalized = s
+                    .replace(/[?#].*$/, "")
+                    .replace(/^@/, "")
+                    .replace(/^(?:https?:\/\/)?(?:www\.)?(?:t\.me|telegram\.me)\//i, "")
+                    .replace(/^joinchat\//i, "+");
+                  const m = normalized.match(/^(\+[A-Za-z0-9_-]+|[A-Za-z0-9_]{4,})$/i);
                   return m ? m[1] : null;
                 };
                 // Join a single channel/invite, with smart handling of small
