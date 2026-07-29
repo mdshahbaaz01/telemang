@@ -23,6 +23,7 @@ import { Route as AuthenticatedRecipesRouteImport } from './routes/_authenticate
 import { Route as AuthenticatedProxiesRouteImport } from './routes/_authenticated/proxies'
 import { Route as AuthenticatedProfileUpdaterRouteImport } from './routes/_authenticated/profile-updater'
 import { Route as AuthenticatedOwnerRouteImport } from './routes/_authenticated/owner'
+import { Route as AuthenticatedJoinRequestsRouteImport } from './routes/_authenticated/join-requests'
 import { Route as AuthenticatedJoinPacingRouteImport } from './routes/_authenticated/join-pacing'
 import { Route as AuthenticatedHealthRouteImport } from './routes/_authenticated/health'
 import { Route as AuthenticatedForwardRangeRouteImport } from './routes/_authenticated/forward-range'
@@ -35,6 +36,7 @@ import { Route as AuthenticatedBotSuccessRouteImport } from './routes/_authentic
 import { Route as AuthenticatedBotFlowRouteImport } from './routes/_authenticated/bot-flow'
 import { Route as AuthenticatedAnalyticsRouteImport } from './routes/_authenticated/analytics'
 import { Route as AuthenticatedActionsRouteImport } from './routes/_authenticated/actions'
+import { Route as ApiPublicJoinRequestsStreamRouteImport } from './routes/api/public/join-requests-stream'
 import { Route as ApiPublicForwardRangeStreamRouteImport } from './routes/api/public/forward-range-stream'
 import { Route as ApiPublicCleanupStreamRouteImport } from './routes/api/public/cleanup-stream'
 import { Route as ApiPublicBulkStreamRouteImport } from './routes/api/public/bulk-stream'
@@ -120,6 +122,12 @@ const AuthenticatedOwnerRoute = AuthenticatedOwnerRouteImport.update({
   path: '/owner',
   getParentRoute: () => AuthenticatedRouteRoute,
 } as any)
+const AuthenticatedJoinRequestsRoute =
+  AuthenticatedJoinRequestsRouteImport.update({
+    id: '/join-requests',
+    path: '/join-requests',
+    getParentRoute: () => AuthenticatedRouteRoute,
+  } as any)
 const AuthenticatedJoinPacingRoute = AuthenticatedJoinPacingRouteImport.update({
   id: '/join-pacing',
   path: '/join-pacing',
@@ -181,6 +189,12 @@ const AuthenticatedActionsRoute = AuthenticatedActionsRouteImport.update({
   path: '/actions',
   getParentRoute: () => AuthenticatedRouteRoute,
 } as any)
+const ApiPublicJoinRequestsStreamRoute =
+  ApiPublicJoinRequestsStreamRouteImport.update({
+    id: '/api/public/join-requests-stream',
+    path: '/api/public/join-requests-stream',
+    getParentRoute: () => rootRouteImport,
+  } as any)
 const ApiPublicForwardRangeStreamRoute =
   ApiPublicForwardRangeStreamRouteImport.update({
     id: '/api/public/forward-range-stream',
@@ -273,6 +287,7 @@ export interface FileRoutesByFullPath {
   '/forward-range': typeof AuthenticatedForwardRangeRoute
   '/health': typeof AuthenticatedHealthRoute
   '/join-pacing': typeof AuthenticatedJoinPacingRoute
+  '/join-requests': typeof AuthenticatedJoinRequestsRoute
   '/owner': typeof AuthenticatedOwnerRoute
   '/profile-updater': typeof AuthenticatedProfileUpdaterRoute
   '/proxies': typeof AuthenticatedProxiesRoute
@@ -291,6 +306,7 @@ export interface FileRoutesByFullPath {
   '/api/public/bulk-stream': typeof ApiPublicBulkStreamRoute
   '/api/public/cleanup-stream': typeof ApiPublicCleanupStreamRoute
   '/api/public/forward-range-stream': typeof ApiPublicForwardRangeStreamRoute
+  '/api/public/join-requests-stream': typeof ApiPublicJoinRequestsStreamRoute
   '/api/public/hooks/auto-leave': typeof ApiPublicHooksAutoLeaveRoute
   '/api/public/hooks/daily-summary': typeof ApiPublicHooksDailySummaryRoute
   '/api/public/hooks/resume-stuck': typeof ApiPublicHooksResumeStuckRoute
@@ -314,6 +330,7 @@ export interface FileRoutesByTo {
   '/forward-range': typeof AuthenticatedForwardRangeRoute
   '/health': typeof AuthenticatedHealthRoute
   '/join-pacing': typeof AuthenticatedJoinPacingRoute
+  '/join-requests': typeof AuthenticatedJoinRequestsRoute
   '/owner': typeof AuthenticatedOwnerRoute
   '/profile-updater': typeof AuthenticatedProfileUpdaterRoute
   '/proxies': typeof AuthenticatedProxiesRoute
@@ -332,6 +349,7 @@ export interface FileRoutesByTo {
   '/api/public/bulk-stream': typeof ApiPublicBulkStreamRoute
   '/api/public/cleanup-stream': typeof ApiPublicCleanupStreamRoute
   '/api/public/forward-range-stream': typeof ApiPublicForwardRangeStreamRoute
+  '/api/public/join-requests-stream': typeof ApiPublicJoinRequestsStreamRoute
   '/api/public/hooks/auto-leave': typeof ApiPublicHooksAutoLeaveRoute
   '/api/public/hooks/daily-summary': typeof ApiPublicHooksDailySummaryRoute
   '/api/public/hooks/resume-stuck': typeof ApiPublicHooksResumeStuckRoute
@@ -357,6 +375,7 @@ export interface FileRoutesById {
   '/_authenticated/forward-range': typeof AuthenticatedForwardRangeRoute
   '/_authenticated/health': typeof AuthenticatedHealthRoute
   '/_authenticated/join-pacing': typeof AuthenticatedJoinPacingRoute
+  '/_authenticated/join-requests': typeof AuthenticatedJoinRequestsRoute
   '/_authenticated/owner': typeof AuthenticatedOwnerRoute
   '/_authenticated/profile-updater': typeof AuthenticatedProfileUpdaterRoute
   '/_authenticated/proxies': typeof AuthenticatedProxiesRoute
@@ -375,6 +394,7 @@ export interface FileRoutesById {
   '/api/public/bulk-stream': typeof ApiPublicBulkStreamRoute
   '/api/public/cleanup-stream': typeof ApiPublicCleanupStreamRoute
   '/api/public/forward-range-stream': typeof ApiPublicForwardRangeStreamRoute
+  '/api/public/join-requests-stream': typeof ApiPublicJoinRequestsStreamRoute
   '/api/public/hooks/auto-leave': typeof ApiPublicHooksAutoLeaveRoute
   '/api/public/hooks/daily-summary': typeof ApiPublicHooksDailySummaryRoute
   '/api/public/hooks/resume-stuck': typeof ApiPublicHooksResumeStuckRoute
@@ -400,6 +420,7 @@ export interface FileRouteTypes {
     | '/forward-range'
     | '/health'
     | '/join-pacing'
+    | '/join-requests'
     | '/owner'
     | '/profile-updater'
     | '/proxies'
@@ -418,6 +439,7 @@ export interface FileRouteTypes {
     | '/api/public/bulk-stream'
     | '/api/public/cleanup-stream'
     | '/api/public/forward-range-stream'
+    | '/api/public/join-requests-stream'
     | '/api/public/hooks/auto-leave'
     | '/api/public/hooks/daily-summary'
     | '/api/public/hooks/resume-stuck'
@@ -441,6 +463,7 @@ export interface FileRouteTypes {
     | '/forward-range'
     | '/health'
     | '/join-pacing'
+    | '/join-requests'
     | '/owner'
     | '/profile-updater'
     | '/proxies'
@@ -459,6 +482,7 @@ export interface FileRouteTypes {
     | '/api/public/bulk-stream'
     | '/api/public/cleanup-stream'
     | '/api/public/forward-range-stream'
+    | '/api/public/join-requests-stream'
     | '/api/public/hooks/auto-leave'
     | '/api/public/hooks/daily-summary'
     | '/api/public/hooks/resume-stuck'
@@ -483,6 +507,7 @@ export interface FileRouteTypes {
     | '/_authenticated/forward-range'
     | '/_authenticated/health'
     | '/_authenticated/join-pacing'
+    | '/_authenticated/join-requests'
     | '/_authenticated/owner'
     | '/_authenticated/profile-updater'
     | '/_authenticated/proxies'
@@ -501,6 +526,7 @@ export interface FileRouteTypes {
     | '/api/public/bulk-stream'
     | '/api/public/cleanup-stream'
     | '/api/public/forward-range-stream'
+    | '/api/public/join-requests-stream'
     | '/api/public/hooks/auto-leave'
     | '/api/public/hooks/daily-summary'
     | '/api/public/hooks/resume-stuck'
@@ -518,6 +544,7 @@ export interface RootRouteChildren {
   ApiPublicBulkStreamRoute: typeof ApiPublicBulkStreamRoute
   ApiPublicCleanupStreamRoute: typeof ApiPublicCleanupStreamRoute
   ApiPublicForwardRangeStreamRoute: typeof ApiPublicForwardRangeStreamRoute
+  ApiPublicJoinRequestsStreamRoute: typeof ApiPublicJoinRequestsStreamRoute
   ApiPublicHooksAutoLeaveRoute: typeof ApiPublicHooksAutoLeaveRoute
   ApiPublicHooksDailySummaryRoute: typeof ApiPublicHooksDailySummaryRoute
   ApiPublicHooksResumeStuckRoute: typeof ApiPublicHooksResumeStuckRoute
@@ -626,6 +653,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedOwnerRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
+    '/_authenticated/join-requests': {
+      id: '/_authenticated/join-requests'
+      path: '/join-requests'
+      fullPath: '/join-requests'
+      preLoaderRoute: typeof AuthenticatedJoinRequestsRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
     '/_authenticated/join-pacing': {
       id: '/_authenticated/join-pacing'
       path: '/join-pacing'
@@ -709,6 +743,13 @@ declare module '@tanstack/react-router' {
       fullPath: '/actions'
       preLoaderRoute: typeof AuthenticatedActionsRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
+    }
+    '/api/public/join-requests-stream': {
+      id: '/api/public/join-requests-stream'
+      path: '/api/public/join-requests-stream'
+      fullPath: '/api/public/join-requests-stream'
+      preLoaderRoute: typeof ApiPublicJoinRequestsStreamRouteImport
+      parentRoute: typeof rootRouteImport
     }
     '/api/public/forward-range-stream': {
       id: '/api/public/forward-range-stream'
@@ -824,6 +865,7 @@ interface AuthenticatedRouteRouteChildren {
   AuthenticatedForwardRangeRoute: typeof AuthenticatedForwardRangeRoute
   AuthenticatedHealthRoute: typeof AuthenticatedHealthRoute
   AuthenticatedJoinPacingRoute: typeof AuthenticatedJoinPacingRoute
+  AuthenticatedJoinRequestsRoute: typeof AuthenticatedJoinRequestsRoute
   AuthenticatedOwnerRoute: typeof AuthenticatedOwnerRoute
   AuthenticatedProfileUpdaterRoute: typeof AuthenticatedProfileUpdaterRoute
   AuthenticatedProxiesRoute: typeof AuthenticatedProxiesRoute
@@ -853,6 +895,7 @@ const AuthenticatedRouteRouteChildren: AuthenticatedRouteRouteChildren = {
   AuthenticatedForwardRangeRoute: AuthenticatedForwardRangeRoute,
   AuthenticatedHealthRoute: AuthenticatedHealthRoute,
   AuthenticatedJoinPacingRoute: AuthenticatedJoinPacingRoute,
+  AuthenticatedJoinRequestsRoute: AuthenticatedJoinRequestsRoute,
   AuthenticatedOwnerRoute: AuthenticatedOwnerRoute,
   AuthenticatedProfileUpdaterRoute: AuthenticatedProfileUpdaterRoute,
   AuthenticatedProxiesRoute: AuthenticatedProxiesRoute,
@@ -881,6 +924,7 @@ const rootRouteChildren: RootRouteChildren = {
   ApiPublicBulkStreamRoute: ApiPublicBulkStreamRoute,
   ApiPublicCleanupStreamRoute: ApiPublicCleanupStreamRoute,
   ApiPublicForwardRangeStreamRoute: ApiPublicForwardRangeStreamRoute,
+  ApiPublicJoinRequestsStreamRoute: ApiPublicJoinRequestsStreamRoute,
   ApiPublicHooksAutoLeaveRoute: ApiPublicHooksAutoLeaveRoute,
   ApiPublicHooksDailySummaryRoute: ApiPublicHooksDailySummaryRoute,
   ApiPublicHooksResumeStuckRoute: ApiPublicHooksResumeStuckRoute,
