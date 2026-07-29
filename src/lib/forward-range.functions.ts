@@ -106,8 +106,8 @@ export const forwardMessageRange = createServerFn({ method: "POST" })
           const em = (e as Error).message || String(e);
           const fw = parseFloodWait(em);
           if (fw) {
-            logs.push({ level: "warn", message: `FloodWait ${fw}s — sleeping and retrying batch…` });
-            await new Promise((r) => setTimeout(r, (fw + 1) * 1000));
+            logs.push({ level: "warn", message: `FloodWait ${fw.seconds}s — sleeping and retrying batch…` });
+            await new Promise((r) => setTimeout(r, (fw.seconds + 1) * 1000));
             i -= 100; // retry this batch
             continue;
           }
