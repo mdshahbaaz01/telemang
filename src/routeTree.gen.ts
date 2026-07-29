@@ -23,6 +23,7 @@ import { Route as AuthenticatedRecipesRouteImport } from './routes/_authenticate
 import { Route as AuthenticatedProxiesRouteImport } from './routes/_authenticated/proxies'
 import { Route as AuthenticatedProfileUpdaterRouteImport } from './routes/_authenticated/profile-updater'
 import { Route as AuthenticatedOwnerRouteImport } from './routes/_authenticated/owner'
+import { Route as AuthenticatedJoinRequestsRouteImport } from './routes/_authenticated/join-requests'
 import { Route as AuthenticatedJoinPacingRouteImport } from './routes/_authenticated/join-pacing'
 import { Route as AuthenticatedHealthRouteImport } from './routes/_authenticated/health'
 import { Route as AuthenticatedForwardRangeRouteImport } from './routes/_authenticated/forward-range'
@@ -121,6 +122,12 @@ const AuthenticatedOwnerRoute = AuthenticatedOwnerRouteImport.update({
   path: '/owner',
   getParentRoute: () => AuthenticatedRouteRoute,
 } as any)
+const AuthenticatedJoinRequestsRoute =
+  AuthenticatedJoinRequestsRouteImport.update({
+    id: '/join-requests',
+    path: '/join-requests',
+    getParentRoute: () => AuthenticatedRouteRoute,
+  } as any)
 const AuthenticatedJoinPacingRoute = AuthenticatedJoinPacingRouteImport.update({
   id: '/join-pacing',
   path: '/join-pacing',
@@ -280,6 +287,7 @@ export interface FileRoutesByFullPath {
   '/forward-range': typeof AuthenticatedForwardRangeRoute
   '/health': typeof AuthenticatedHealthRoute
   '/join-pacing': typeof AuthenticatedJoinPacingRoute
+  '/join-requests': typeof AuthenticatedJoinRequestsRoute
   '/owner': typeof AuthenticatedOwnerRoute
   '/profile-updater': typeof AuthenticatedProfileUpdaterRoute
   '/proxies': typeof AuthenticatedProxiesRoute
@@ -322,6 +330,7 @@ export interface FileRoutesByTo {
   '/forward-range': typeof AuthenticatedForwardRangeRoute
   '/health': typeof AuthenticatedHealthRoute
   '/join-pacing': typeof AuthenticatedJoinPacingRoute
+  '/join-requests': typeof AuthenticatedJoinRequestsRoute
   '/owner': typeof AuthenticatedOwnerRoute
   '/profile-updater': typeof AuthenticatedProfileUpdaterRoute
   '/proxies': typeof AuthenticatedProxiesRoute
@@ -366,6 +375,7 @@ export interface FileRoutesById {
   '/_authenticated/forward-range': typeof AuthenticatedForwardRangeRoute
   '/_authenticated/health': typeof AuthenticatedHealthRoute
   '/_authenticated/join-pacing': typeof AuthenticatedJoinPacingRoute
+  '/_authenticated/join-requests': typeof AuthenticatedJoinRequestsRoute
   '/_authenticated/owner': typeof AuthenticatedOwnerRoute
   '/_authenticated/profile-updater': typeof AuthenticatedProfileUpdaterRoute
   '/_authenticated/proxies': typeof AuthenticatedProxiesRoute
@@ -410,6 +420,7 @@ export interface FileRouteTypes {
     | '/forward-range'
     | '/health'
     | '/join-pacing'
+    | '/join-requests'
     | '/owner'
     | '/profile-updater'
     | '/proxies'
@@ -452,6 +463,7 @@ export interface FileRouteTypes {
     | '/forward-range'
     | '/health'
     | '/join-pacing'
+    | '/join-requests'
     | '/owner'
     | '/profile-updater'
     | '/proxies'
@@ -495,6 +507,7 @@ export interface FileRouteTypes {
     | '/_authenticated/forward-range'
     | '/_authenticated/health'
     | '/_authenticated/join-pacing'
+    | '/_authenticated/join-requests'
     | '/_authenticated/owner'
     | '/_authenticated/profile-updater'
     | '/_authenticated/proxies'
@@ -638,6 +651,13 @@ declare module '@tanstack/react-router' {
       path: '/owner'
       fullPath: '/owner'
       preLoaderRoute: typeof AuthenticatedOwnerRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
+    '/_authenticated/join-requests': {
+      id: '/_authenticated/join-requests'
+      path: '/join-requests'
+      fullPath: '/join-requests'
+      preLoaderRoute: typeof AuthenticatedJoinRequestsRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
     '/_authenticated/join-pacing': {
@@ -845,6 +865,7 @@ interface AuthenticatedRouteRouteChildren {
   AuthenticatedForwardRangeRoute: typeof AuthenticatedForwardRangeRoute
   AuthenticatedHealthRoute: typeof AuthenticatedHealthRoute
   AuthenticatedJoinPacingRoute: typeof AuthenticatedJoinPacingRoute
+  AuthenticatedJoinRequestsRoute: typeof AuthenticatedJoinRequestsRoute
   AuthenticatedOwnerRoute: typeof AuthenticatedOwnerRoute
   AuthenticatedProfileUpdaterRoute: typeof AuthenticatedProfileUpdaterRoute
   AuthenticatedProxiesRoute: typeof AuthenticatedProxiesRoute
@@ -874,6 +895,7 @@ const AuthenticatedRouteRouteChildren: AuthenticatedRouteRouteChildren = {
   AuthenticatedForwardRangeRoute: AuthenticatedForwardRangeRoute,
   AuthenticatedHealthRoute: AuthenticatedHealthRoute,
   AuthenticatedJoinPacingRoute: AuthenticatedJoinPacingRoute,
+  AuthenticatedJoinRequestsRoute: AuthenticatedJoinRequestsRoute,
   AuthenticatedOwnerRoute: AuthenticatedOwnerRoute,
   AuthenticatedProfileUpdaterRoute: AuthenticatedProfileUpdaterRoute,
   AuthenticatedProxiesRoute: AuthenticatedProxiesRoute,
