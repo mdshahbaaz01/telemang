@@ -32,6 +32,7 @@ import {
   Trophy,
   Flag,
   Globe,
+  Forward,
 } from "lucide-react";
 import {
   DndContext,
