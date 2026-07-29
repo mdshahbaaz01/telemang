@@ -277,19 +277,10 @@ export async function joinTelegramTargetVerified(args: {
       const requestNeeded = !!peekInfo?.requestNeeded;
 
       if (cn === "ChatInviteAlready" && chat) {
-      const verified = await waitForMembership(client, Api, chat);
+        const verified = await waitForMembership(client, Api, chat);
         if (!verified) {
-          return {
-            status: "already",
-            path: "peek_already",
-            message: `Already member of ${chat.username ? "@" + chat.username : chat.title || "channel"}`,
-            note: "Membership verification pending",
-            canonicalTarget: chat.username ?? null,
-            errorCode: "VERIFY_PENDING",
-            verified: false,
-            canonicalChannelId: idOf(chat),
-          };
-        }
+          log?.("warn", `Telegram invite peek claimed already-member for ${chat.username ? "@" + chat.username : chat.title || "channel"}, but membership verification failed; forcing a real join path`);
+        } else {
         const canonicalChannelId = await verifyCanonicalMatch(
           client,
           Api,
@@ -307,6 +298,7 @@ export async function joinTelegramTargetVerified(args: {
           verified: true,
           canonicalChannelId,
         };
+        }
       }
 
       // If the invite peek already exposes a public username, join that
