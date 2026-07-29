@@ -274,6 +274,7 @@ export async function joinTelegramTargetVerified(args: {
       peekInfo = await client.invoke(new Api.messages.CheckChatInvite({ hash: inviteHash }));
       const chat = firstChatFrom(peekInfo);
       const cn = classNameOf(peekInfo);
+      const requestNeeded = !!peekInfo?.requestNeeded;
 
       if (cn === "ChatInviteAlready" && chat) {
       const verified = await waitForMembership(client, Api, chat);
@@ -308,7 +309,7 @@ export async function joinTelegramTargetVerified(args: {
         };
       }
 
-      if (chat?.username) {
+      if (!requestNeeded && chat?.username) {
         const entity = await client.getEntity(chat.username);
         return joinEntityVerified(client, Api, entity, `@${chat.username}`, "peek_username", log);
       }
@@ -319,13 +320,17 @@ export async function joinTelegramTargetVerified(args: {
       // the public username works immediately. Search by the invite preview
       // title first and join the verified public match before falling back to
       // the private/request flow.
-      const searched = await findPublicUsernameByInvitePreview(client, Api, peekInfo, log);
-      if (searched?.username) {
-        const entity = await client.getEntity(searched.username);
-        return joinEntityVerified(client, Api, entity, `@${searched.username}`, "peek_search_username", log);
+      if (!requestNeeded) {
+        const searched = await findPublicUsernameByInvitePreview(client, Api, peekInfo, log);
+        if (searched?.username) {
+          const entity = await client.getEntity(searched.username);
+          return joinEntityVerified(client, Api, entity, `@${searched.username}`, "peek_search_username", log);
+        }
+      } else {
+        log?.("info", `Invite +${inviteHash.slice(0, 8)}… requires admin approval; sending real join request through invite import`);
       }
 
-      if (chat && cn === "ChatInvitePeek") {
+      if (!requestNeeded && chat && cn === "ChatInvitePeek") {
         try {
           return await joinEntityVerified(client, Api, chat, chat.title || "channel", "peek_chat", log);
         } catch (error) {
@@ -374,6 +379,18 @@ export async function joinTelegramTargetVerified(args: {
         errorCode: null,
         verified: true,
         canonicalChannelId,
+      };
+    }
+    if (peekInfo?.requestNeeded) {
+      return {
+        status: "requested",
+        path: "import_invite",
+        message: `Join request sent for +${inviteHash.slice(0, 8)}…`,
+        note: "waiting for channel approval",
+        canonicalTarget: null,
+        errorCode: "INVITE_REQUEST_SENT",
+        verified: false,
+        canonicalChannelId: null,
       };
     }
     throw new Error(`JOIN_NOT_VERIFIED: +${inviteHash.slice(0, 8)}… returned no chat`);
