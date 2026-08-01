@@ -290,7 +290,70 @@ export async function findPublicUsernameByInvitePreview(
   return chat?.username ? chat : null;
 }
 
+/**
+ * Registry-aware entry point: blocklist gate → join → fingerprint assert →
+ * membership ledger. Falls back to a plain join when no registry is passed.
+ */
 export async function joinTelegramTargetVerified(args: {
+  client: any;
+  Api: any;
+  target: string;
+  publicInviteFallback?: boolean;
+  log?: Logger;
+  registry?: JoinRegistryCtx;
+}): Promise<SmartTelegramJoinResult> {
+  const { registry, log } = args;
+  if (!registry) return joinTelegramTargetCore(args);
+
+  const canon = canonicalizeJoinTarget(args.target);
+  const blocked = await isTargetBlocked(registry, canon.key);
+  if (blocked.blocked) {
+    log?.("warn", `Skipping ${args.target}: permanently blocked for this account (${blocked.reason})`);
+    throw new Error(`JOIN_BLOCKED: ${blocked.reason ?? "permanently blocked"}`);
+  }
+
+  try {
+    const result = await joinTelegramTargetCore(args);
+    const fp: ChatFingerprint = {
+      chatId: result.canonicalChannelId,
+      chatType: result.chatType ?? null,
+      title: result.chatTitle ?? null,
+      username: result.chatUsername ?? result.canonicalTarget ?? null,
+      requiresApproval: result.status === "requested",
+      isPublic: !!(result.isPublic ?? result.chatUsername),
+      discussionChatId: result.discussionChatId ?? null,
+    };
+    const { drift } = await assertFingerprint(registry, canon.key, fp);
+    if (drift.length) {
+      log?.("warn", `Identity drift for ${args.target}: ${drift.join("; ")}`);
+      result.fingerprintDrift = drift;
+    }
+    await recordMembership(registry, canon.key, {
+      status: result.status === "requested" ? "requested" : "joined",
+      chatId: result.canonicalChannelId,
+      chatType: result.chatType ?? null,
+      method: result.path,
+      errorCode: result.errorCode,
+      verified: result.verified,
+    });
+    return result;
+  } catch (error) {
+    const msg = textOf(error);
+    const verdict = classifyJoinFailure(msg);
+    if (verdict.permanent) {
+      await blockTarget(registry, canon.key, verdict.reason, verdict.code);
+      await recordMembership(registry, canon.key, {
+        status: verdict.code === "USER_BANNED_IN_CHANNEL" || verdict.code === "CHANNEL_PRIVATE" ? "banned" : "failed",
+        errorCode: verdict.code,
+        scheduleVerify: false,
+      });
+      log?.("error", `${args.target}: ${verdict.reason} — will not be retried for this account`);
+    }
+    throw error;
+  }
+}
+
+async function joinTelegramTargetCore(args: {
   client: any;
   Api: any;
   target: string;
