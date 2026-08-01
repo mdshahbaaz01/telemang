@@ -34,6 +34,17 @@ function classNameOf(value: any): string {
   return String(value?.className ?? value?.constructor?.name ?? "");
 }
 
+/**
+ * Legacy basic groups (Api.Chat) are NOT channels: channels.* methods reject
+ * them with "Cannot cast InputPeerChat to any kind of InputChannel".
+ */
+function isBasicGroup(entity: any): boolean {
+  const cn = classNameOf(entity);
+  if (cn === "Chat" || cn === "ChatForbidden" || cn === "InputPeerChat") return true;
+  if (cn === "Channel" || cn === "ChannelForbidden") return false;
+  return entity?.megagroup === undefined && entity?.broadcast === undefined && entity?.accessHash === undefined && entity?.id !== undefined && entity?.title !== undefined;
+}
+
 function firstChatFrom(value: any): any | null {
   if (!value) return null;
   if (value.chat) return value.chat;
@@ -50,6 +61,15 @@ function firstChatFrom(value: any): any | null {
 async function verifyMembership(client: any, Api: any, channel: any): Promise<boolean> {
   if (!channel) return false;
   if (channel.left === false || channel.creator || channel.adminRights) return true;
+  if (isBasicGroup(channel)) {
+    try {
+      const full: any = await client.invoke(new Api.messages.GetFullChat({ chatId: channel.id }));
+      const chat = Array.isArray(full?.chats) && full.chats.length ? full.chats[0] : null;
+      return !!chat && chat.left !== true && chat.deactivated !== true;
+    } catch {
+      return false;
+    }
+  }
   try {
     const me = await client.getMe(true);
     const inputChannel = await client.getInputEntity(channel);
@@ -90,6 +110,20 @@ async function verifyCanonicalMatch(
 ): Promise<string> {
   const expectedId = idOf(expected);
   if (!expectedId) throw new Error(`JOIN_CANONICAL_MISMATCH: ${label} missing id`);
+  if (isBasicGroup(expected)) {
+    const resp: any = await client.invoke(new Api.messages.GetChats({ id: [expected.id] }));
+    const returned = Array.isArray(resp?.chats) && resp.chats.length ? resp.chats[0] : null;
+    const returnedId = idOf(returned);
+    if (!returnedId) throw new Error(`JOIN_CANONICAL_MISMATCH: ${label} returned no chat`);
+    if (returnedId !== expectedId) {
+      log?.("error", `Canonical mismatch for ${label}: expected=${expectedId} got=${returnedId}`);
+      throw new Error(`JOIN_CANONICAL_MISMATCH: ${label} expected=${expectedId} got=${returnedId}`);
+    }
+    if (returned?.left === true) {
+      throw new Error(`JOIN_CANONICAL_MISMATCH: ${label} chat reports left=true after join`);
+    }
+    return returnedId;
+  }
   const inputChannel = await client.getInputEntity(expected);
   const resp: any = await client.invoke(new Api.channels.GetChannels({ id: [inputChannel] }));
   const returned = Array.isArray(resp?.chats) && resp.chats.length ? resp.chats[0] : null;
@@ -114,8 +148,13 @@ async function joinEntityVerified(
   log?: Logger,
 ): Promise<SmartTelegramJoinResult> {
   let verifiedEntity = entity;
+  const basic = isBasicGroup(entity);
   try {
-    await client.invoke(new Api.channels.JoinChannel({ channel: entity }));
+    if (!basic) {
+      await client.invoke(new Api.channels.JoinChannel({ channel: entity }));
+    } else {
+      log?.("info", `${label} is a legacy group — joining via invite import only (channels.JoinChannel is not supported for basic groups)`);
+    }
   } catch (error) {
     const msg = textOf(error);
     if (/INVITE_REQUEST_SENT|INVITE_REQUEST_ALREADY_SENT|REQUEST_SENT/i.test(msg)) {
@@ -261,7 +300,7 @@ export async function joinTelegramTargetVerified(args: {
         log?.("info", `Invite +${inviteHash.slice(0, 8)}… requires admin approval; sending a real join request through invite import`);
       }
 
-      if (!requestNeeded && chat && cn === "ChatInvitePeek") {
+      if (!requestNeeded && chat && cn === "ChatInvitePeek" && !isBasicGroup(chat)) {
         try {
           return await joinEntityVerified(client, Api, chat, chat.title || "channel", "peek_chat", log);
         } catch (error) {
