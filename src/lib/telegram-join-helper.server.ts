@@ -34,20 +34,6 @@ function classNameOf(value: any): string {
   return String(value?.className ?? value?.constructor?.name ?? "");
 }
 
-function cleanTitle(value: unknown): string {
-  return String(value ?? "")
-    .trim()
-    .toLowerCase()
-    .replace(/[^a-z0-9\u0900-\u097f]+/gi, " ")
-    .replace(/\s+/g, " ")
-    .trim();
-}
-
-function toCount(value: unknown): number {
-  const n = Number(value ?? 0);
-  return Number.isFinite(n) ? n : 0;
-}
-
 function firstChatFrom(value: any): any | null {
   if (!value) return null;
   if (value.chat) return value.chat;
@@ -181,66 +167,22 @@ async function joinEntityVerified(
   };
 }
 
+/**
+ * Resolve an invite preview to a public chat.
+ *
+ * IMPORTANT: only the username Telegram itself attaches to the invite preview
+ * is trusted. We deliberately do NOT search public chats by title — titles are
+ * not unique ("Tasks", "Crypto", …) and a title search made accounts join a
+ * completely unrelated public channel instead of the invited private one.
+ */
 export async function findPublicUsernameByInvitePreview(
-  client: any,
-  Api: any,
+  _client: any,
+  _Api: any,
   inviteInfo: any,
-  log?: Logger,
+  _log?: Logger,
 ): Promise<any | null> {
-  const title = String(inviteInfo?.title ?? "").trim();
-  if (!title) return null;
-  const wantedTitle = cleanTitle(title);
-  if (!wantedTitle) return null;
-  const wantedCount = toCount(inviteInfo?.participantsCount);
-  const wantedMegagroup = !!inviteInfo?.megagroup;
-  const wantedBroadcast = !!inviteInfo?.broadcast || (!!inviteInfo?.channel && !wantedMegagroup);
-
-  try {
-    const queries = Array.from(
-      new Set([
-        title,
-        wantedTitle,
-        wantedTitle.split(" ").slice(0, 4).join(" "),
-      ].filter((q) => q && q.length >= 3)),
-    );
-    const byId = new Map<string, any>();
-    for (const q of queries) {
-      const found: any = await client.invoke(new Api.contacts.Search({ q, limit: 20 }));
-      for (const chat of (Array.isArray(found?.chats) ? found.chats : [])) {
-        if (!chat?.username || !chat?.id) continue;
-        byId.set(String(chat.id), chat);
-      }
-    }
-
-    const candidates = Array.from(byId.values())
-      .map((chat) => {
-        const titleScore = cleanTitle(chat?.title) === wantedTitle
-          ? 1000
-          : cleanTitle(chat?.title).includes(wantedTitle) || wantedTitle.includes(cleanTitle(chat?.title))
-            ? 250
-            : 0;
-        const typeScore =
-          (wantedMegagroup && !!chat?.megagroup) || (wantedBroadcast && !!chat?.broadcast)
-            ? 100
-            : 0;
-        const count = toCount(chat?.participantsCount ?? chat?.participants_count);
-        const countScore = wantedCount && count
-          ? Math.max(0, 100 - Math.min(100, Math.round((Math.abs(count - wantedCount) / Math.max(wantedCount, 1)) * 100)))
-          : 0;
-        return { chat, score: titleScore + typeScore + countScore, count };
-      })
-      .filter((c) => c.score >= 1000 || (c.score >= 350 && wantedCount > 0))
-      .sort((a, b) => b.score - a.score || Math.abs((a.count || 0) - wantedCount) - Math.abs((b.count || 0) - wantedCount));
-
-    const best = candidates[0]?.chat ?? null;
-    if (best?.username) {
-      log?.("info", `Resolved invite preview "${title}" to public @${best.username}; joining public username instead of approval invite`);
-    }
-    return best;
-  } catch (error) {
-    log?.("info", `Public username search failed for invite preview (${extractTelegramErrorCode(textOf(error)) ?? "search_failed"})`);
-    return null;
-  }
+  const chat = firstChatFrom(inviteInfo);
+  return chat?.username ? chat : null;
 }
 
 export async function joinTelegramTargetVerified(args: {
@@ -313,23 +255,10 @@ export async function joinTelegramTargetVerified(args: {
         }
       }
 
-      // Many bots store an approval-required +invite link for a channel that
-      // is actually public with a searchable username. Always try to resolve
-      // the public username from the invite preview title (regardless of the
-      // requestNeeded flag) and join it directly before falling back to the
-      // private request flow.
-      const searched = await findPublicUsernameByInvitePreview(client, Api, peekInfo, log);
-      if (searched?.username) {
-        try {
-          const entity = await client.getEntity(searched.username);
-          return await joinEntityVerified(client, Api, entity, `@${searched.username}`, "peek_search_username", log);
-        } catch (error) {
-          log?.("info", `Public search join via @${searched.username} failed (${extractTelegramErrorCode(textOf(error)) ?? "err"}); falling back to invite import…`);
-        }
-      }
-
+      // NOTE: no title-based public search here. Titles are not unique, and
+      // guessing by title previously joined unrelated public channels.
       if (requestNeeded) {
-        log?.("info", `Invite +${inviteHash.slice(0, 8)}… requires admin approval and no public username matched; sending real join request through invite import`);
+        log?.("info", `Invite +${inviteHash.slice(0, 8)}… requires admin approval; sending a real join request through invite import`);
       }
 
       if (!requestNeeded && chat && cn === "ChatInvitePeek") {
