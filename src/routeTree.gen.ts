@@ -25,6 +25,7 @@ import { Route as AuthenticatedProfileUpdaterRouteImport } from './routes/_authe
 import { Route as AuthenticatedOwnerRouteImport } from './routes/_authenticated/owner'
 import { Route as AuthenticatedJoinRequestsRouteImport } from './routes/_authenticated/join-requests'
 import { Route as AuthenticatedJoinPacingRouteImport } from './routes/_authenticated/join-pacing'
+import { Route as AuthenticatedJoinIntegrityRouteImport } from './routes/_authenticated/join-integrity'
 import { Route as AuthenticatedHealthRouteImport } from './routes/_authenticated/health'
 import { Route as AuthenticatedForwardRangeRouteImport } from './routes/_authenticated/forward-range'
 import { Route as AuthenticatedDashboardRouteImport } from './routes/_authenticated/dashboard'
@@ -49,6 +50,7 @@ import { Route as ApiPublicMiniappProxySplatRouteImport } from './routes/api/pub
 import { Route as ApiPublicHooksRunScheduledBroadcastsRouteImport } from './routes/api/public/hooks/run-scheduled-broadcasts'
 import { Route as ApiPublicHooksRetentionRouteImport } from './routes/api/public/hooks/retention'
 import { Route as ApiPublicHooksResumeStuckRouteImport } from './routes/api/public/hooks/resume-stuck'
+import { Route as ApiPublicHooksJoinVerifySweepRouteImport } from './routes/api/public/hooks/join-verify-sweep'
 import { Route as ApiPublicHooksDailySummaryRouteImport } from './routes/api/public/hooks/daily-summary'
 import { Route as ApiPublicHooksAutoLeaveRouteImport } from './routes/api/public/hooks/auto-leave'
 
@@ -133,6 +135,12 @@ const AuthenticatedJoinPacingRoute = AuthenticatedJoinPacingRouteImport.update({
   path: '/join-pacing',
   getParentRoute: () => AuthenticatedRouteRoute,
 } as any)
+const AuthenticatedJoinIntegrityRoute =
+  AuthenticatedJoinIntegrityRouteImport.update({
+    id: '/join-integrity',
+    path: '/join-integrity',
+    getParentRoute: () => AuthenticatedRouteRoute,
+  } as any)
 const AuthenticatedHealthRoute = AuthenticatedHealthRouteImport.update({
   id: '/health',
   path: '/health',
@@ -259,6 +267,12 @@ const ApiPublicHooksResumeStuckRoute =
     path: '/api/public/hooks/resume-stuck',
     getParentRoute: () => rootRouteImport,
   } as any)
+const ApiPublicHooksJoinVerifySweepRoute =
+  ApiPublicHooksJoinVerifySweepRouteImport.update({
+    id: '/api/public/hooks/join-verify-sweep',
+    path: '/api/public/hooks/join-verify-sweep',
+    getParentRoute: () => rootRouteImport,
+  } as any)
 const ApiPublicHooksDailySummaryRoute =
   ApiPublicHooksDailySummaryRouteImport.update({
     id: '/api/public/hooks/daily-summary',
@@ -286,6 +300,7 @@ export interface FileRoutesByFullPath {
   '/dashboard': typeof AuthenticatedDashboardRoute
   '/forward-range': typeof AuthenticatedForwardRangeRoute
   '/health': typeof AuthenticatedHealthRoute
+  '/join-integrity': typeof AuthenticatedJoinIntegrityRoute
   '/join-pacing': typeof AuthenticatedJoinPacingRoute
   '/join-requests': typeof AuthenticatedJoinRequestsRoute
   '/owner': typeof AuthenticatedOwnerRoute
@@ -309,6 +324,7 @@ export interface FileRoutesByFullPath {
   '/api/public/join-requests-stream': typeof ApiPublicJoinRequestsStreamRoute
   '/api/public/hooks/auto-leave': typeof ApiPublicHooksAutoLeaveRoute
   '/api/public/hooks/daily-summary': typeof ApiPublicHooksDailySummaryRoute
+  '/api/public/hooks/join-verify-sweep': typeof ApiPublicHooksJoinVerifySweepRoute
   '/api/public/hooks/resume-stuck': typeof ApiPublicHooksResumeStuckRoute
   '/api/public/hooks/retention': typeof ApiPublicHooksRetentionRoute
   '/api/public/hooks/run-scheduled-broadcasts': typeof ApiPublicHooksRunScheduledBroadcastsRoute
@@ -329,6 +345,7 @@ export interface FileRoutesByTo {
   '/dashboard': typeof AuthenticatedDashboardRoute
   '/forward-range': typeof AuthenticatedForwardRangeRoute
   '/health': typeof AuthenticatedHealthRoute
+  '/join-integrity': typeof AuthenticatedJoinIntegrityRoute
   '/join-pacing': typeof AuthenticatedJoinPacingRoute
   '/join-requests': typeof AuthenticatedJoinRequestsRoute
   '/owner': typeof AuthenticatedOwnerRoute
@@ -352,6 +369,7 @@ export interface FileRoutesByTo {
   '/api/public/join-requests-stream': typeof ApiPublicJoinRequestsStreamRoute
   '/api/public/hooks/auto-leave': typeof ApiPublicHooksAutoLeaveRoute
   '/api/public/hooks/daily-summary': typeof ApiPublicHooksDailySummaryRoute
+  '/api/public/hooks/join-verify-sweep': typeof ApiPublicHooksJoinVerifySweepRoute
   '/api/public/hooks/resume-stuck': typeof ApiPublicHooksResumeStuckRoute
   '/api/public/hooks/retention': typeof ApiPublicHooksRetentionRoute
   '/api/public/hooks/run-scheduled-broadcasts': typeof ApiPublicHooksRunScheduledBroadcastsRoute
@@ -374,6 +392,7 @@ export interface FileRoutesById {
   '/_authenticated/dashboard': typeof AuthenticatedDashboardRoute
   '/_authenticated/forward-range': typeof AuthenticatedForwardRangeRoute
   '/_authenticated/health': typeof AuthenticatedHealthRoute
+  '/_authenticated/join-integrity': typeof AuthenticatedJoinIntegrityRoute
   '/_authenticated/join-pacing': typeof AuthenticatedJoinPacingRoute
   '/_authenticated/join-requests': typeof AuthenticatedJoinRequestsRoute
   '/_authenticated/owner': typeof AuthenticatedOwnerRoute
@@ -397,6 +416,7 @@ export interface FileRoutesById {
   '/api/public/join-requests-stream': typeof ApiPublicJoinRequestsStreamRoute
   '/api/public/hooks/auto-leave': typeof ApiPublicHooksAutoLeaveRoute
   '/api/public/hooks/daily-summary': typeof ApiPublicHooksDailySummaryRoute
+  '/api/public/hooks/join-verify-sweep': typeof ApiPublicHooksJoinVerifySweepRoute
   '/api/public/hooks/resume-stuck': typeof ApiPublicHooksResumeStuckRoute
   '/api/public/hooks/retention': typeof ApiPublicHooksRetentionRoute
   '/api/public/hooks/run-scheduled-broadcasts': typeof ApiPublicHooksRunScheduledBroadcastsRoute
@@ -419,6 +439,7 @@ export interface FileRouteTypes {
     | '/dashboard'
     | '/forward-range'
     | '/health'
+    | '/join-integrity'
     | '/join-pacing'
     | '/join-requests'
     | '/owner'
@@ -442,6 +463,7 @@ export interface FileRouteTypes {
     | '/api/public/join-requests-stream'
     | '/api/public/hooks/auto-leave'
     | '/api/public/hooks/daily-summary'
+    | '/api/public/hooks/join-verify-sweep'
     | '/api/public/hooks/resume-stuck'
     | '/api/public/hooks/retention'
     | '/api/public/hooks/run-scheduled-broadcasts'
@@ -462,6 +484,7 @@ export interface FileRouteTypes {
     | '/dashboard'
     | '/forward-range'
     | '/health'
+    | '/join-integrity'
     | '/join-pacing'
     | '/join-requests'
     | '/owner'
@@ -485,6 +508,7 @@ export interface FileRouteTypes {
     | '/api/public/join-requests-stream'
     | '/api/public/hooks/auto-leave'
     | '/api/public/hooks/daily-summary'
+    | '/api/public/hooks/join-verify-sweep'
     | '/api/public/hooks/resume-stuck'
     | '/api/public/hooks/retention'
     | '/api/public/hooks/run-scheduled-broadcasts'
@@ -506,6 +530,7 @@ export interface FileRouteTypes {
     | '/_authenticated/dashboard'
     | '/_authenticated/forward-range'
     | '/_authenticated/health'
+    | '/_authenticated/join-integrity'
     | '/_authenticated/join-pacing'
     | '/_authenticated/join-requests'
     | '/_authenticated/owner'
@@ -529,6 +554,7 @@ export interface FileRouteTypes {
     | '/api/public/join-requests-stream'
     | '/api/public/hooks/auto-leave'
     | '/api/public/hooks/daily-summary'
+    | '/api/public/hooks/join-verify-sweep'
     | '/api/public/hooks/resume-stuck'
     | '/api/public/hooks/retention'
     | '/api/public/hooks/run-scheduled-broadcasts'
@@ -547,6 +573,7 @@ export interface RootRouteChildren {
   ApiPublicJoinRequestsStreamRoute: typeof ApiPublicJoinRequestsStreamRoute
   ApiPublicHooksAutoLeaveRoute: typeof ApiPublicHooksAutoLeaveRoute
   ApiPublicHooksDailySummaryRoute: typeof ApiPublicHooksDailySummaryRoute
+  ApiPublicHooksJoinVerifySweepRoute: typeof ApiPublicHooksJoinVerifySweepRoute
   ApiPublicHooksResumeStuckRoute: typeof ApiPublicHooksResumeStuckRoute
   ApiPublicHooksRetentionRoute: typeof ApiPublicHooksRetentionRoute
   ApiPublicHooksRunScheduledBroadcastsRoute: typeof ApiPublicHooksRunScheduledBroadcastsRoute
@@ -665,6 +692,13 @@ declare module '@tanstack/react-router' {
       path: '/join-pacing'
       fullPath: '/join-pacing'
       preLoaderRoute: typeof AuthenticatedJoinPacingRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
+    '/_authenticated/join-integrity': {
+      id: '/_authenticated/join-integrity'
+      path: '/join-integrity'
+      fullPath: '/join-integrity'
+      preLoaderRoute: typeof AuthenticatedJoinIntegrityRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
     '/_authenticated/health': {
@@ -835,6 +869,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiPublicHooksResumeStuckRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/api/public/hooks/join-verify-sweep': {
+      id: '/api/public/hooks/join-verify-sweep'
+      path: '/api/public/hooks/join-verify-sweep'
+      fullPath: '/api/public/hooks/join-verify-sweep'
+      preLoaderRoute: typeof ApiPublicHooksJoinVerifySweepRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/api/public/hooks/daily-summary': {
       id: '/api/public/hooks/daily-summary'
       path: '/api/public/hooks/daily-summary'
@@ -864,6 +905,7 @@ interface AuthenticatedRouteRouteChildren {
   AuthenticatedDashboardRoute: typeof AuthenticatedDashboardRoute
   AuthenticatedForwardRangeRoute: typeof AuthenticatedForwardRangeRoute
   AuthenticatedHealthRoute: typeof AuthenticatedHealthRoute
+  AuthenticatedJoinIntegrityRoute: typeof AuthenticatedJoinIntegrityRoute
   AuthenticatedJoinPacingRoute: typeof AuthenticatedJoinPacingRoute
   AuthenticatedJoinRequestsRoute: typeof AuthenticatedJoinRequestsRoute
   AuthenticatedOwnerRoute: typeof AuthenticatedOwnerRoute
@@ -894,6 +936,7 @@ const AuthenticatedRouteRouteChildren: AuthenticatedRouteRouteChildren = {
   AuthenticatedDashboardRoute: AuthenticatedDashboardRoute,
   AuthenticatedForwardRangeRoute: AuthenticatedForwardRangeRoute,
   AuthenticatedHealthRoute: AuthenticatedHealthRoute,
+  AuthenticatedJoinIntegrityRoute: AuthenticatedJoinIntegrityRoute,
   AuthenticatedJoinPacingRoute: AuthenticatedJoinPacingRoute,
   AuthenticatedJoinRequestsRoute: AuthenticatedJoinRequestsRoute,
   AuthenticatedOwnerRoute: AuthenticatedOwnerRoute,
@@ -927,6 +970,7 @@ const rootRouteChildren: RootRouteChildren = {
   ApiPublicJoinRequestsStreamRoute: ApiPublicJoinRequestsStreamRoute,
   ApiPublicHooksAutoLeaveRoute: ApiPublicHooksAutoLeaveRoute,
   ApiPublicHooksDailySummaryRoute: ApiPublicHooksDailySummaryRoute,
+  ApiPublicHooksJoinVerifySweepRoute: ApiPublicHooksJoinVerifySweepRoute,
   ApiPublicHooksResumeStuckRoute: ApiPublicHooksResumeStuckRoute,
   ApiPublicHooksRetentionRoute: ApiPublicHooksRetentionRoute,
   ApiPublicHooksRunScheduledBroadcastsRoute:

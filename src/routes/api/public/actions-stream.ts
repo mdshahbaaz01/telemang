@@ -1080,6 +1080,7 @@ export const Route = createFileRoute("/api/public/actions-stream")({
                          Api,
                          target,
                          publicInviteFallback: op.publicInviteFallback !== false,
+                          registry: userId ? { supabase: supabase as any, userId, accountId } : undefined,
                           log: (level, message) => send("log", { accountId, level, target: joinLogTarget, message }),
                         }), 45_000);
                        joinPath = result.path;

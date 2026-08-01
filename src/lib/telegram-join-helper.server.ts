@@ -1,3 +1,14 @@
+import {
+  assertFingerprint,
+  blockTarget,
+  classifyJoinFailure,
+  isTargetBlocked,
+  recordMembership,
+  type ChatFingerprint,
+  type JoinRegistryCtx,
+} from "./join-registry.server";
+import { canonicalizeJoinTarget } from "./join-target-key";
+
 type JoinLogLevel = "info" | "warn" | "success" | "error";
 
 export type SmartTelegramJoinResult = {
@@ -16,6 +27,13 @@ export type SmartTelegramJoinResult = {
   errorCode: string | null;
   verified: boolean;
   canonicalChannelId: string | null;
+  /** "channel" | "supergroup" | "basic_group" | "unknown" */
+  chatType?: string | null;
+  chatTitle?: string | null;
+  chatUsername?: string | null;
+  isPublic?: boolean;
+  discussionChatId?: string | null;
+  fingerprintDrift?: string[];
 };
 
 type Logger = (level: JoinLogLevel, message: string) => void;
@@ -43,6 +61,48 @@ function isBasicGroup(entity: any): boolean {
   if (cn === "Chat" || cn === "ChatForbidden" || cn === "InputPeerChat") return true;
   if (cn === "Channel" || cn === "ChannelForbidden") return false;
   return entity?.megagroup === undefined && entity?.broadcast === undefined && entity?.accessHash === undefined && entity?.id !== undefined && entity?.title !== undefined;
+}
+
+function chatTypeOf(entity: any): string {
+  if (!entity) return "unknown";
+  if (isBasicGroup(entity)) return "basic_group";
+  if (entity.megagroup) return "supergroup";
+  if (entity.broadcast) return "channel";
+  if (entity.gigagroup) return "broadcast_group";
+  return classNameOf(entity) === "Channel" ? "channel" : "unknown";
+}
+
+/** Channel + its linked discussion group (if any) — so we never half-join a pair. */
+async function chatMeta(
+  client: any,
+  Api: any,
+  entity: any,
+): Promise<{
+  chatType: string;
+  chatTitle: string | null;
+  chatUsername: string | null;
+  discussionChatId: string | null;
+  isPublic: boolean;
+}> {
+  const chatType = chatTypeOf(entity);
+  let discussionChatId: string | null = null;
+  if (chatType === "channel" || chatType === "supergroup") {
+    try {
+      const input = await client.getInputEntity(entity);
+      const full: any = await client.invoke(new Api.channels.GetFullChannel({ channel: input }));
+      const linked = full?.fullChat?.linkedChatId;
+      if (linked !== undefined && linked !== null) discussionChatId = String(linked);
+    } catch {
+      // full-channel info is best-effort
+    }
+  }
+  return {
+    chatType,
+    chatTitle: entity?.title ?? null,
+    chatUsername: entity?.username ?? null,
+    discussionChatId,
+    isPublic: !!entity?.username,
+  };
 }
 
 function firstChatFrom(value: any): any | null {
@@ -190,10 +250,15 @@ async function joinEntityVerified(
       errorCode: "VERIFY_PENDING",
       verified: false,
       canonicalChannelId: idOf(verifiedEntity),
+      ...(await chatMeta(client, Api, verifiedEntity)),
     };
   }
   const canonicalChannelId = await verifyCanonicalMatch(client, Api, verifiedEntity, label, log);
   log?.("success", `Verified joined ${label} (path=${path}, channelId=${canonicalChannelId})`);
+  const meta = await chatMeta(client, Api, verifiedEntity);
+  if (meta.discussionChatId) {
+    log?.("info", `${label} has a linked discussion group (id=${meta.discussionChatId})`);
+  }
   return {
     status: "joined",
     path,
@@ -203,6 +268,7 @@ async function joinEntityVerified(
     errorCode: null,
     verified: true,
     canonicalChannelId,
+    ...meta,
   };
 }
 
@@ -224,7 +290,70 @@ export async function findPublicUsernameByInvitePreview(
   return chat?.username ? chat : null;
 }
 
+/**
+ * Registry-aware entry point: blocklist gate → join → fingerprint assert →
+ * membership ledger. Falls back to a plain join when no registry is passed.
+ */
 export async function joinTelegramTargetVerified(args: {
+  client: any;
+  Api: any;
+  target: string;
+  publicInviteFallback?: boolean;
+  log?: Logger;
+  registry?: JoinRegistryCtx;
+}): Promise<SmartTelegramJoinResult> {
+  const { registry, log } = args;
+  if (!registry) return joinTelegramTargetCore(args);
+
+  const canon = canonicalizeJoinTarget(args.target);
+  const blocked = await isTargetBlocked(registry, canon.key);
+  if (blocked.blocked) {
+    log?.("warn", `Skipping ${args.target}: permanently blocked for this account (${blocked.reason})`);
+    throw new Error(`JOIN_BLOCKED: ${blocked.reason ?? "permanently blocked"}`);
+  }
+
+  try {
+    const result = await joinTelegramTargetCore(args);
+    const fp: ChatFingerprint = {
+      chatId: result.canonicalChannelId,
+      chatType: result.chatType ?? null,
+      title: result.chatTitle ?? null,
+      username: result.chatUsername ?? result.canonicalTarget ?? null,
+      requiresApproval: result.status === "requested",
+      isPublic: !!(result.isPublic ?? result.chatUsername),
+      discussionChatId: result.discussionChatId ?? null,
+    };
+    const { drift } = await assertFingerprint(registry, canon.key, fp);
+    if (drift.length) {
+      log?.("warn", `Identity drift for ${args.target}: ${drift.join("; ")}`);
+      result.fingerprintDrift = drift;
+    }
+    await recordMembership(registry, canon.key, {
+      status: result.status === "requested" ? "requested" : "joined",
+      chatId: result.canonicalChannelId,
+      chatType: result.chatType ?? null,
+      method: result.path,
+      errorCode: result.errorCode,
+      verified: result.verified,
+    });
+    return result;
+  } catch (error) {
+    const msg = textOf(error);
+    const verdict = classifyJoinFailure(msg);
+    if (verdict.permanent) {
+      await blockTarget(registry, canon.key, verdict.reason, verdict.code);
+      await recordMembership(registry, canon.key, {
+        status: verdict.code === "USER_BANNED_IN_CHANNEL" || verdict.code === "CHANNEL_PRIVATE" ? "banned" : "failed",
+        errorCode: verdict.code,
+        scheduleVerify: false,
+      });
+      log?.("error", `${args.target}: ${verdict.reason} — will not be retried for this account`);
+    }
+    throw error;
+  }
+}
+
+async function joinTelegramTargetCore(args: {
   client: any;
   Api: any;
   target: string;
