@@ -34,20 +34,6 @@ function classNameOf(value: any): string {
   return String(value?.className ?? value?.constructor?.name ?? "");
 }
 
-function cleanTitle(value: unknown): string {
-  return String(value ?? "")
-    .trim()
-    .toLowerCase()
-    .replace(/[^a-z0-9\u0900-\u097f]+/gi, " ")
-    .replace(/\s+/g, " ")
-    .trim();
-}
-
-function toCount(value: unknown): number {
-  const n = Number(value ?? 0);
-  return Number.isFinite(n) ? n : 0;
-}
-
 function firstChatFrom(value: any): any | null {
   if (!value) return null;
   if (value.chat) return value.chat;
