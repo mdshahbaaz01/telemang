@@ -354,6 +354,7 @@ export const sendMessageAs = createServerFn({ method: "POST" })
 
 async function sendOwnContact(client: any, Api: any, peer: any, replyToMsgId?: number) {
   const me: any = await client.getMe();
+  // (unchanged)
   const phone = String(me?.phone ?? "");
   if (!phone) throw new Error("This Telegram account has no phone number available to share.");
   return await client.sendFile(peer, {
