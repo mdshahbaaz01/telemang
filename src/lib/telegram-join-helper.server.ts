@@ -1,3 +1,14 @@
+import {
+  assertFingerprint,
+  blockTarget,
+  classifyJoinFailure,
+  isTargetBlocked,
+  recordMembership,
+  type ChatFingerprint,
+  type JoinRegistryCtx,
+} from "./join-registry.server";
+import { canonicalizeJoinTarget } from "./join-target-key";
+
 type JoinLogLevel = "info" | "warn" | "success" | "error";
 
 export type SmartTelegramJoinResult = {
@@ -16,6 +27,11 @@ export type SmartTelegramJoinResult = {
   errorCode: string | null;
   verified: boolean;
   canonicalChannelId: string | null;
+  /** "channel" | "supergroup" | "basic_group" | "unknown" */
+  chatType?: string | null;
+  chatTitle?: string | null;
+  discussionChatId?: string | null;
+  fingerprintDrift?: string[];
 };
 
 type Logger = (level: JoinLogLevel, message: string) => void;
