@@ -729,6 +729,16 @@ function BotFlowPage() {
   // ─── Broadcast a typed message to every open chat ─────────────────
   const [broadcastText, setBroadcastText] = useState("");
   const [broadcastingMsg, setBroadcastingMsg] = useState(false);
+  // Live refs to each open chat iframe so we can nudge them to refetch
+  // history without reloading (which would restart the session).
+  const chatFrames = useRef<Record<string, HTMLIFrameElement | null>>({});
+  const pingOpenChats = useCallback(() => {
+    for (const el of Object.values(chatFrames.current)) {
+      try {
+        el?.contentWindow?.postMessage({ type: "tg-refresh-history" }, window.location.origin);
+      } catch {}
+    }
+  }, []);
   const broadcastMessage = useCallback(async () => {
     const text = broadcastText.trim();
     if (!text) return;
