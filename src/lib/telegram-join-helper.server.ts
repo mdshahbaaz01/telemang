@@ -248,10 +248,15 @@ async function joinEntityVerified(
       errorCode: "VERIFY_PENDING",
       verified: false,
       canonicalChannelId: idOf(verifiedEntity),
+      ...(await chatMeta(client, Api, verifiedEntity)),
     };
   }
   const canonicalChannelId = await verifyCanonicalMatch(client, Api, verifiedEntity, label, log);
   log?.("success", `Verified joined ${label} (path=${path}, channelId=${canonicalChannelId})`);
+  const meta = await chatMeta(client, Api, verifiedEntity);
+  if (meta.discussionChatId) {
+    log?.("info", `${label} has a linked discussion group (id=${meta.discussionChatId})`);
+  }
   return {
     status: "joined",
     path,
@@ -261,6 +266,7 @@ async function joinEntityVerified(
     errorCode: null,
     verified: true,
     canonicalChannelId,
+    ...meta,
   };
 }
 
