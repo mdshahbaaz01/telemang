@@ -1711,6 +1711,43 @@ function BotFlowPage() {
             </div>
           </div>
 
+          <div className="rounded-md border border-border bg-background/50 p-3 space-y-3">
+            <div className="flex items-center gap-2">
+              <Switch checked={vxAutoSend} onCheckedChange={setVxAutoSend} id="vx-autosend" />
+              <Label htmlFor="vx-autosend" className="cursor-pointer">
+                Auto-send each extracted link to a chat (from the same account)
+              </Label>
+            </div>
+            {vxAutoSend && (
+              <div className="grid gap-3 md:grid-cols-2">
+                <div>
+                  <Label>Target chat / group / channel</Label>
+                  <Input
+                    value={vxTarget}
+                    onChange={(e) => setVxTarget(e.target.value)}
+                    placeholder="@mychannel  ·  https://t.me/mychannel  ·  c:123456789"
+                  />
+                  <p className="mt-1 text-xs text-muted-foreground">
+                    {vxTargetKey
+                      ? <>Sends as <span className="font-mono text-foreground">{vxTargetKey}</span> — each account must already be a member.</>
+                      : "Public @username, t.me link, or a peer key (u:/g:/c:)."}
+                  </p>
+                </div>
+                <div>
+                  <Label>Message template</Label>
+                  <Input
+                    value={vxTemplate}
+                    onChange={(e) => setVxTemplate(e.target.value)}
+                    placeholder="{link}"
+                  />
+                  <p className="mt-1 text-xs text-muted-foreground">
+                    Use <code>{"{link}"}</code> as the placeholder for the extracted URL.
+                  </p>
+                </div>
+              </div>
+            )}
+          </div>
+
           <div className="space-y-2">
             <div className="flex items-center gap-2">
               <div className="text-sm font-medium mr-auto">
@@ -1782,6 +1819,14 @@ function BotFlowPage() {
                           <Copy className="h-3.5 w-3.5" />
                         </button>
                         <BrowserPickerButton url={r.url} compact />
+                        {r.sent === "ok" && (
+                          <span className="rounded bg-primary/10 px-1.5 py-0.5 text-[10px] uppercase text-primary">sent</span>
+                        )}
+                        {r.sent === "fail" && (
+                          <span className="rounded bg-destructive/10 px-1.5 py-0.5 text-[10px] uppercase text-destructive" title={r.sendError}>
+                            send failed
+                          </span>
+                        )}
                       </>
                     )}
                   </div>
