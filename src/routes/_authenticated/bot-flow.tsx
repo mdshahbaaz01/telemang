@@ -1424,6 +1424,128 @@ function BotFlowPage() {
                       Sent as a normal message from each account to @{parsed.username} — chats stay connected and update live.
                     </div>
                   </div>
+                  {/* ── Attachment broadcast ─────────────────────── */}
+                  <div className="rounded-md border border-border bg-background/60 p-2 text-xs space-y-2">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <span className="font-medium">Send a file to all</span>
+                      <span className="text-muted-foreground">· from your Media Library</span>
+                    </div>
+                    <div className="flex flex-wrap gap-2">
+                      <Select value={mediaId} onValueChange={setMediaId}>
+                        <SelectTrigger className="h-8 w-[220px] text-xs">
+                          <SelectValue placeholder={mediaItems.length ? "Pick a file…" : "Media library is empty"} />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {mediaItems.map((m) => (
+                            <SelectItem key={m.id} value={m.id} className="text-xs">
+                              {m.name}{m.isVoice ? " (voice)" : ""}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                      <Input
+                        value={mediaCaption}
+                        onChange={(e) => setMediaCaption(e.target.value)}
+                        placeholder="Caption (optional)"
+                        className="h-8 max-w-[280px] text-xs"
+                        disabled={sendingMedia}
+                      />
+                      <Button size="sm" onClick={() => void broadcastMedia()} disabled={sendingMedia || !mediaId}>
+                        {sendingMedia ? "Sending…" : "Send file to all"}
+                      </Button>
+                    </div>
+                  </div>
+                  {/* ── Sequence sender ──────────────────────────── */}
+                  <div className="rounded-md border border-border bg-background/60 p-2 text-xs space-y-2">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <span className="font-medium">Sequence sender</span>
+                      <span className="text-muted-foreground">
+                        · script steps once, every open account runs them in order
+                      </span>
+                    </div>
+                    <div className="flex flex-wrap gap-2">
+                      <Select value={seqKind} onValueChange={(v) => setSeqKind(v as typeof seqKind)}>
+                        <SelectTrigger className="h-8 w-[130px] text-xs">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="text" className="text-xs">Send text</SelectItem>
+                          <SelectItem value="button" className="text-xs">Tap button</SelectItem>
+                          <SelectItem value="wait" className="text-xs">Wait (sec)</SelectItem>
+                        </SelectContent>
+                      </Select>
+                      <Input
+                        value={seqDraft}
+                        onChange={(e) => setSeqDraft(e.target.value)}
+                        onKeyDown={(e) => {
+                          if (e.key === "Enter") { e.preventDefault(); addSeqStep(); }
+                        }}
+                        placeholder={
+                          seqKind === "wait" ? "Seconds, e.g. 5"
+                            : seqKind === "button" ? "Exact button label"
+                            : "Message text, e.g. /start"
+                        }
+                        className="h-8 max-w-[280px] text-xs"
+                      />
+                      <Button size="sm" variant="outline" onClick={addSeqStep}>Add step</Button>
+                      {seqSteps.length > 0 && (
+                        <>
+                          <Button
+                            size="sm"
+                            onClick={() => void runSequence()}
+                            disabled={seqRunning}
+                          >
+                            {seqRunning ? "Running…" : `Run on ${chatOpen.length} account(s)`}
+                          </Button>
+                          {seqRunning ? (
+                            <Button size="sm" variant="destructive" onClick={() => { seqAbort.current = true; }}>
+                              Stop
+                            </Button>
+                          ) : (
+                            <Button size="sm" variant="ghost" onClick={() => setSeqSteps([])}>Clear</Button>
+                          )}
+                        </>
+                      )}
+                    </div>
+                    {seqSteps.length > 0 && (
+                      <ol className="space-y-1">
+                        {seqSteps.map((s, i) => (
+                          <li
+                            key={`${i}-${s.kind}`}
+                            className={
+                              "flex items-center gap-2 rounded border px-2 py-1 " +
+                              (seqProgress?.step === i + 1
+                                ? "border-primary/50 bg-primary/10"
+                                : "border-border")
+                            }
+                          >
+                            <span className="font-mono text-[10px] text-muted-foreground">{i + 1}</span>
+                            <span className="rounded bg-muted px-1 text-[10px] uppercase">{s.kind}</span>
+                            <span className="min-w-0 flex-1 truncate">
+                              {s.kind === "wait" ? `${s.seconds}s` : s.value}
+                            </span>
+                            <button
+                              type="button"
+                              className="rounded p-1 hover:bg-muted"
+                              title="Remove step"
+                              onClick={() => setSeqSteps((p) => p.filter((_, x) => x !== i))}
+                            >
+                              <X className="h-3 w-3" />
+                            </button>
+                          </li>
+                        ))}
+                      </ol>
+                    )}
+                    {seqProgress && (
+                      <div className="text-[10px] text-primary">
+                        Step {seqProgress.step}/{seqSteps.length} · {seqProgress.note}
+                      </div>
+                    )}
+                    <div className="text-[10px] text-muted-foreground">
+                      "Tap button" re-reads the bot's newest buttons before each press, so multi-step
+                      flows (/start → wait → tap Verify) work end-to-end without reloading sessions.
+                    </div>
+                  </div>
                   <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3">
                   {visibleChatIds.map((id) => {
                     const a = accountList.find((x) => x.id === id);
