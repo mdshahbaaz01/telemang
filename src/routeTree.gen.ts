@@ -49,6 +49,7 @@ import { Route as ApiPublicMiniappProxySplatRouteImport } from './routes/api/pub
 import { Route as ApiPublicHooksRunScheduledBroadcastsRouteImport } from './routes/api/public/hooks/run-scheduled-broadcasts'
 import { Route as ApiPublicHooksRetentionRouteImport } from './routes/api/public/hooks/retention'
 import { Route as ApiPublicHooksResumeStuckRouteImport } from './routes/api/public/hooks/resume-stuck'
+import { Route as ApiPublicHooksJoinVerifySweepRouteImport } from './routes/api/public/hooks/join-verify-sweep'
 import { Route as ApiPublicHooksDailySummaryRouteImport } from './routes/api/public/hooks/daily-summary'
 import { Route as ApiPublicHooksAutoLeaveRouteImport } from './routes/api/public/hooks/auto-leave'
 
@@ -259,6 +260,12 @@ const ApiPublicHooksResumeStuckRoute =
     path: '/api/public/hooks/resume-stuck',
     getParentRoute: () => rootRouteImport,
   } as any)
+const ApiPublicHooksJoinVerifySweepRoute =
+  ApiPublicHooksJoinVerifySweepRouteImport.update({
+    id: '/api/public/hooks/join-verify-sweep',
+    path: '/api/public/hooks/join-verify-sweep',
+    getParentRoute: () => rootRouteImport,
+  } as any)
 const ApiPublicHooksDailySummaryRoute =
   ApiPublicHooksDailySummaryRouteImport.update({
     id: '/api/public/hooks/daily-summary',
@@ -309,6 +316,7 @@ export interface FileRoutesByFullPath {
   '/api/public/join-requests-stream': typeof ApiPublicJoinRequestsStreamRoute
   '/api/public/hooks/auto-leave': typeof ApiPublicHooksAutoLeaveRoute
   '/api/public/hooks/daily-summary': typeof ApiPublicHooksDailySummaryRoute
+  '/api/public/hooks/join-verify-sweep': typeof ApiPublicHooksJoinVerifySweepRoute
   '/api/public/hooks/resume-stuck': typeof ApiPublicHooksResumeStuckRoute
   '/api/public/hooks/retention': typeof ApiPublicHooksRetentionRoute
   '/api/public/hooks/run-scheduled-broadcasts': typeof ApiPublicHooksRunScheduledBroadcastsRoute
@@ -352,6 +360,7 @@ export interface FileRoutesByTo {
   '/api/public/join-requests-stream': typeof ApiPublicJoinRequestsStreamRoute
   '/api/public/hooks/auto-leave': typeof ApiPublicHooksAutoLeaveRoute
   '/api/public/hooks/daily-summary': typeof ApiPublicHooksDailySummaryRoute
+  '/api/public/hooks/join-verify-sweep': typeof ApiPublicHooksJoinVerifySweepRoute
   '/api/public/hooks/resume-stuck': typeof ApiPublicHooksResumeStuckRoute
   '/api/public/hooks/retention': typeof ApiPublicHooksRetentionRoute
   '/api/public/hooks/run-scheduled-broadcasts': typeof ApiPublicHooksRunScheduledBroadcastsRoute
@@ -397,6 +406,7 @@ export interface FileRoutesById {
   '/api/public/join-requests-stream': typeof ApiPublicJoinRequestsStreamRoute
   '/api/public/hooks/auto-leave': typeof ApiPublicHooksAutoLeaveRoute
   '/api/public/hooks/daily-summary': typeof ApiPublicHooksDailySummaryRoute
+  '/api/public/hooks/join-verify-sweep': typeof ApiPublicHooksJoinVerifySweepRoute
   '/api/public/hooks/resume-stuck': typeof ApiPublicHooksResumeStuckRoute
   '/api/public/hooks/retention': typeof ApiPublicHooksRetentionRoute
   '/api/public/hooks/run-scheduled-broadcasts': typeof ApiPublicHooksRunScheduledBroadcastsRoute
@@ -442,6 +452,7 @@ export interface FileRouteTypes {
     | '/api/public/join-requests-stream'
     | '/api/public/hooks/auto-leave'
     | '/api/public/hooks/daily-summary'
+    | '/api/public/hooks/join-verify-sweep'
     | '/api/public/hooks/resume-stuck'
     | '/api/public/hooks/retention'
     | '/api/public/hooks/run-scheduled-broadcasts'
@@ -485,6 +496,7 @@ export interface FileRouteTypes {
     | '/api/public/join-requests-stream'
     | '/api/public/hooks/auto-leave'
     | '/api/public/hooks/daily-summary'
+    | '/api/public/hooks/join-verify-sweep'
     | '/api/public/hooks/resume-stuck'
     | '/api/public/hooks/retention'
     | '/api/public/hooks/run-scheduled-broadcasts'
@@ -529,6 +541,7 @@ export interface FileRouteTypes {
     | '/api/public/join-requests-stream'
     | '/api/public/hooks/auto-leave'
     | '/api/public/hooks/daily-summary'
+    | '/api/public/hooks/join-verify-sweep'
     | '/api/public/hooks/resume-stuck'
     | '/api/public/hooks/retention'
     | '/api/public/hooks/run-scheduled-broadcasts'
@@ -547,6 +560,7 @@ export interface RootRouteChildren {
   ApiPublicJoinRequestsStreamRoute: typeof ApiPublicJoinRequestsStreamRoute
   ApiPublicHooksAutoLeaveRoute: typeof ApiPublicHooksAutoLeaveRoute
   ApiPublicHooksDailySummaryRoute: typeof ApiPublicHooksDailySummaryRoute
+  ApiPublicHooksJoinVerifySweepRoute: typeof ApiPublicHooksJoinVerifySweepRoute
   ApiPublicHooksResumeStuckRoute: typeof ApiPublicHooksResumeStuckRoute
   ApiPublicHooksRetentionRoute: typeof ApiPublicHooksRetentionRoute
   ApiPublicHooksRunScheduledBroadcastsRoute: typeof ApiPublicHooksRunScheduledBroadcastsRoute
@@ -835,6 +849,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiPublicHooksResumeStuckRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/api/public/hooks/join-verify-sweep': {
+      id: '/api/public/hooks/join-verify-sweep'
+      path: '/api/public/hooks/join-verify-sweep'
+      fullPath: '/api/public/hooks/join-verify-sweep'
+      preLoaderRoute: typeof ApiPublicHooksJoinVerifySweepRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/api/public/hooks/daily-summary': {
       id: '/api/public/hooks/daily-summary'
       path: '/api/public/hooks/daily-summary'
@@ -927,6 +948,7 @@ const rootRouteChildren: RootRouteChildren = {
   ApiPublicJoinRequestsStreamRoute: ApiPublicJoinRequestsStreamRoute,
   ApiPublicHooksAutoLeaveRoute: ApiPublicHooksAutoLeaveRoute,
   ApiPublicHooksDailySummaryRoute: ApiPublicHooksDailySummaryRoute,
+  ApiPublicHooksJoinVerifySweepRoute: ApiPublicHooksJoinVerifySweepRoute,
   ApiPublicHooksResumeStuckRoute: ApiPublicHooksResumeStuckRoute,
   ApiPublicHooksRetentionRoute: ApiPublicHooksRetentionRoute,
   ApiPublicHooksRunScheduledBroadcastsRoute:
