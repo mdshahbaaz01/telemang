@@ -633,8 +633,8 @@ function BotFlowPage() {
 
   const refreshBotButtons = useCallback(async (offsetArg?: number) => {
     const offset = Math.max(0, offsetArg ?? botBtnOffset);
-    if (!parsed?.username) return;
-    if (chatOpen.length === 0) return;
+    if (!parsed?.username) return {} as Record<string, PerAccountBtn>;
+    if (chatOpen.length === 0) return {} as Record<string, PerAccountBtn>;
     const target = `@${parsed.username}`;
     setBotBtnState((s) => ({ ...s, loading: true }));
     const results = await Promise.all(
@@ -691,6 +691,7 @@ function BotFlowPage() {
           ? `No buttons on message #${offset + 1} back — try a different offset`
           : "No inline buttons found on the bot's latest messages",
       );
+    return perAccount;
   }, [chatOpen, parsed?.username, previewChatFn, botBtnOffset]);
 
   const broadcastPress = useCallback(
