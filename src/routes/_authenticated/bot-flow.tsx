@@ -756,12 +756,11 @@ function BotFlowPage() {
     setBroadcastingMsg(false);
     if (ok) setBroadcastText("");
     toast[fail && !ok ? "error" : "success"](`Message sent → ok:${ok} fail:${fail}`);
-    // Refresh the visible chats so the sent message + any bot reply shows up.
-    setChatReload((p) => {
-      const next = { ...p };
-      for (const id of chatOpen) next[id] = (next[id] ?? 0) + 1;
-      return next;
-    });
+    // Keep sessions alive: ask each open chat frame to pull new history
+    // instead of remounting/reloading the iframe.
+    pingOpenChats();
+    setTimeout(pingOpenChats, 1500);
+    setTimeout(pingOpenChats, 4000);
   }, [broadcastText, parsed?.username, chatOpen, botBtnState.perAccount, previewChatFn, sendMessageAsFn]);
 
   // Auto-clear cached buttons when the set of open chats changes.
