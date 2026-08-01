@@ -30,6 +30,8 @@ export type SmartTelegramJoinResult = {
   /** "channel" | "supergroup" | "basic_group" | "unknown" */
   chatType?: string | null;
   chatTitle?: string | null;
+  chatUsername?: string | null;
+  isPublic?: boolean;
   discussionChatId?: string | null;
   fingerprintDrift?: string[];
 };
@@ -78,7 +80,7 @@ async function chatMeta(
 ): Promise<{
   chatType: string;
   chatTitle: string | null;
-  username: string | null;
+  chatUsername: string | null;
   discussionChatId: string | null;
   isPublic: boolean;
 }> {
@@ -97,7 +99,7 @@ async function chatMeta(
   return {
     chatType,
     chatTitle: entity?.title ?? null,
-    username: entity?.username ?? null,
+    chatUsername: entity?.username ?? null,
     discussionChatId,
     isPublic: !!entity?.username,
   };
