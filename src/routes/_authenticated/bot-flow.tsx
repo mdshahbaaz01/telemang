@@ -1267,7 +1267,7 @@ function BotFlowPage() {
                       </Button>
                     </div>
                     <div className="text-[10px] text-muted-foreground">
-                      Sent as a normal message from each account to @{parsed.username} — chats refresh automatically.
+                      Sent as a normal message from each account to @{parsed.username} — chats stay connected and update live.
                     </div>
                   </div>
                   <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3">
