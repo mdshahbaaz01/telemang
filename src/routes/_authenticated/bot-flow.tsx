@@ -726,6 +726,44 @@ function BotFlowPage() {
     [botBtnState.perAccount, pressInlineButtonAsFn, sendMessageAsFn],
   );
 
+  // ─── Broadcast a typed message to every open chat ─────────────────
+  const [broadcastText, setBroadcastText] = useState("");
+  const [broadcastingMsg, setBroadcastingMsg] = useState(false);
+  const broadcastMessage = useCallback(async () => {
+    const text = broadcastText.trim();
+    if (!text) return;
+    if (!parsed?.username) return toast.error("Open a bot chat first");
+    if (chatOpen.length === 0) return toast.error("No open accounts");
+    const target = `@${parsed.username}`;
+    setBroadcastingMsg(true);
+    let ok = 0, fail = 0;
+    await Promise.all(
+      chatOpen.map(async (accountId) => {
+        try {
+          let peerKey = botBtnState.perAccount[accountId]?.peerKey ?? null;
+          if (!peerKey) {
+            const res: any = await previewChatFn({ data: { target, accountId } });
+            peerKey = res?.peerKey ?? null;
+          }
+          if (!peerKey) { fail++; return; }
+          await sendMessageAsFn({ data: { accountId, peerKey, text } });
+          ok++;
+        } catch {
+          fail++;
+        }
+      }),
+    );
+    setBroadcastingMsg(false);
+    if (ok) setBroadcastText("");
+    toast[fail && !ok ? "error" : "success"](`Message sent → ok:${ok} fail:${fail}`);
+    // Refresh the visible chats so the sent message + any bot reply shows up.
+    setChatReload((p) => {
+      const next = { ...p };
+      for (const id of chatOpen) next[id] = (next[id] ?? 0) + 1;
+      return next;
+    });
+  }, [broadcastText, parsed?.username, chatOpen, botBtnState.perAccount, previewChatFn, sendMessageAsFn]);
+
   // Auto-clear cached buttons when the set of open chats changes.
   useEffect(() => {
     setBotBtnState({ loading: false, labels: [], perAccount: {} });
@@ -1189,6 +1227,39 @@ function BotFlowPage() {
                         </div>
                       </>
                     )}
+                  </div>
+                  <div className="rounded-md border border-border bg-background/60 p-2 text-xs space-y-2">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <span className="font-medium">Broadcast a message</span>
+                      <span className="text-muted-foreground">
+                        · type once, sends from all {chatOpen.length} open account(s)
+                      </span>
+                    </div>
+                    <div className="flex gap-2">
+                      <Input
+                        value={broadcastText}
+                        onChange={(e) => setBroadcastText(e.target.value)}
+                        onKeyDown={(e) => {
+                          if (e.key === "Enter" && !e.shiftKey) {
+                            e.preventDefault();
+                            if (!broadcastingMsg) void broadcastMessage();
+                          }
+                        }}
+                        placeholder="Message to send from every open account… (Enter to send)"
+                        className="h-8 text-xs"
+                        disabled={broadcastingMsg}
+                      />
+                      <Button
+                        size="sm"
+                        onClick={() => void broadcastMessage()}
+                        disabled={broadcastingMsg || !broadcastText.trim()}
+                      >
+                        {broadcastingMsg ? "Sending…" : "Send to all"}
+                      </Button>
+                    </div>
+                    <div className="text-[10px] text-muted-foreground">
+                      Sent as a normal message from each account to @{parsed.username} — chats refresh automatically.
+                    </div>
                   </div>
                   <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3">
                   {visibleChatIds.map((id) => {
