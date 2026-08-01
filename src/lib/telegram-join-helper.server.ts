@@ -300,7 +300,7 @@ export async function joinTelegramTargetVerified(args: {
         log?.("info", `Invite +${inviteHash.slice(0, 8)}… requires admin approval; sending a real join request through invite import`);
       }
 
-      if (!requestNeeded && chat && cn === "ChatInvitePeek") {
+      if (!requestNeeded && chat && cn === "ChatInvitePeek" && !isBasicGroup(chat)) {
         try {
           return await joinEntityVerified(client, Api, chat, chat.title || "channel", "peek_chat", log);
         } catch (error) {
