@@ -726,6 +726,44 @@ function BotFlowPage() {
     [botBtnState.perAccount, pressInlineButtonAsFn, sendMessageAsFn],
   );
 
+  // ─── Broadcast a typed message to every open chat ─────────────────
+  const [broadcastText, setBroadcastText] = useState("");
+  const [broadcastingMsg, setBroadcastingMsg] = useState(false);
+  const broadcastMessage = useCallback(async () => {
+    const text = broadcastText.trim();
+    if (!text) return;
+    if (!parsed?.username) return toast.error("Open a bot chat first");
+    if (chatOpen.length === 0) return toast.error("No open accounts");
+    const target = `@${parsed.username}`;
+    setBroadcastingMsg(true);
+    let ok = 0, fail = 0;
+    await Promise.all(
+      chatOpen.map(async (accountId) => {
+        try {
+          let peerKey = botBtnState.perAccount[accountId]?.peerKey ?? null;
+          if (!peerKey) {
+            const res: any = await previewChatFn({ data: { target, accountId } });
+            peerKey = res?.peerKey ?? null;
+          }
+          if (!peerKey) { fail++; return; }
+          await sendMessageAsFn({ data: { accountId, peerKey, text } });
+          ok++;
+        } catch {
+          fail++;
+        }
+      }),
+    );
+    setBroadcastingMsg(false);
+    if (ok) setBroadcastText("");
+    toast[fail && !ok ? "error" : "success"](`Message sent → ok:${ok} fail:${fail}`);
+    // Refresh the visible chats so the sent message + any bot reply shows up.
+    setChatReload((p) => {
+      const next = { ...p };
+      for (const id of chatOpen) next[id] = (next[id] ?? 0) + 1;
+      return next;
+    });
+  }, [broadcastText, parsed?.username, chatOpen, botBtnState.perAccount, previewChatFn, sendMessageAsFn]);
+
   // Auto-clear cached buttons when the set of open chats changes.
   useEffect(() => {
     setBotBtnState({ loading: false, labels: [], perAccount: {} });
