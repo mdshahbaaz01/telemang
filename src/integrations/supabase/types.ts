@@ -517,6 +517,124 @@ export type Database = {
         }
         Relationships: []
       }
+      forward_rule_events: {
+        Row: {
+          created_at: string
+          id: number
+          message: string | null
+          msg_id: number | null
+          rule_id: string
+          status: string
+          target_peer_key: string | null
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: number
+          message?: string | null
+          msg_id?: number | null
+          rule_id: string
+          status: string
+          target_peer_key?: string | null
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: number
+          message?: string | null
+          msg_id?: number | null
+          rule_id?: string
+          status?: string
+          target_peer_key?: string | null
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "forward_rule_events_rule_id_fkey"
+            columns: ["rule_id"]
+            isOneToOne: false
+            referencedRelation: "forward_rules"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      forward_rules: {
+        Row: {
+          account_id: string
+          created_at: string
+          delay_ms: number
+          drop_author: boolean
+          enabled: boolean
+          exclude_keywords: string | null
+          forwarded_count: number
+          id: string
+          include_keywords: string | null
+          last_error: string | null
+          last_msg_id: number
+          last_run_at: string | null
+          media_only: boolean
+          mode: string
+          name: string
+          source_label: string | null
+          source_peer_key: string
+          target_peer_keys: Json
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          account_id: string
+          created_at?: string
+          delay_ms?: number
+          drop_author?: boolean
+          enabled?: boolean
+          exclude_keywords?: string | null
+          forwarded_count?: number
+          id?: string
+          include_keywords?: string | null
+          last_error?: string | null
+          last_msg_id?: number
+          last_run_at?: string | null
+          media_only?: boolean
+          mode?: string
+          name: string
+          source_label?: string | null
+          source_peer_key: string
+          target_peer_keys?: Json
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          account_id?: string
+          created_at?: string
+          delay_ms?: number
+          drop_author?: boolean
+          enabled?: boolean
+          exclude_keywords?: string | null
+          forwarded_count?: number
+          id?: string
+          include_keywords?: string | null
+          last_error?: string | null
+          last_msg_id?: number
+          last_run_at?: string | null
+          media_only?: boolean
+          mode?: string
+          name?: string
+          source_label?: string | null
+          source_peer_key?: string
+          target_peer_keys?: Json
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "forward_rules_account_id_fkey"
+            columns: ["account_id"]
+            isOneToOne: false
+            referencedRelation: "telegram_accounts"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       idempotency_keys: {
         Row: {
           completed_at: string | null
