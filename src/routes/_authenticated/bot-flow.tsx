@@ -895,8 +895,26 @@ function BotFlowPage() {
           setSeqProgress({ step: i + 1, note: `Sent "${step.value}" → ok:${ok} fail:${fail}` });
         } else {
           setSeqProgress({ step: i + 1, note: `Tapping "${step.value}"` });
-          await refreshBotButtons();
-          await broadcastPress(step.value);
+          const fresh = await refreshBotButtons();
+          let ok = 0, fail = 0, skip = 0;
+          await Promise.all(
+            Object.entries(fresh).map(async ([accountId, v]) => {
+              const btn = v.buttons.find((b) => b.label === step.value);
+              if (!btn) { skip++; return; }
+              try {
+                if (btn.kind === "callback" && btn.data) {
+                  await pressInlineButtonAsFn({
+                    data: { accountId, peerKey: v.peerKey, msgId: v.msgId, data: btn.data, buttonLabel: step.value },
+                  });
+                  ok++;
+                } else if (btn.kind === "reply") {
+                  await sendMessageAsFn({ data: { accountId, peerKey: v.peerKey, text: step.value } });
+                  ok++;
+                } else { skip++; }
+              } catch { fail++; }
+            }),
+          );
+          setSeqProgress({ step: i + 1, note: `Tapped "${step.value}" → ok:${ok} fail:${fail} skip:${skip}` });
         }
         pingOpenChats();
         await new Promise((r) => setTimeout(r, 800));
@@ -907,7 +925,7 @@ function BotFlowPage() {
       pingOpenChats();
       setTimeout(pingOpenChats, 2000);
     }
-  }, [seqSteps, chatOpen, resolvePeerKeyFor, sendMessageAsFn, refreshBotButtons, broadcastPress, pingOpenChats]);
+  }, [seqSteps, chatOpen, resolvePeerKeyFor, sendMessageAsFn, refreshBotButtons, pressInlineButtonAsFn, pingOpenChats]);
 
   // Auto-clear cached buttons when the set of open chats changes.
   useEffect(() => {
