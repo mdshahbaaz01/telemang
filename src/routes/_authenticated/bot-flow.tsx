@@ -452,8 +452,31 @@ function BotFlowPage() {
   const [vxButtonText, setVxButtonText] = useState("verify");
   const [vxSelected, setVxSelected] = useState<string[]>([]);
   const [vxRunning, setVxRunning] = useState(false);
+  // Optional: auto-send each extracted link to a target chat from the SAME account
+  const [vxAutoSend, setVxAutoSend] = useState(false);
+  const [vxTarget, setVxTarget] = useState("");
+  const [vxTemplate, setVxTemplate] = useState("{link}");
+  useEffect(() => {
+    try {
+      const raw = localStorage.getItem("botflow.vxAutoSend");
+      if (raw) {
+        const p = JSON.parse(raw) as { on?: boolean; target?: string; tpl?: string };
+        setVxAutoSend(!!p.on);
+        setVxTarget(p.target ?? "");
+        setVxTemplate(p.tpl || "{link}");
+      }
+    } catch { /* ignore */ }
+  }, []);
+  useEffect(() => {
+    try {
+      localStorage.setItem(
+        "botflow.vxAutoSend",
+        JSON.stringify({ on: vxAutoSend, target: vxTarget, tpl: vxTemplate }),
+      );
+    } catch { /* ignore */ }
+  }, [vxAutoSend, vxTarget, vxTemplate]);
   const [vxResults, setVxResults] = useState<
-    { accountId: string; status: "loading" | "ready" | "error"; url?: string; label?: string; kind?: "webview" | "url"; error?: string }[]
+    { accountId: string; status: "loading" | "ready" | "error"; url?: string; label?: string; kind?: "webview" | "url"; error?: string; sent?: "ok" | "fail"; sendError?: string }[]
   >([]);
 
   const vxParsed = useMemo(() => {
