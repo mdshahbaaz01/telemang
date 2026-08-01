@@ -672,6 +672,47 @@ export type Database = {
           },
         ]
       }
+      join_blocklist: {
+        Row: {
+          account_id: string | null
+          created_at: string
+          error_code: string | null
+          id: string
+          permanent: boolean
+          reason: string
+          target_key: string
+          user_id: string
+        }
+        Insert: {
+          account_id?: string | null
+          created_at?: string
+          error_code?: string | null
+          id?: string
+          permanent?: boolean
+          reason: string
+          target_key: string
+          user_id: string
+        }
+        Update: {
+          account_id?: string | null
+          created_at?: string
+          error_code?: string | null
+          id?: string
+          permanent?: boolean
+          reason?: string
+          target_key?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "join_blocklist_account_id_fkey"
+            columns: ["account_id"]
+            isOneToOne: false
+            referencedRelation: "telegram_accounts"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       join_cache: {
         Row: {
           account_id: string
@@ -718,6 +759,122 @@ export type Database = {
         Relationships: [
           {
             foreignKeyName: "join_cache_account_id_fkey"
+            columns: ["account_id"]
+            isOneToOne: false
+            referencedRelation: "telegram_accounts"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      join_fingerprints: {
+        Row: {
+          chat_id: string | null
+          chat_type: string | null
+          discussion_chat_id: string | null
+          drift: Json | null
+          drift_at: string | null
+          first_seen_at: string
+          id: string
+          is_public: boolean
+          last_seen_at: string
+          migrated_from_chat_id: string | null
+          requires_approval: boolean
+          target_key: string
+          title: string | null
+          user_id: string
+          username: string | null
+        }
+        Insert: {
+          chat_id?: string | null
+          chat_type?: string | null
+          discussion_chat_id?: string | null
+          drift?: Json | null
+          drift_at?: string | null
+          first_seen_at?: string
+          id?: string
+          is_public?: boolean
+          last_seen_at?: string
+          migrated_from_chat_id?: string | null
+          requires_approval?: boolean
+          target_key: string
+          title?: string | null
+          user_id: string
+          username?: string | null
+        }
+        Update: {
+          chat_id?: string | null
+          chat_type?: string | null
+          discussion_chat_id?: string | null
+          drift?: Json | null
+          drift_at?: string | null
+          first_seen_at?: string
+          id?: string
+          is_public?: boolean
+          last_seen_at?: string
+          migrated_from_chat_id?: string | null
+          requires_approval?: boolean
+          target_key?: string
+          title?: string | null
+          user_id?: string
+          username?: string | null
+        }
+        Relationships: []
+      }
+      join_memberships: {
+        Row: {
+          account_id: string | null
+          chat_id: string | null
+          chat_type: string | null
+          checks: number
+          created_at: string
+          error_code: string | null
+          id: string
+          last_check_at: string | null
+          method: string | null
+          status: string
+          target_key: string
+          updated_at: string
+          user_id: string
+          verified_at: string | null
+          verify_after: string | null
+        }
+        Insert: {
+          account_id?: string | null
+          chat_id?: string | null
+          chat_type?: string | null
+          checks?: number
+          created_at?: string
+          error_code?: string | null
+          id?: string
+          last_check_at?: string | null
+          method?: string | null
+          status?: string
+          target_key: string
+          updated_at?: string
+          user_id: string
+          verified_at?: string | null
+          verify_after?: string | null
+        }
+        Update: {
+          account_id?: string | null
+          chat_id?: string | null
+          chat_type?: string | null
+          checks?: number
+          created_at?: string
+          error_code?: string | null
+          id?: string
+          last_check_at?: string | null
+          method?: string | null
+          status?: string
+          target_key?: string
+          updated_at?: string
+          user_id?: string
+          verified_at?: string | null
+          verify_after?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "join_memberships_account_id_fkey"
             columns: ["account_id"]
             isOneToOne: false
             referencedRelation: "telegram_accounts"
