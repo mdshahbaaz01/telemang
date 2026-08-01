@@ -50,6 +50,15 @@ function firstChatFrom(value: any): any | null {
 async function verifyMembership(client: any, Api: any, channel: any): Promise<boolean> {
   if (!channel) return false;
   if (channel.left === false || channel.creator || channel.adminRights) return true;
+  if (isBasicGroup(channel)) {
+    try {
+      const full: any = await client.invoke(new Api.messages.GetFullChat({ chatId: channel.id }));
+      const chat = Array.isArray(full?.chats) && full.chats.length ? full.chats[0] : null;
+      return !!chat && chat.left !== true && chat.deactivated !== true;
+    } catch {
+      return false;
+    }
+  }
   try {
     const me = await client.getMe(true);
     const inputChannel = await client.getInputEntity(channel);
