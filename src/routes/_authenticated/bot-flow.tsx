@@ -13,6 +13,8 @@ import {
   pressInlineButtonAs,
   sendMessageAs,
 } from "@/lib/tg-viewer.functions";
+import { sendMediaAs } from "@/lib/tg-viewer.functions";
+import { listMedia } from "@/lib/media-library.functions";
 import { previewChat } from "@/lib/chat-viewer.functions";
 import { useMiniAppProxyUrl } from "@/lib/miniapp-proxy-url";
 import { AdminGate } from "@/components/AdminGate";
@@ -631,8 +633,8 @@ function BotFlowPage() {
 
   const refreshBotButtons = useCallback(async (offsetArg?: number) => {
     const offset = Math.max(0, offsetArg ?? botBtnOffset);
-    if (!parsed?.username) return;
-    if (chatOpen.length === 0) return;
+    if (!parsed?.username) return {} as Record<string, PerAccountBtn>;
+    if (chatOpen.length === 0) return {} as Record<string, PerAccountBtn>;
     const target = `@${parsed.username}`;
     setBotBtnState((s) => ({ ...s, loading: true }));
     const results = await Promise.all(
@@ -689,6 +691,7 @@ function BotFlowPage() {
           ? `No buttons on message #${offset + 1} back — try a different offset`
           : "No inline buttons found on the bot's latest messages",
       );
+    return perAccount;
   }, [chatOpen, parsed?.username, previewChatFn, botBtnOffset]);
 
   const broadcastPress = useCallback(
@@ -772,6 +775,157 @@ function BotFlowPage() {
     setTimeout(pingOpenChats, 1500);
     setTimeout(pingOpenChats, 4000);
   }, [broadcastText, parsed?.username, chatOpen, botBtnState.perAccount, previewChatFn, sendMessageAsFn]);
+
+  // Resolve (and memoize) the bot peerKey for one account.
+  const peerKeyCache = useRef<Record<string, string>>({});
+  const resolvePeerKeyFor = useCallback(
+    async (accountId: string): Promise<string | null> => {
+      const cached = botBtnState.perAccount[accountId]?.peerKey ?? peerKeyCache.current[accountId];
+      if (cached) return cached;
+      if (!parsed?.username) return null;
+      const res: any = await previewChatFn({ data: { target: `@${parsed.username}`, accountId } });
+      const pk: string | null = res?.peerKey ?? null;
+      if (pk) peerKeyCache.current[accountId] = pk;
+      return pk;
+    },
+    [botBtnState.perAccount, parsed?.username, previewChatFn],
+  );
+
+  // ─── Attachment broadcast (media library) ─────────────────────────
+  const listMediaFn = useServerFn(listMedia);
+  const sendMediaAsFn = useServerFn(sendMediaAs);
+  const mediaQ = useQuery({
+    queryKey: ["bot-flow-media"],
+    queryFn: () => listMediaFn({} as any),
+    staleTime: 60_000,
+  });
+  const mediaItems = (mediaQ.data ?? []) as Array<{
+    id: string; name: string; path: string; filename: string; isVoice: boolean;
+  }>;
+  const [mediaId, setMediaId] = useState<string>("");
+  const [mediaCaption, setMediaCaption] = useState("");
+  const [sendingMedia, setSendingMedia] = useState(false);
+  const broadcastMedia = useCallback(async () => {
+    const item = mediaItems.find((m) => m.id === mediaId);
+    if (!item) return toast.error("Pick a file from the media library first");
+    if (chatOpen.length === 0) return toast.error("No open accounts");
+    setSendingMedia(true);
+    let ok = 0, fail = 0;
+    await Promise.all(
+      chatOpen.map(async (accountId) => {
+        try {
+          const peerKey = await resolvePeerKeyFor(accountId);
+          if (!peerKey) { fail++; return; }
+          await sendMediaAsFn({
+            data: {
+              accountId,
+              peerKey,
+              path: item.path,
+              filename: item.filename,
+              isVoice: item.isVoice,
+              caption: mediaCaption.trim() || undefined,
+            },
+          });
+          ok++;
+        } catch {
+          fail++;
+        }
+      }),
+    );
+    setSendingMedia(false);
+    toast[fail && !ok ? "error" : "success"](`File sent → ok:${ok} fail:${fail}`);
+    pingOpenChats();
+    setTimeout(pingOpenChats, 2000);
+  }, [mediaItems, mediaId, mediaCaption, chatOpen, resolvePeerKeyFor, sendMediaAsFn, pingOpenChats]);
+
+  // ─── Sequence sender (scripted multi-step run) ────────────────────
+  type SeqStep =
+    | { kind: "text"; value: string }
+    | { kind: "button"; value: string }
+    | { kind: "wait"; seconds: number };
+  const [seqSteps, setSeqSteps] = useState<SeqStep[]>([]);
+  const [seqDraft, setSeqDraft] = useState("");
+  const [seqKind, setSeqKind] = useState<"text" | "button" | "wait">("text");
+  const [seqRunning, setSeqRunning] = useState(false);
+  const [seqProgress, setSeqProgress] = useState<{ step: number; note: string } | null>(null);
+  const seqAbort = useRef(false);
+
+  const addSeqStep = () => {
+    const v = seqDraft.trim();
+    if (seqKind === "wait") {
+      const s = Math.max(1, Math.min(300, Number(v) || 3));
+      setSeqSteps((p) => [...p, { kind: "wait", seconds: s }]);
+    } else {
+      if (!v) return;
+      setSeqSteps((p) => [...p, { kind: seqKind, value: v }]);
+    }
+    setSeqDraft("");
+  };
+
+  const runSequence = useCallback(async () => {
+    if (!seqSteps.length) return toast.error("Add at least one step");
+    if (chatOpen.length === 0) return toast.error("No open accounts");
+    seqAbort.current = false;
+    setSeqRunning(true);
+    try {
+      for (let i = 0; i < seqSteps.length; i++) {
+        if (seqAbort.current) { toast.info("Sequence stopped"); break; }
+        const step = seqSteps[i];
+        if (step.kind === "wait") {
+          setSeqProgress({ step: i + 1, note: `Waiting ${step.seconds}s…` });
+          for (let s = 0; s < step.seconds * 4; s++) {
+            if (seqAbort.current) break;
+            await new Promise((r) => setTimeout(r, 250));
+          }
+          continue;
+        }
+        if (step.kind === "text") {
+          setSeqProgress({ step: i + 1, note: `Sending "${step.value}"` });
+          let ok = 0, fail = 0;
+          await Promise.all(
+            chatOpen.map(async (accountId) => {
+              try {
+                const peerKey = await resolvePeerKeyFor(accountId);
+                if (!peerKey) { fail++; return; }
+                await sendMessageAsFn({ data: { accountId, peerKey, text: step.value } });
+                ok++;
+              } catch { fail++; }
+            }),
+          );
+          setSeqProgress({ step: i + 1, note: `Sent "${step.value}" → ok:${ok} fail:${fail}` });
+        } else {
+          setSeqProgress({ step: i + 1, note: `Tapping "${step.value}"` });
+          const fresh = await refreshBotButtons();
+          let ok = 0, fail = 0, skip = 0;
+          await Promise.all(
+            Object.entries(fresh).map(async ([accountId, v]) => {
+              const btn = v.buttons.find((b) => b.label === step.value);
+              if (!btn) { skip++; return; }
+              try {
+                if (btn.kind === "callback" && btn.data) {
+                  await pressInlineButtonAsFn({
+                    data: { accountId, peerKey: v.peerKey, msgId: v.msgId, data: btn.data, buttonLabel: step.value },
+                  });
+                  ok++;
+                } else if (btn.kind === "reply") {
+                  await sendMessageAsFn({ data: { accountId, peerKey: v.peerKey, text: step.value } });
+                  ok++;
+                } else { skip++; }
+              } catch { fail++; }
+            }),
+          );
+          setSeqProgress({ step: i + 1, note: `Tapped "${step.value}" → ok:${ok} fail:${fail} skip:${skip}` });
+        }
+        pingOpenChats();
+        await new Promise((r) => setTimeout(r, 800));
+      }
+    } finally {
+      setSeqRunning(false);
+      setSeqProgress(null);
+      pingOpenChats();
+      setTimeout(pingOpenChats, 2000);
+    }
+  }, [seqSteps, chatOpen, resolvePeerKeyFor, sendMessageAsFn, refreshBotButtons, pressInlineButtonAsFn, pingOpenChats]);
 
   // Auto-clear cached buttons when the set of open chats changes.
   useEffect(() => {
@@ -1268,6 +1422,128 @@ function BotFlowPage() {
                     </div>
                     <div className="text-[10px] text-muted-foreground">
                       Sent as a normal message from each account to @{parsed.username} — chats stay connected and update live.
+                    </div>
+                  </div>
+                  {/* ── Attachment broadcast ─────────────────────── */}
+                  <div className="rounded-md border border-border bg-background/60 p-2 text-xs space-y-2">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <span className="font-medium">Send a file to all</span>
+                      <span className="text-muted-foreground">· from your Media Library</span>
+                    </div>
+                    <div className="flex flex-wrap gap-2">
+                      <Select value={mediaId} onValueChange={setMediaId}>
+                        <SelectTrigger className="h-8 w-[220px] text-xs">
+                          <SelectValue placeholder={mediaItems.length ? "Pick a file…" : "Media library is empty"} />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {mediaItems.map((m) => (
+                            <SelectItem key={m.id} value={m.id} className="text-xs">
+                              {m.name}{m.isVoice ? " (voice)" : ""}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                      <Input
+                        value={mediaCaption}
+                        onChange={(e) => setMediaCaption(e.target.value)}
+                        placeholder="Caption (optional)"
+                        className="h-8 max-w-[280px] text-xs"
+                        disabled={sendingMedia}
+                      />
+                      <Button size="sm" onClick={() => void broadcastMedia()} disabled={sendingMedia || !mediaId}>
+                        {sendingMedia ? "Sending…" : "Send file to all"}
+                      </Button>
+                    </div>
+                  </div>
+                  {/* ── Sequence sender ──────────────────────────── */}
+                  <div className="rounded-md border border-border bg-background/60 p-2 text-xs space-y-2">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <span className="font-medium">Sequence sender</span>
+                      <span className="text-muted-foreground">
+                        · script steps once, every open account runs them in order
+                      </span>
+                    </div>
+                    <div className="flex flex-wrap gap-2">
+                      <Select value={seqKind} onValueChange={(v) => setSeqKind(v as typeof seqKind)}>
+                        <SelectTrigger className="h-8 w-[130px] text-xs">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="text" className="text-xs">Send text</SelectItem>
+                          <SelectItem value="button" className="text-xs">Tap button</SelectItem>
+                          <SelectItem value="wait" className="text-xs">Wait (sec)</SelectItem>
+                        </SelectContent>
+                      </Select>
+                      <Input
+                        value={seqDraft}
+                        onChange={(e) => setSeqDraft(e.target.value)}
+                        onKeyDown={(e) => {
+                          if (e.key === "Enter") { e.preventDefault(); addSeqStep(); }
+                        }}
+                        placeholder={
+                          seqKind === "wait" ? "Seconds, e.g. 5"
+                            : seqKind === "button" ? "Exact button label"
+                            : "Message text, e.g. /start"
+                        }
+                        className="h-8 max-w-[280px] text-xs"
+                      />
+                      <Button size="sm" variant="outline" onClick={addSeqStep}>Add step</Button>
+                      {seqSteps.length > 0 && (
+                        <>
+                          <Button
+                            size="sm"
+                            onClick={() => void runSequence()}
+                            disabled={seqRunning}
+                          >
+                            {seqRunning ? "Running…" : `Run on ${chatOpen.length} account(s)`}
+                          </Button>
+                          {seqRunning ? (
+                            <Button size="sm" variant="destructive" onClick={() => { seqAbort.current = true; }}>
+                              Stop
+                            </Button>
+                          ) : (
+                            <Button size="sm" variant="ghost" onClick={() => setSeqSteps([])}>Clear</Button>
+                          )}
+                        </>
+                      )}
+                    </div>
+                    {seqSteps.length > 0 && (
+                      <ol className="space-y-1">
+                        {seqSteps.map((s, i) => (
+                          <li
+                            key={`${i}-${s.kind}`}
+                            className={
+                              "flex items-center gap-2 rounded border px-2 py-1 " +
+                              (seqProgress?.step === i + 1
+                                ? "border-primary/50 bg-primary/10"
+                                : "border-border")
+                            }
+                          >
+                            <span className="font-mono text-[10px] text-muted-foreground">{i + 1}</span>
+                            <span className="rounded bg-muted px-1 text-[10px] uppercase">{s.kind}</span>
+                            <span className="min-w-0 flex-1 truncate">
+                              {s.kind === "wait" ? `${s.seconds}s` : s.value}
+                            </span>
+                            <button
+                              type="button"
+                              className="rounded p-1 hover:bg-muted"
+                              title="Remove step"
+                              onClick={() => setSeqSteps((p) => p.filter((_, x) => x !== i))}
+                            >
+                              <X className="h-3 w-3" />
+                            </button>
+                          </li>
+                        ))}
+                      </ol>
+                    )}
+                    {seqProgress && (
+                      <div className="text-[10px] text-primary">
+                        Step {seqProgress.step}/{seqSteps.length} · {seqProgress.note}
+                      </div>
+                    )}
+                    <div className="text-[10px] text-muted-foreground">
+                      "Tap button" re-reads the bot's newest buttons before each press, so multi-step
+                      flows (/start → wait → tap Verify) work end-to-end without reloading sessions.
                     </div>
                   </div>
                   <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3">

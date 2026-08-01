@@ -368,6 +368,48 @@ async function sendOwnContact(client: any, Api: any, peer: any, replyToMsgId?: n
 }
 
 // ── markRead ────────────────────────────────────────────────────────────
+// ── sendMediaAs ─────────────────────────────────────────────────────────
+export const sendMediaAs = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((d: unknown) => z.object({
+    accountId: z.string().uuid(),
+    peerKey: z.string().min(3),
+    path: z.string().min(1).max(500),
+    filename: z.string().min(1).max(200),
+    isVoice: z.boolean().optional(),
+    caption: z.string().max(1024).optional(),
+    replyToMsgId: z.number().int().positive().optional(),
+  }).parse(d))
+  .handler(async ({ data, context }) => {
+    await assertAdmin(context.supabase);
+    const { openClientForAccount } = await import("./cleanup.server");
+    const { Api } = await import("telegram");
+    const { CustomFile } = await import("telegram/client/uploads");
+
+    const { data: signed, error: sErr } = await context.supabase.storage
+      .from("action-attachments")
+      .createSignedUrl(data.path, 300);
+    if (sErr || !signed?.signedUrl) throw new Error(`Attachment fetch failed: ${sErr?.message ?? "no url"}`);
+    const res = await fetch(signed.signedUrl);
+    if (!res.ok) throw new Error(`Attachment download failed: ${res.status}`);
+    const buf = Buffer.from(await res.arrayBuffer());
+
+    const client = await openClientForAccount(context.supabase, data.accountId);
+    try {
+      const peer = await resolvePeerFromKey(client, Api, data.peerKey);
+      const sent: any = await client.sendFile(peer, {
+        file: new CustomFile(data.filename, buf.length, data.filename, buf),
+        caption: data.caption || undefined,
+        voiceNote: !!data.isVoice,
+        replyTo: data.replyToMsgId,
+      });
+      return { id: Number(sent?.id ?? 0), date: sent?.date ? Number(sent.date) * 1000 : Date.now() };
+    } finally {
+      await client.disconnect().catch(() => {});
+    }
+  });
+
+// ── markRead ────────────────────────────────────────────────────────────
 export const markRead = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .inputValidator((d: unknown) => z.object({ accountId: z.string().uuid(), peerKey: z.string().min(3) }).parse(d))
