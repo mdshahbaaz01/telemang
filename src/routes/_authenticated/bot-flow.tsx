@@ -515,6 +515,7 @@ function BotFlowPage() {
     if (!vxParsed?.username) return toast.error("Paste a bot link or @username");
     const ids = vxSelected.length ? vxSelected : allIds;
     if (!ids.length) return toast.error("Select at least one account");
+    if (vxAutoSend && !vxTargetKey) return toast.error("Enter a target chat for auto-send");
     setVxRunning(true);
     setVxResults(ids.map((id) => ({ accountId: id, status: "loading" as const })));
     await Promise.all(
@@ -536,6 +537,27 @@ function BotFlowPage() {
                 : r,
             ),
           );
+          if (vxAutoSend && vxTargetKey && res.url) {
+            try {
+              const text = (vxTemplate || "{link}").includes("{link}")
+                ? (vxTemplate || "{link}").replace(/\{link\}/g, res.url)
+                : `${vxTemplate} ${res.url}`.trim();
+              await sendMessageAs({
+                data: { accountId, peerKey: vxTargetKey, text },
+              });
+              setVxResults((prev) =>
+                prev.map((r) => (r.accountId === accountId ? { ...r, sent: "ok" } : r)),
+              );
+            } catch (e) {
+              setVxResults((prev) =>
+                prev.map((r) =>
+                  r.accountId === accountId
+                    ? { ...r, sent: "fail", sendError: (e as Error).message || "Send failed" }
+                    : r,
+                ),
+              );
+            }
+          }
         } catch (e) {
           setVxResults((prev) =>
             prev.map((r) =>
