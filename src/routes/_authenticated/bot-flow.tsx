@@ -498,6 +498,19 @@ function BotFlowPage() {
   const vxToggle = (id: string) =>
     setVxSelected((ids) => (ids.includes(id) ? ids.filter((x) => x !== id) : [...ids, id]));
 
+  // "@name" | "t.me/name" | "c:123" → peer key accepted by sendMessageAs
+  const normalizeVxTarget = (raw: string) => {
+    const t = raw.trim();
+    if (!t) return "";
+    if (/^[ucg]:\d+$/.test(t)) return t;
+    const cleaned = t
+      .replace(/^https?:\/\/(t\.me|telegram\.me)\//i, "")
+      .replace(/^@/, "")
+      .split(/[/?]/)[0];
+    return cleaned ? `@${cleaned}` : "";
+  };
+  const vxTargetKey = useMemo(() => normalizeVxTarget(vxTarget), [vxTarget]);
+
   const runExtractVerify = async () => {
     if (!vxParsed?.username) return toast.error("Paste a bot link or @username");
     const ids = vxSelected.length ? vxSelected : allIds;
