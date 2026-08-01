@@ -452,8 +452,31 @@ function BotFlowPage() {
   const [vxButtonText, setVxButtonText] = useState("verify");
   const [vxSelected, setVxSelected] = useState<string[]>([]);
   const [vxRunning, setVxRunning] = useState(false);
+  // Optional: auto-send each extracted link to a target chat from the SAME account
+  const [vxAutoSend, setVxAutoSend] = useState(false);
+  const [vxTarget, setVxTarget] = useState("");
+  const [vxTemplate, setVxTemplate] = useState("{link}");
+  useEffect(() => {
+    try {
+      const raw = localStorage.getItem("botflow.vxAutoSend");
+      if (raw) {
+        const p = JSON.parse(raw) as { on?: boolean; target?: string; tpl?: string };
+        setVxAutoSend(!!p.on);
+        setVxTarget(p.target ?? "");
+        setVxTemplate(p.tpl || "{link}");
+      }
+    } catch { /* ignore */ }
+  }, []);
+  useEffect(() => {
+    try {
+      localStorage.setItem(
+        "botflow.vxAutoSend",
+        JSON.stringify({ on: vxAutoSend, target: vxTarget, tpl: vxTemplate }),
+      );
+    } catch { /* ignore */ }
+  }, [vxAutoSend, vxTarget, vxTemplate]);
   const [vxResults, setVxResults] = useState<
-    { accountId: string; status: "loading" | "ready" | "error"; url?: string; label?: string; kind?: "webview" | "url"; error?: string }[]
+    { accountId: string; status: "loading" | "ready" | "error"; url?: string; label?: string; kind?: "webview" | "url"; error?: string; sent?: "ok" | "fail"; sendError?: string }[]
   >([]);
 
   const vxParsed = useMemo(() => {
@@ -475,10 +498,24 @@ function BotFlowPage() {
   const vxToggle = (id: string) =>
     setVxSelected((ids) => (ids.includes(id) ? ids.filter((x) => x !== id) : [...ids, id]));
 
+  // "@name" | "t.me/name" | "c:123" → peer key accepted by sendMessageAs
+  const normalizeVxTarget = (raw: string) => {
+    const t = raw.trim();
+    if (!t) return "";
+    if (/^[ucg]:\d+$/.test(t)) return t;
+    const cleaned = t
+      .replace(/^https?:\/\/(t\.me|telegram\.me)\//i, "")
+      .replace(/^@/, "")
+      .split(/[/?]/)[0];
+    return cleaned ? `@${cleaned}` : "";
+  };
+  const vxTargetKey = useMemo(() => normalizeVxTarget(vxTarget), [vxTarget]);
+
   const runExtractVerify = async () => {
     if (!vxParsed?.username) return toast.error("Paste a bot link or @username");
     const ids = vxSelected.length ? vxSelected : allIds;
     if (!ids.length) return toast.error("Select at least one account");
+    if (vxAutoSend && !vxTargetKey) return toast.error("Enter a target chat for auto-send");
     setVxRunning(true);
     setVxResults(ids.map((id) => ({ accountId: id, status: "loading" as const })));
     await Promise.all(
@@ -500,6 +537,27 @@ function BotFlowPage() {
                 : r,
             ),
           );
+          if (vxAutoSend && vxTargetKey && res.url) {
+            try {
+              const text = (vxTemplate || "{link}").includes("{link}")
+                ? (vxTemplate || "{link}").replace(/\{link\}/g, res.url)
+                : `${vxTemplate} ${res.url}`.trim();
+              await sendMessageAs({
+                data: { accountId, peerKey: vxTargetKey, text },
+              });
+              setVxResults((prev) =>
+                prev.map((r) => (r.accountId === accountId ? { ...r, sent: "ok" } : r)),
+              );
+            } catch (e) {
+              setVxResults((prev) =>
+                prev.map((r) =>
+                  r.accountId === accountId
+                    ? { ...r, sent: "fail", sendError: (e as Error).message || "Send failed" }
+                    : r,
+                ),
+              );
+            }
+          }
         } catch (e) {
           setVxResults((prev) =>
             prev.map((r) =>
@@ -1653,6 +1711,43 @@ function BotFlowPage() {
             </div>
           </div>
 
+          <div className="rounded-md border border-border bg-background/50 p-3 space-y-3">
+            <div className="flex items-center gap-2">
+              <Switch checked={vxAutoSend} onCheckedChange={setVxAutoSend} id="vx-autosend" />
+              <Label htmlFor="vx-autosend" className="cursor-pointer">
+                Auto-send each extracted link to a chat (from the same account)
+              </Label>
+            </div>
+            {vxAutoSend && (
+              <div className="grid gap-3 md:grid-cols-2">
+                <div>
+                  <Label>Target chat / group / channel</Label>
+                  <Input
+                    value={vxTarget}
+                    onChange={(e) => setVxTarget(e.target.value)}
+                    placeholder="@mychannel  ·  https://t.me/mychannel  ·  c:123456789"
+                  />
+                  <p className="mt-1 text-xs text-muted-foreground">
+                    {vxTargetKey
+                      ? <>Sends as <span className="font-mono text-foreground">{vxTargetKey}</span> — each account must already be a member.</>
+                      : "Public @username, t.me link, or a peer key (u:/g:/c:)."}
+                  </p>
+                </div>
+                <div>
+                  <Label>Message template</Label>
+                  <Input
+                    value={vxTemplate}
+                    onChange={(e) => setVxTemplate(e.target.value)}
+                    placeholder="{link}"
+                  />
+                  <p className="mt-1 text-xs text-muted-foreground">
+                    Use <code>{"{link}"}</code> as the placeholder for the extracted URL.
+                  </p>
+                </div>
+              </div>
+            )}
+          </div>
+
           <div className="space-y-2">
             <div className="flex items-center gap-2">
               <div className="text-sm font-medium mr-auto">
@@ -1724,6 +1819,14 @@ function BotFlowPage() {
                           <Copy className="h-3.5 w-3.5" />
                         </button>
                         <BrowserPickerButton url={r.url} compact />
+                        {r.sent === "ok" && (
+                          <span className="rounded bg-primary/10 px-1.5 py-0.5 text-[10px] uppercase text-primary">sent</span>
+                        )}
+                        {r.sent === "fail" && (
+                          <span className="rounded bg-destructive/10 px-1.5 py-0.5 text-[10px] uppercase text-destructive" title={r.sendError}>
+                            send failed
+                          </span>
+                        )}
                       </>
                     )}
                   </div>
