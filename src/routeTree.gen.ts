@@ -25,6 +25,7 @@ import { Route as AuthenticatedProfileUpdaterRouteImport } from './routes/_authe
 import { Route as AuthenticatedOwnerRouteImport } from './routes/_authenticated/owner'
 import { Route as AuthenticatedJoinRequestsRouteImport } from './routes/_authenticated/join-requests'
 import { Route as AuthenticatedJoinPacingRouteImport } from './routes/_authenticated/join-pacing'
+import { Route as AuthenticatedJoinIntegrityRouteImport } from './routes/_authenticated/join-integrity'
 import { Route as AuthenticatedHealthRouteImport } from './routes/_authenticated/health'
 import { Route as AuthenticatedForwardRangeRouteImport } from './routes/_authenticated/forward-range'
 import { Route as AuthenticatedDashboardRouteImport } from './routes/_authenticated/dashboard'
@@ -134,6 +135,12 @@ const AuthenticatedJoinPacingRoute = AuthenticatedJoinPacingRouteImport.update({
   path: '/join-pacing',
   getParentRoute: () => AuthenticatedRouteRoute,
 } as any)
+const AuthenticatedJoinIntegrityRoute =
+  AuthenticatedJoinIntegrityRouteImport.update({
+    id: '/join-integrity',
+    path: '/join-integrity',
+    getParentRoute: () => AuthenticatedRouteRoute,
+  } as any)
 const AuthenticatedHealthRoute = AuthenticatedHealthRouteImport.update({
   id: '/health',
   path: '/health',
@@ -293,6 +300,7 @@ export interface FileRoutesByFullPath {
   '/dashboard': typeof AuthenticatedDashboardRoute
   '/forward-range': typeof AuthenticatedForwardRangeRoute
   '/health': typeof AuthenticatedHealthRoute
+  '/join-integrity': typeof AuthenticatedJoinIntegrityRoute
   '/join-pacing': typeof AuthenticatedJoinPacingRoute
   '/join-requests': typeof AuthenticatedJoinRequestsRoute
   '/owner': typeof AuthenticatedOwnerRoute
@@ -337,6 +345,7 @@ export interface FileRoutesByTo {
   '/dashboard': typeof AuthenticatedDashboardRoute
   '/forward-range': typeof AuthenticatedForwardRangeRoute
   '/health': typeof AuthenticatedHealthRoute
+  '/join-integrity': typeof AuthenticatedJoinIntegrityRoute
   '/join-pacing': typeof AuthenticatedJoinPacingRoute
   '/join-requests': typeof AuthenticatedJoinRequestsRoute
   '/owner': typeof AuthenticatedOwnerRoute
@@ -383,6 +392,7 @@ export interface FileRoutesById {
   '/_authenticated/dashboard': typeof AuthenticatedDashboardRoute
   '/_authenticated/forward-range': typeof AuthenticatedForwardRangeRoute
   '/_authenticated/health': typeof AuthenticatedHealthRoute
+  '/_authenticated/join-integrity': typeof AuthenticatedJoinIntegrityRoute
   '/_authenticated/join-pacing': typeof AuthenticatedJoinPacingRoute
   '/_authenticated/join-requests': typeof AuthenticatedJoinRequestsRoute
   '/_authenticated/owner': typeof AuthenticatedOwnerRoute
@@ -429,6 +439,7 @@ export interface FileRouteTypes {
     | '/dashboard'
     | '/forward-range'
     | '/health'
+    | '/join-integrity'
     | '/join-pacing'
     | '/join-requests'
     | '/owner'
@@ -473,6 +484,7 @@ export interface FileRouteTypes {
     | '/dashboard'
     | '/forward-range'
     | '/health'
+    | '/join-integrity'
     | '/join-pacing'
     | '/join-requests'
     | '/owner'
@@ -518,6 +530,7 @@ export interface FileRouteTypes {
     | '/_authenticated/dashboard'
     | '/_authenticated/forward-range'
     | '/_authenticated/health'
+    | '/_authenticated/join-integrity'
     | '/_authenticated/join-pacing'
     | '/_authenticated/join-requests'
     | '/_authenticated/owner'
@@ -679,6 +692,13 @@ declare module '@tanstack/react-router' {
       path: '/join-pacing'
       fullPath: '/join-pacing'
       preLoaderRoute: typeof AuthenticatedJoinPacingRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
+    '/_authenticated/join-integrity': {
+      id: '/_authenticated/join-integrity'
+      path: '/join-integrity'
+      fullPath: '/join-integrity'
+      preLoaderRoute: typeof AuthenticatedJoinIntegrityRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
     '/_authenticated/health': {
@@ -885,6 +905,7 @@ interface AuthenticatedRouteRouteChildren {
   AuthenticatedDashboardRoute: typeof AuthenticatedDashboardRoute
   AuthenticatedForwardRangeRoute: typeof AuthenticatedForwardRangeRoute
   AuthenticatedHealthRoute: typeof AuthenticatedHealthRoute
+  AuthenticatedJoinIntegrityRoute: typeof AuthenticatedJoinIntegrityRoute
   AuthenticatedJoinPacingRoute: typeof AuthenticatedJoinPacingRoute
   AuthenticatedJoinRequestsRoute: typeof AuthenticatedJoinRequestsRoute
   AuthenticatedOwnerRoute: typeof AuthenticatedOwnerRoute
@@ -915,6 +936,7 @@ const AuthenticatedRouteRouteChildren: AuthenticatedRouteRouteChildren = {
   AuthenticatedDashboardRoute: AuthenticatedDashboardRoute,
   AuthenticatedForwardRangeRoute: AuthenticatedForwardRangeRoute,
   AuthenticatedHealthRoute: AuthenticatedHealthRoute,
+  AuthenticatedJoinIntegrityRoute: AuthenticatedJoinIntegrityRoute,
   AuthenticatedJoinPacingRoute: AuthenticatedJoinPacingRoute,
   AuthenticatedJoinRequestsRoute: AuthenticatedJoinRequestsRoute,
   AuthenticatedOwnerRoute: AuthenticatedOwnerRoute,
