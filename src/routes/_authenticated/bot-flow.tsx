@@ -1304,6 +1304,7 @@ function BotFlowPage() {
                         </div>
                         <iframe
                           src={src}
+                          ref={(el) => { chatFrames.current[id] = el; }}
                           title={`${who} — @${parsed.username}`}
                           className="h-full w-full flex-1 border-0"
                           loading="lazy"
