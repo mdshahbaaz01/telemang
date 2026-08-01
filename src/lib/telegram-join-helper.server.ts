@@ -110,6 +110,20 @@ async function verifyCanonicalMatch(
 ): Promise<string> {
   const expectedId = idOf(expected);
   if (!expectedId) throw new Error(`JOIN_CANONICAL_MISMATCH: ${label} missing id`);
+  if (isBasicGroup(expected)) {
+    const resp: any = await client.invoke(new Api.messages.GetChats({ id: [expected.id] }));
+    const returned = Array.isArray(resp?.chats) && resp.chats.length ? resp.chats[0] : null;
+    const returnedId = idOf(returned);
+    if (!returnedId) throw new Error(`JOIN_CANONICAL_MISMATCH: ${label} returned no chat`);
+    if (returnedId !== expectedId) {
+      log?.("error", `Canonical mismatch for ${label}: expected=${expectedId} got=${returnedId}`);
+      throw new Error(`JOIN_CANONICAL_MISMATCH: ${label} expected=${expectedId} got=${returnedId}`);
+    }
+    if (returned?.left === true) {
+      throw new Error(`JOIN_CANONICAL_MISMATCH: ${label} chat reports left=true after join`);
+    }
+    return returnedId;
+  }
   const inputChannel = await client.getInputEntity(expected);
   const resp: any = await client.invoke(new Api.channels.GetChannels({ id: [inputChannel] }));
   const returned = Array.isArray(resp?.chats) && resp.chats.length ? resp.chats[0] : null;
@@ -134,8 +148,13 @@ async function joinEntityVerified(
   log?: Logger,
 ): Promise<SmartTelegramJoinResult> {
   let verifiedEntity = entity;
+  const basic = isBasicGroup(entity);
   try {
-    await client.invoke(new Api.channels.JoinChannel({ channel: entity }));
+    if (!basic) {
+      await client.invoke(new Api.channels.JoinChannel({ channel: entity }));
+    } else {
+      log?.("info", `${label} is a legacy group — joining via invite import only (channels.JoinChannel is not supported for basic groups)`);
+    }
   } catch (error) {
     const msg = textOf(error);
     if (/INVITE_REQUEST_SENT|INVITE_REQUEST_ALREADY_SENT|REQUEST_SENT/i.test(msg)) {
