@@ -61,6 +61,48 @@ function isBasicGroup(entity: any): boolean {
   return entity?.megagroup === undefined && entity?.broadcast === undefined && entity?.accessHash === undefined && entity?.id !== undefined && entity?.title !== undefined;
 }
 
+function chatTypeOf(entity: any): string {
+  if (!entity) return "unknown";
+  if (isBasicGroup(entity)) return "basic_group";
+  if (entity.megagroup) return "supergroup";
+  if (entity.broadcast) return "channel";
+  if (entity.gigagroup) return "broadcast_group";
+  return classNameOf(entity) === "Channel" ? "channel" : "unknown";
+}
+
+/** Channel + its linked discussion group (if any) — so we never half-join a pair. */
+async function chatMeta(
+  client: any,
+  Api: any,
+  entity: any,
+): Promise<{
+  chatType: string;
+  chatTitle: string | null;
+  username: string | null;
+  discussionChatId: string | null;
+  isPublic: boolean;
+}> {
+  const chatType = chatTypeOf(entity);
+  let discussionChatId: string | null = null;
+  if (chatType === "channel" || chatType === "supergroup") {
+    try {
+      const input = await client.getInputEntity(entity);
+      const full: any = await client.invoke(new Api.channels.GetFullChannel({ channel: input }));
+      const linked = full?.fullChat?.linkedChatId;
+      if (linked !== undefined && linked !== null) discussionChatId = String(linked);
+    } catch {
+      // full-channel info is best-effort
+    }
+  }
+  return {
+    chatType,
+    chatTitle: entity?.title ?? null,
+    username: entity?.username ?? null,
+    discussionChatId,
+    isPublic: !!entity?.username,
+  };
+}
+
 function firstChatFrom(value: any): any | null {
   if (!value) return null;
   if (value.chat) return value.chat;
