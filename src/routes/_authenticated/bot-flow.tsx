@@ -729,6 +729,16 @@ function BotFlowPage() {
   // ─── Broadcast a typed message to every open chat ─────────────────
   const [broadcastText, setBroadcastText] = useState("");
   const [broadcastingMsg, setBroadcastingMsg] = useState(false);
+  // Live refs to each open chat iframe so we can nudge them to refetch
+  // history without reloading (which would restart the session).
+  const chatFrames = useRef<Record<string, HTMLIFrameElement | null>>({});
+  const pingOpenChats = useCallback(() => {
+    for (const el of Object.values(chatFrames.current)) {
+      try {
+        el?.contentWindow?.postMessage({ type: "tg-refresh-history" }, window.location.origin);
+      } catch {}
+    }
+  }, []);
   const broadcastMessage = useCallback(async () => {
     const text = broadcastText.trim();
     if (!text) return;
@@ -756,12 +766,11 @@ function BotFlowPage() {
     setBroadcastingMsg(false);
     if (ok) setBroadcastText("");
     toast[fail && !ok ? "error" : "success"](`Message sent → ok:${ok} fail:${fail}`);
-    // Refresh the visible chats so the sent message + any bot reply shows up.
-    setChatReload((p) => {
-      const next = { ...p };
-      for (const id of chatOpen) next[id] = (next[id] ?? 0) + 1;
-      return next;
-    });
+    // Keep sessions alive: ask each open chat frame to pull new history
+    // instead of remounting/reloading the iframe.
+    pingOpenChats();
+    setTimeout(pingOpenChats, 1500);
+    setTimeout(pingOpenChats, 4000);
   }, [broadcastText, parsed?.username, chatOpen, botBtnState.perAccount, previewChatFn, sendMessageAsFn]);
 
   // Auto-clear cached buttons when the set of open chats changes.
@@ -1258,7 +1267,7 @@ function BotFlowPage() {
                       </Button>
                     </div>
                     <div className="text-[10px] text-muted-foreground">
-                      Sent as a normal message from each account to @{parsed.username} — chats refresh automatically.
+                      Sent as a normal message from each account to @{parsed.username} — chats stay connected and update live.
                     </div>
                   </div>
                   <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3">
@@ -1295,6 +1304,7 @@ function BotFlowPage() {
                         </div>
                         <iframe
                           src={src}
+                          ref={(el) => { chatFrames.current[id] = el; }}
                           title={`${who} — @${parsed.username}`}
                           className="h-full w-full flex-1 border-0"
                           loading="lazy"

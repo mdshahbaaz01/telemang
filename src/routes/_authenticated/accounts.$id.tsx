@@ -110,6 +110,22 @@ function AccountViewerPage() {
   });
 
   const dialogs: Dialog[] = (dialogsQ.data?.dialogs ?? []) as Dialog[];
+
+  // Allow a parent frame (e.g. Bot Flow) to ask for a live history refresh
+  // instead of reloading/remounting this whole viewer.
+  useEffect(() => {
+    const onMsg = (ev: MessageEvent) => {
+      const t = (ev.data as any)?.type;
+      if (t === "tg-refresh-history") {
+        void historyQ.refetch();
+      } else if (t === "tg-refresh-all") {
+        void historyQ.refetch();
+        void dialogsQ.refetch();
+      }
+    };
+    window.addEventListener("message", onMsg);
+    return () => window.removeEventListener("message", onMsg);
+  }, [historyQ, dialogsQ]);
   const meId: string | undefined = dialogsQ.data?.me?.id;
   const me = dialogsQ.data?.me as
     | { id: string; name: string; username: string | null; phone: string | null; photoDataUrl: string | null }
