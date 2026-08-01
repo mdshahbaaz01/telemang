@@ -34,6 +34,17 @@ function classNameOf(value: any): string {
   return String(value?.className ?? value?.constructor?.name ?? "");
 }
 
+/**
+ * Legacy basic groups (Api.Chat) are NOT channels: channels.* methods reject
+ * them with "Cannot cast InputPeerChat to any kind of InputChannel".
+ */
+function isBasicGroup(entity: any): boolean {
+  const cn = classNameOf(entity);
+  if (cn === "Chat" || cn === "ChatForbidden" || cn === "InputPeerChat") return true;
+  if (cn === "Channel" || cn === "ChannelForbidden") return false;
+  return entity?.megagroup === undefined && entity?.broadcast === undefined && entity?.accessHash === undefined && entity?.id !== undefined && entity?.title !== undefined;
+}
+
 function firstChatFrom(value: any): any | null {
   if (!value) return null;
   if (value.chat) return value.chat;
