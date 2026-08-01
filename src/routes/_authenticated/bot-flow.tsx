@@ -13,6 +13,8 @@ import {
   pressInlineButtonAs,
   sendMessageAs,
 } from "@/lib/tg-viewer.functions";
+import { sendMediaAs } from "@/lib/tg-viewer.functions";
+import { listMedia } from "@/lib/media-library.functions";
 import { previewChat } from "@/lib/chat-viewer.functions";
 import { useMiniAppProxyUrl } from "@/lib/miniapp-proxy-url";
 import { AdminGate } from "@/components/AdminGate";
@@ -772,6 +774,139 @@ function BotFlowPage() {
     setTimeout(pingOpenChats, 1500);
     setTimeout(pingOpenChats, 4000);
   }, [broadcastText, parsed?.username, chatOpen, botBtnState.perAccount, previewChatFn, sendMessageAsFn]);
+
+  // Resolve (and memoize) the bot peerKey for one account.
+  const peerKeyCache = useRef<Record<string, string>>({});
+  const resolvePeerKeyFor = useCallback(
+    async (accountId: string): Promise<string | null> => {
+      const cached = botBtnState.perAccount[accountId]?.peerKey ?? peerKeyCache.current[accountId];
+      if (cached) return cached;
+      if (!parsed?.username) return null;
+      const res: any = await previewChatFn({ data: { target: `@${parsed.username}`, accountId } });
+      const pk: string | null = res?.peerKey ?? null;
+      if (pk) peerKeyCache.current[accountId] = pk;
+      return pk;
+    },
+    [botBtnState.perAccount, parsed?.username, previewChatFn],
+  );
+
+  // ─── Attachment broadcast (media library) ─────────────────────────
+  const listMediaFn = useServerFn(listMedia);
+  const sendMediaAsFn = useServerFn(sendMediaAs);
+  const mediaQ = useQuery({
+    queryKey: ["bot-flow-media"],
+    queryFn: () => listMediaFn({} as any),
+    staleTime: 60_000,
+  });
+  const mediaItems = (mediaQ.data ?? []) as Array<{
+    id: string; name: string; path: string; filename: string; isVoice: boolean;
+  }>;
+  const [mediaId, setMediaId] = useState<string>("");
+  const [mediaCaption, setMediaCaption] = useState("");
+  const [sendingMedia, setSendingMedia] = useState(false);
+  const broadcastMedia = useCallback(async () => {
+    const item = mediaItems.find((m) => m.id === mediaId);
+    if (!item) return toast.error("Pick a file from the media library first");
+    if (chatOpen.length === 0) return toast.error("No open accounts");
+    setSendingMedia(true);
+    let ok = 0, fail = 0;
+    await Promise.all(
+      chatOpen.map(async (accountId) => {
+        try {
+          const peerKey = await resolvePeerKeyFor(accountId);
+          if (!peerKey) { fail++; return; }
+          await sendMediaAsFn({
+            data: {
+              accountId,
+              peerKey,
+              path: item.path,
+              filename: item.filename,
+              isVoice: item.isVoice,
+              caption: mediaCaption.trim() || undefined,
+            },
+          });
+          ok++;
+        } catch {
+          fail++;
+        }
+      }),
+    );
+    setSendingMedia(false);
+    toast[fail && !ok ? "error" : "success"](`File sent → ok:${ok} fail:${fail}`);
+    pingOpenChats();
+    setTimeout(pingOpenChats, 2000);
+  }, [mediaItems, mediaId, mediaCaption, chatOpen, resolvePeerKeyFor, sendMediaAsFn, pingOpenChats]);
+
+  // ─── Sequence sender (scripted multi-step run) ────────────────────
+  type SeqStep =
+    | { kind: "text"; value: string }
+    | { kind: "button"; value: string }
+    | { kind: "wait"; seconds: number };
+  const [seqSteps, setSeqSteps] = useState<SeqStep[]>([]);
+  const [seqDraft, setSeqDraft] = useState("");
+  const [seqKind, setSeqKind] = useState<"text" | "button" | "wait">("text");
+  const [seqRunning, setSeqRunning] = useState(false);
+  const [seqProgress, setSeqProgress] = useState<{ step: number; note: string } | null>(null);
+  const seqAbort = useRef(false);
+
+  const addSeqStep = () => {
+    const v = seqDraft.trim();
+    if (seqKind === "wait") {
+      const s = Math.max(1, Math.min(300, Number(v) || 3));
+      setSeqSteps((p) => [...p, { kind: "wait", seconds: s }]);
+    } else {
+      if (!v) return;
+      setSeqSteps((p) => [...p, { kind: seqKind, value: v }]);
+    }
+    setSeqDraft("");
+  };
+
+  const runSequence = useCallback(async () => {
+    if (!seqSteps.length) return toast.error("Add at least one step");
+    if (chatOpen.length === 0) return toast.error("No open accounts");
+    seqAbort.current = false;
+    setSeqRunning(true);
+    try {
+      for (let i = 0; i < seqSteps.length; i++) {
+        if (seqAbort.current) { toast.info("Sequence stopped"); break; }
+        const step = seqSteps[i];
+        if (step.kind === "wait") {
+          setSeqProgress({ step: i + 1, note: `Waiting ${step.seconds}s…` });
+          for (let s = 0; s < step.seconds * 4; s++) {
+            if (seqAbort.current) break;
+            await new Promise((r) => setTimeout(r, 250));
+          }
+          continue;
+        }
+        if (step.kind === "text") {
+          setSeqProgress({ step: i + 1, note: `Sending "${step.value}"` });
+          let ok = 0, fail = 0;
+          await Promise.all(
+            chatOpen.map(async (accountId) => {
+              try {
+                const peerKey = await resolvePeerKeyFor(accountId);
+                if (!peerKey) { fail++; return; }
+                await sendMessageAsFn({ data: { accountId, peerKey, text: step.value } });
+                ok++;
+              } catch { fail++; }
+            }),
+          );
+          setSeqProgress({ step: i + 1, note: `Sent "${step.value}" → ok:${ok} fail:${fail}` });
+        } else {
+          setSeqProgress({ step: i + 1, note: `Tapping "${step.value}"` });
+          await refreshBotButtons();
+          await broadcastPress(step.value);
+        }
+        pingOpenChats();
+        await new Promise((r) => setTimeout(r, 800));
+      }
+    } finally {
+      setSeqRunning(false);
+      setSeqProgress(null);
+      pingOpenChats();
+      setTimeout(pingOpenChats, 2000);
+    }
+  }, [seqSteps, chatOpen, resolvePeerKeyFor, sendMessageAsFn, refreshBotButtons, broadcastPress, pingOpenChats]);
 
   // Auto-clear cached buttons when the set of open chats changes.
   useEffect(() => {
