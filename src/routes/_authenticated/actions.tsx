@@ -945,8 +945,8 @@ function ActionsPageInner() {
           maxDelay,
         },
       });
-      toast.success(`Scheduled for ${formatIst(when)} (fires within ±1s)`);
-      setScheduledAt("");
+      toast.success(bgRef.current ? "Started in background — it keeps running on the server even if you close the app" : `Scheduled for ${formatIst(when)}`);
+      if (!bgRef.current) setScheduledAt("");
       await qc.invalidateQueries({ queryKey: ["scheduled-broadcasts"] });
       return res;
     } catch (e) {
@@ -1020,8 +1020,8 @@ function ActionsPageInner() {
           maxDelay,
         },
       });
-      toast.success(`Scheduled for ${formatIst(when)} (fires within ±1s)`);
-      setScheduledAt("");
+      toast.success(bgRef.current ? "Started in background — it keeps running on the server even if you close the app" : `Scheduled for ${formatIst(when)}`);
+      if (!bgRef.current) setScheduledAt("");
       await qc.invalidateQueries({ queryKey: ["scheduled-broadcasts"] });
     } catch (e) {
       toast.error((e as Error).message);
@@ -1049,8 +1049,8 @@ function ActionsPageInner() {
           maxDelay,
         },
       });
-      toast.success(`Scheduled for ${formatIst(when)} (fires within ±1s)`);
-      setScheduledAt("");
+      toast.success(bgRef.current ? "Started in background — it keeps running on the server even if you close the app" : `Scheduled for ${formatIst(when)}`);
+      if (!bgRef.current) setScheduledAt("");
       await qc.invalidateQueries({ queryKey: ["scheduled-broadcasts"] });
     } catch (e) {
       toast.error((e as Error).message);
@@ -1080,8 +1080,8 @@ function ActionsPageInner() {
     setScheduling(true);
     try {
       await createSchedFn({ data: { scheduledAt: when.toISOString(), op, minDelay, maxDelay } });
-      toast.success(`Scheduled for ${formatIst(when)} (continues automatically)`);
-      setScheduledAt("");
+      toast.success(bgRef.current ? "Started in background — it keeps running on the server even if you close the app" : `Scheduled for ${formatIst(when)}`);
+      if (!bgRef.current) setScheduledAt("");
       await qc.invalidateQueries({ queryKey: ["scheduled-broadcasts"] });
     } catch (e) {
       toast.error((e as Error).message);
