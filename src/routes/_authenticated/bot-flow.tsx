@@ -499,7 +499,19 @@ function BotFlowPage() {
     } catch { /* ignore */ }
   }, [vxAutoSend, vxTarget, vxTemplate]);
   const [vxResults, setVxResults] = useState<
-    { accountId: string; status: "loading" | "ready" | "error"; url?: string; label?: string; kind?: "webview" | "url"; error?: string; sent?: "ok" | "fail"; sendError?: string }[]
+    {
+      accountId: string;
+      status: "loading" | "ready" | "error";
+      url?: string;
+      label?: string;
+      kind?: "webview" | "url";
+      error?: string;
+      sent?: "ok" | "fail";
+      sendError?: string;
+      join?: "joining" | "joined" | "already" | "requested" | "fail";
+      joinError?: string;
+      joinTitle?: string;
+    }[]
   >([]);
 
   const vxParsed = useMemo(() => {
@@ -538,6 +550,28 @@ function BotFlowPage() {
     return cleaned ? `@${cleaned}` : "";
   };
   const vxTargetKey = useMemo(() => normalizeVxTarget(vxTarget), [vxTarget]);
+  // Raw link usable by joinFromLink (invite hash or public username)
+  const vxJoinUrl = useMemo(() => {
+    const t = vxTarget.trim();
+    if (!t) return "";
+    if (/^[ucg]:\d+$/.test(t)) return "";
+    if (/^invite:/i.test(t)) return `https://t.me/${t.replace(/^invite:/i, "")}`;
+    if (/^https?:\/\//i.test(t)) return t;
+    if (/^(t\.me|telegram\.me)\//i.test(t)) return `https://${t}`;
+    return `https://t.me/${t.replace(/^@/, "")}`;
+  }, [vxTarget]);
+
+  const vxSummary = useMemo(() => {
+    const s = { joined: 0, joinFailed: 0, sent: 0, sendFailed: 0, extractFailed: 0 };
+    for (const r of vxResults) {
+      if (r.join === "joined" || r.join === "already" || r.join === "requested") s.joined += 1;
+      if (r.join === "fail") s.joinFailed += 1;
+      if (r.sent === "ok") s.sent += 1;
+      if (r.sent === "fail") s.sendFailed += 1;
+      if (r.status === "error") s.extractFailed += 1;
+    }
+    return s;
+  }, [vxResults]);
 
   const runExtractVerify = async () => {
     if (!vxParsed?.username) return toast.error("Paste a bot link or @username");
@@ -566,12 +600,55 @@ function BotFlowPage() {
             ),
           );
           if (vxAutoSend && vxTargetKey && res.url) {
+            let peerKey = vxTargetKey;
+            if (vxJoinUrl) {
+              setVxResults((prev) =>
+                prev.map((r) => (r.accountId === accountId ? { ...r, join: "joining" } : r)),
+              );
+              try {
+                const j = await joinFromLink({ data: { accountId, url: vxJoinUrl } });
+                if (j.peerKey) peerKey = j.peerKey;
+                setVxResults((prev) =>
+                  prev.map((r) =>
+                    r.accountId === accountId
+                      ? {
+                          ...r,
+                          join: (j as { requested?: boolean }).requested
+                            ? "requested"
+                            : j.joined
+                              ? "joined"
+                              : "already",
+                          joinTitle: j.title,
+                        }
+                      : r,
+                  ),
+                );
+                if ((j as { requested?: boolean }).requested) {
+                  setVxResults((prev) =>
+                    prev.map((r) =>
+                      r.accountId === accountId
+                        ? { ...r, sent: "fail", sendError: "Join request pending approval" }
+                        : r,
+                    ),
+                  );
+                  return;
+                }
+              } catch (e) {
+                setVxResults((prev) =>
+                  prev.map((r) =>
+                    r.accountId === accountId
+                      ? { ...r, join: "fail", joinError: (e as Error).message || "Join failed" }
+                      : r,
+                  ),
+                );
+              }
+            }
             try {
               const text = (vxTemplate || "{link}").includes("{link}")
                 ? (vxTemplate || "{link}").replace(/\{link\}/g, res.url)
                 : `${vxTemplate} ${res.url}`.trim();
               await sendMessageAs({
-                data: { accountId, peerKey: vxTargetKey, text },
+                data: { accountId, peerKey, text },
               });
               setVxResults((prev) =>
                 prev.map((r) => (r.accountId === accountId ? { ...r, sent: "ok" } : r)),
@@ -1882,6 +1959,14 @@ function BotFlowPage() {
 
           {vxResults.length > 0 && (
             <div className="space-y-1">
+              <div className="flex flex-wrap gap-2 text-[11px] text-muted-foreground">
+                <span>{vxResults.length} account(s)</span>
+                {vxSummary.joined > 0 && <span className="text-primary">{vxSummary.joined} joined</span>}
+                {vxSummary.joinFailed > 0 && <span className="text-destructive">{vxSummary.joinFailed} join failed</span>}
+                {vxSummary.sent > 0 && <span className="text-primary">{vxSummary.sent} sent</span>}
+                {vxSummary.sendFailed > 0 && <span className="text-destructive">{vxSummary.sendFailed} send failed</span>}
+                {vxSummary.extractFailed > 0 && <span className="text-destructive">{vxSummary.extractFailed} extract failed</span>}
+              </div>
               {vxResults.map((r) => {
                 const acc = accountList.find((a) => a.id === r.accountId);
                 const who = acc?.first_name || acc?.username || acc?.phone || r.accountId.slice(0, 8);
@@ -1911,6 +1996,29 @@ function BotFlowPage() {
                           <Copy className="h-3.5 w-3.5" />
                         </button>
                         <BrowserPickerButton url={r.url} compact />
+                        {r.join === "joining" && (
+                          <span className="flex items-center gap-1 rounded bg-muted px-1.5 py-0.5 text-[10px] uppercase text-muted-foreground">
+                            <Loader2 className="h-3 w-3 animate-spin" /> joining
+                          </span>
+                        )}
+                        {(r.join === "joined" || r.join === "already") && (
+                          <span
+                            className="rounded bg-primary/10 px-1.5 py-0.5 text-[10px] uppercase text-primary"
+                            title={r.joinTitle}
+                          >
+                            {r.join === "joined" ? "joined" : "member"}
+                          </span>
+                        )}
+                        {r.join === "requested" && (
+                          <span className="rounded bg-yellow-500/15 px-1.5 py-0.5 text-[10px] uppercase text-yellow-600 dark:text-yellow-400" title={r.joinTitle}>
+                            requested
+                          </span>
+                        )}
+                        {r.join === "fail" && (
+                          <span className="rounded bg-destructive/10 px-1.5 py-0.5 text-[10px] uppercase text-destructive" title={r.joinError}>
+                            join failed
+                          </span>
+                        )}
                         {r.sent === "ok" && (
                           <span className="rounded bg-primary/10 px-1.5 py-0.5 text-[10px] uppercase text-primary">sent</span>
                         )}
