@@ -2208,7 +2208,18 @@ function ActionsPageInner() {
               </div>
             )}
 
-            <div className="flex gap-2 pt-2">
+            <div className="flex flex-wrap gap-2 pt-2">
+              {backgroundSupported && (
+                <Button
+                  type="button"
+                  variant="secondary"
+                  onClick={runInBackground}
+                  disabled={bgBusy || scheduling}
+                  title="Runs on the server. Keeps going even if you close the app, switch tabs or lose internet."
+                >
+                  <Play className="mr-1 h-4 w-4" /> {bgBusy ? "Starting…" : "Run in background"}
+                </Button>
+              )}
               {tab === "broadcast" ? (
                 <>
                   <Button onClick={runBroadcast} disabled={running || scheduling}>
