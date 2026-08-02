@@ -1960,6 +1960,22 @@ function BotFlowPage() {
               {vxRunning ? <Loader2 className="mr-1 h-4 w-4 animate-spin" /> : <Play className="mr-1 h-4 w-4" />}
               Extract links
             </Button>
+            {vxRunning && (
+              <Button
+                variant="destructive"
+                onClick={() => {
+                  vxStopRef.current = true;
+                  setVxResults((prev) =>
+                    prev.map((r) =>
+                      r.status === "loading" ? { ...r, status: "error", error: "Stopped" } : r,
+                    ),
+                  );
+                  toast.info("Stopping — running requests will finish, pending ones are cancelled");
+                }}
+              >
+                <Square className="mr-1 h-4 w-4" /> Stop
+              </Button>
+            )}
             {vxResults.length > 0 && (
               <>
                 <Button variant="outline" onClick={copyAllVerify}>
