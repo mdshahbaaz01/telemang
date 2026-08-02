@@ -484,11 +484,17 @@ function ActionsPageInner() {
   const [running, setRunning] = useState(false);
   const [totals, setTotals] = useState<{ ok: number; fail: number } | null>(null);
   const abortRef = useRef<AbortController | null>(null);
+  // When true, schedule helpers run the job on the server "right now" so it
+  // keeps going after the tab/browser/internet is gone.
+  const bgRef = useRef(false);
+  const [bgBusy, setBgBusy] = useState(false);
 
   const [scheduledAt, setScheduledAt] = useState<string>("");
   const [scheduling, setScheduling] = useState(false);
   const listSchedFn = useServerFn(listScheduledBroadcasts);
-  const createSchedFn = useServerFn(createScheduledBroadcast);
+  const createSchedRaw = useServerFn(createScheduledBroadcast);
+  const createSchedFn = (args: { data: any }) =>
+    createSchedRaw({ data: { ...args.data, ...(bgRef.current ? { spread: true } : {}) } });
   const cancelSchedFn = useServerFn(cancelScheduledBroadcast);
   const clearSchedHistoryFn = useServerFn(clearScheduledHistory);
   const deleteSchedFn = useServerFn(deleteScheduledBroadcast);
@@ -910,14 +916,15 @@ function ActionsPageInner() {
   };
 
   const scheduleBroadcast = async () => {
-    if (!scheduledAt) {
+    const bg = bgRef.current;
+    if (!bg && !scheduledAt) {
       toast.error("Pick a schedule time (with seconds)");
       return;
     }
     // datetime-local returns a wall-clock string with no timezone. Always
     // treat it as IST so scheduling works the same whether the user's
     // device is in India or elsewhere.
-    const when = istWallClockToDate(scheduledAt);
+    const when = bg ? new Date(Date.now() + 15_000) : istWallClockToDate(scheduledAt);
     if (Number.isNaN(when.getTime())) return toast.error("Invalid schedule time");
     if (when.getTime() < Date.now() + 5_000) {
       return toast.error("Schedule at least 5 seconds in the future");
@@ -938,8 +945,8 @@ function ActionsPageInner() {
           maxDelay,
         },
       });
-      toast.success(`Scheduled for ${formatIst(when)} (fires within ±1s)`);
-      setScheduledAt("");
+      toast.success(bgRef.current ? "Started in background — it keeps running on the server even if you close the app" : `Scheduled for ${formatIst(when)}`);
+      if (!bgRef.current) setScheduledAt("");
       await qc.invalidateQueries({ queryKey: ["scheduled-broadcasts"] });
       return res;
     } catch (e) {
@@ -950,6 +957,7 @@ function ActionsPageInner() {
   };
 
   const parseScheduledAt = () => {
+    if (bgRef.current) return new Date(Date.now() + 15_000);
     if (!scheduledAt) {
       toast.error("Pick a schedule time (with seconds)");
       return null;
@@ -1012,8 +1020,8 @@ function ActionsPageInner() {
           maxDelay,
         },
       });
-      toast.success(`Scheduled for ${formatIst(when)} (fires within ±1s)`);
-      setScheduledAt("");
+      toast.success(bgRef.current ? "Started in background — it keeps running on the server even if you close the app" : `Scheduled for ${formatIst(when)}`);
+      if (!bgRef.current) setScheduledAt("");
       await qc.invalidateQueries({ queryKey: ["scheduled-broadcasts"] });
     } catch (e) {
       toast.error((e as Error).message);
@@ -1041,8 +1049,8 @@ function ActionsPageInner() {
           maxDelay,
         },
       });
-      toast.success(`Scheduled for ${formatIst(when)} (fires within ±1s)`);
-      setScheduledAt("");
+      toast.success(bgRef.current ? "Started in background — it keeps running on the server even if you close the app" : `Scheduled for ${formatIst(when)}`);
+      if (!bgRef.current) setScheduledAt("");
       await qc.invalidateQueries({ queryKey: ["scheduled-broadcasts"] });
     } catch (e) {
       toast.error((e as Error).message);
@@ -1072,8 +1080,8 @@ function ActionsPageInner() {
     setScheduling(true);
     try {
       await createSchedFn({ data: { scheduledAt: when.toISOString(), op, minDelay, maxDelay } });
-      toast.success(`Scheduled for ${formatIst(when)} (continues automatically)`);
-      setScheduledAt("");
+      toast.success(bgRef.current ? "Started in background — it keeps running on the server even if you close the app" : `Scheduled for ${formatIst(when)}`);
+      if (!bgRef.current) setScheduledAt("");
       await qc.invalidateQueries({ queryKey: ["scheduled-broadcasts"] });
     } catch (e) {
       toast.error((e as Error).message);
@@ -1084,8 +1092,27 @@ function ActionsPageInner() {
 
 
 
+  const backgroundSupported =
+    tab === "broadcast" || tab === "reply" || tab === "comment" || tab === "forward" || tab === "edit" || tab === "deleteMessages";
+
+  const runInBackground = async () => {
+    if (!backgroundSupported) return toast.error("Background run is not available for this action");
+    bgRef.current = true;
+    setBgBusy(true);
+    try {
+      if (tab === "broadcast") await scheduleBroadcast();
+      else if (tab === "reply" || tab === "comment") await scheduleReply();
+      else if (tab === "forward") await scheduleForward();
+      else await scheduleEditOrDelete();
+    } finally {
+      bgRef.current = false;
+      setBgBusy(false);
+    }
+  };
+
   return (
     <main className="min-h-screen bg-background">
+
       <header className="border-b border-border bg-card">
         <div className="mx-auto flex max-w-7xl items-center gap-3 px-4 py-3 md:px-8">
           <h1 className="mr-auto text-xl font-semibold">Actions</h1>
@@ -2181,7 +2208,18 @@ function ActionsPageInner() {
               </div>
             )}
 
-            <div className="flex gap-2 pt-2">
+            <div className="flex flex-wrap gap-2 pt-2">
+              {backgroundSupported && (
+                <Button
+                  type="button"
+                  variant="secondary"
+                  onClick={runInBackground}
+                  disabled={bgBusy || scheduling}
+                  title="Runs on the server. Keeps going even if you close the app, switch tabs or lose internet."
+                >
+                  <Play className="mr-1 h-4 w-4" /> {bgBusy ? "Starting…" : "Run in background"}
+                </Button>
+              )}
               {tab === "broadcast" ? (
                 <>
                   <Button onClick={runBroadcast} disabled={running || scheduling}>

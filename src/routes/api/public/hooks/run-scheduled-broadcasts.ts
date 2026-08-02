@@ -37,7 +37,20 @@ function buildQueueItems(row: ScheduleRow) {
   // Every scheduled item fires at the exact scheduled second — no per-account
   // delay. All accounts broadcast simultaneously at the target time.
   const firesAt = new Date(row.scheduled_at).toISOString();
-  const nextTime = (_accountId: string) => firesAt;
+  const base = new Date(row.scheduled_at).getTime();
+  // Optional spread mode (used by "Run in background"): stagger every item by
+  // the configured min/max delay so the run paces itself server-side instead
+  // of firing all deliveries at the same second.
+  const spread = payload?.spread === true;
+  const minD = Math.max(0, Number(payload?.minDelay ?? 0));
+  const maxD = Math.max(minD, Number(payload?.maxDelay ?? minD));
+  let cursor = 0;
+  const nextTime = (_accountId: string) => {
+    if (!spread) return firesAt;
+    const at = new Date(base + cursor * 1000).toISOString();
+    cursor += minD + Math.random() * (maxD - minD);
+    return at;
+  };
 
   const items: Database["public"]["Tables"]["scheduled_broadcast_items"]["Insert"][] = [];
   if (kind === "broadcast") {

@@ -71,8 +71,9 @@ const createSchema = z.object({
   scheduledAt: z.string().datetime({ offset: true }),
   label: z.string().max(120).optional(),
   op: opSchema,
-  minDelay: z.number().int().min(0).max(60).default(1),
-  maxDelay: z.number().int().min(0).max(60).default(2),
+  minDelay: z.number().int().min(0).max(86400).default(1),
+  maxDelay: z.number().int().min(0).max(86400).default(2),
+  spread: z.boolean().optional(),
 });
 
 export const createScheduledBroadcast = createServerFn({ method: "POST" })
@@ -88,6 +89,7 @@ export const createScheduledBroadcast = createServerFn({ method: "POST" })
       ...data.op,
       minDelay: data.minDelay,
       maxDelay: data.maxDelay,
+      ...(data.spread ? { spread: true } : {}),
     };
     const { data: row, error } = await context.supabase
       .from("scheduled_broadcasts")
@@ -201,8 +203,8 @@ export const rescheduleBroadcast = createServerFn({ method: "POST" })
       scheduledAt: z.string().datetime({ offset: true }),
       label: z.string().max(120).optional(),
       op: opSchema.optional(),
-      minDelay: z.number().int().min(0).max(60).optional(),
-      maxDelay: z.number().int().min(0).max(60).optional(),
+      minDelay: z.number().int().min(0).max(86400).optional(),
+      maxDelay: z.number().int().min(0).max(86400).optional(),
     }).parse(d),
   )
   .handler(async ({ data, context }) => {
