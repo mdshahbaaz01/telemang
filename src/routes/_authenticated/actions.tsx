@@ -1092,6 +1092,24 @@ function ActionsPageInner() {
 
 
 
+  const backgroundSupported =
+    tab === "broadcast" || tab === "reply" || tab === "comment" || tab === "forward" || tab === "edit" || tab === "deleteMessages";
+
+  const runInBackground = async () => {
+    if (!backgroundSupported) return toast.error("Background run is not available for this action");
+    bgRef.current = true;
+    setBgBusy(true);
+    try {
+      if (tab === "broadcast") await scheduleBroadcast();
+      else if (tab === "reply" || tab === "comment") await scheduleReply();
+      else if (tab === "forward") await scheduleForward();
+      else await scheduleEditOrDelete();
+    } finally {
+      bgRef.current = false;
+      setBgBusy(false);
+    }
+  };
+
   return (
     <main className="min-h-screen bg-background">
 
