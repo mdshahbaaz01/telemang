@@ -73,6 +73,7 @@ const createSchema = z.object({
   op: opSchema,
   minDelay: z.number().int().min(0).max(86400).default(1),
   maxDelay: z.number().int().min(0).max(86400).default(2),
+  spread: z.boolean().optional(),
 });
 
 export const createScheduledBroadcast = createServerFn({ method: "POST" })
@@ -88,6 +89,7 @@ export const createScheduledBroadcast = createServerFn({ method: "POST" })
       ...data.op,
       minDelay: data.minDelay,
       maxDelay: data.maxDelay,
+      ...(data.spread ? { spread: true } : {}),
     };
     const { data: row, error } = await context.supabase
       .from("scheduled_broadcasts")
