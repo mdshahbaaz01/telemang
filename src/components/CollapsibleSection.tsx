@@ -5,6 +5,8 @@ type Props = {
   title: ReactNode;
   storageKey: string;
   defaultOpen?: boolean;
+  /** Bump this number to force the section open (e.g. from another section). */
+  openSignal?: number;
   right?: ReactNode;
   className?: string;
   bodyClassName?: string;
@@ -15,6 +17,7 @@ export function CollapsibleSection({
   title,
   storageKey,
   defaultOpen = true,
+  openSignal,
   right,
   className,
   bodyClassName,
@@ -37,6 +40,10 @@ export function CollapsibleSection({
     if (!hydrated) return;
     try { localStorage.setItem(key, open ? "1" : "0"); } catch {}
   }, [open, hydrated, key]);
+
+  useEffect(() => {
+    if (openSignal) setOpen(true);
+  }, [openSignal]);
 
   return (
     <section className={`rounded-lg border border-border bg-card p-4 ${open ? "space-y-4" : ""} ${className ?? ""}`}>

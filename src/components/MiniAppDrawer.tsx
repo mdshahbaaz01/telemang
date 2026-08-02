@@ -3,6 +3,7 @@ import { X, Loader2, RefreshCw, ChevronDown, ChevronUp, Trash2 } from "lucide-re
 import { Button } from "@/components/ui/button";
 import { BrowserPickerButton } from "@/components/BrowserPickerButton";
 import { useTelegramWebviewBridge } from "@/lib/telegram-webview-bridge";
+import { MiniAppChrome } from "@/components/MiniAppChrome";
 import { useMiniAppProxyUrl } from "@/lib/miniapp-proxy-url";
 import { useServerFn } from "@tanstack/react-start";
 import { solveCaptcha } from "@/lib/captcha.functions";
@@ -36,7 +37,9 @@ export function MiniAppDrawer({
   const [directMode, setDirectMode] = useState(false);
   const [slowFallback, setSlowFallback] = useState(false);
   const iframeRef = useRef<HTMLIFrameElement | null>(null);
-  useTelegramWebviewBridge(iframeRef, { onBlocked: (details) => setBlocked({ text: details.text }) });
+  const bridge = useTelegramWebviewBridge(iframeRef, {
+    onBlocked: (details) => setBlocked({ text: details.text }),
+  });
   const solve = useServerFn(solveCaptcha);
 
   type CapLog = { ts: number; level: "info" | "warn" | "error"; source: "iframe" | "host"; msg: string; extra?: any };
@@ -224,6 +227,7 @@ export function MiniAppDrawer({
                   )
                 }
               />
+              <MiniAppChrome bridge={bridge} />
               {slowFallback && resolvedUrl && !blocked && (
                 <div className="absolute inset-x-3 bottom-3 rounded-lg border border-yellow-500/40 bg-background/95 p-3 text-xs shadow-lg backdrop-blur">
                   <div className="mb-2 font-semibold">Mini app is not responding here</div>

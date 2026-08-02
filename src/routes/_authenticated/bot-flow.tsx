@@ -4,6 +4,7 @@ import { useServerFn } from "@tanstack/react-start";
 import { useQuery } from "@tanstack/react-query";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useTelegramWebviewBridge } from "@/lib/telegram-webview-bridge";
+import { MiniAppChrome } from "@/components/MiniAppChrome";
 import { supabase } from "@/integrations/supabase/client";
 import { listAccounts } from "@/lib/accounts.functions";
 import {
@@ -393,6 +394,10 @@ function BotFlowPage() {
   const miniParsed = useMemo(() => {
     const raw = miniLink.trim();
     if (!raw) return null;
+    // Bare bot handle ("@somebot" / "somebot") — open that bot's main mini app.
+    if (/^@?[A-Za-z0-9_]{3,64}$/.test(raw)) {
+      return { username: raw.replace(/^@/, ""), startParam: "", appShortName: "" };
+    }
     try {
       const url = new URL(raw.startsWith("http") ? raw : `https://${raw}`);
       const path = url.pathname.replace(/^\/+/, "").split("/");
@@ -446,6 +451,24 @@ function BotFlowPage() {
   const closeMini = (accountId: string) =>
     setMiniRuns((prev) => prev.filter((r) => r.accountId !== accountId));
   const clearMini = () => setMiniRuns([]);
+
+  // Launch a mini app straight from any bot chat (Run-a-bot section).
+  const [miniOpenSignal, setMiniOpenSignal] = useState(0);
+  const [botChatMini, setBotChatMini] = useState("");
+  const openMiniFromBot = async (rawBot: string, startParam: string, ids: string[]) => {
+    const username = rawBot
+      .trim()
+      .replace(/^https?:\/\/(t\.me|telegram\.me|telegram\.dog)\//i, "")
+      .replace(/^@/, "")
+      .split(/[/?]/)[0];
+    if (!username) return toast.error("Enter a bot @username or t.me link");
+    if (!ids.length) return toast.error("Select at least one account");
+    setMiniLink(startParam ? `https://t.me/${username}?startapp=${startParam}` : `@${username}`);
+    setMiniSelected(ids);
+    setMiniOpenSignal((n) => n + 1);
+    setMiniRuns(ids.map((id) => ({ accountId: id, status: "loading" as const })));
+    await Promise.all(ids.map((id) => resolveOne(id, username, startParam)));
+  };
 
   // ─── Verify-link extractor ───────────────────────────────────────
   const [vxLink, setVxLink] = useState("");
@@ -1118,6 +1141,35 @@ function BotFlowPage() {
                 ok {totals.ok} · fail {totals.fail}
               </div>
             )}
+          </div>
+
+          <div className="rounded-md border border-border bg-muted/20 p-2 space-y-2">
+            <div className="text-xs font-medium">Open a mini app from a bot chat</div>
+            <div className="flex flex-wrap items-center gap-2">
+              <Input
+                value={botChatMini}
+                onChange={(e) => setBotChatMini(e.target.value)}
+                placeholder={parsed?.username ? `@${parsed.username}` : "@somebot or https://t.me/somebot"}
+                className="h-8 w-64 text-xs"
+              />
+              <Button
+                size="sm"
+                onClick={() =>
+                  openMiniFromBot(
+                    botChatMini || parsed?.username || "",
+                    parsed?.startParam || "",
+                    selectedIds.length ? selectedIds : allIds,
+                  )
+                }
+                disabled={!botChatMini && !parsed?.username}
+                title="Open this bot's mini app on every selected account"
+              >
+                <Play className="mr-1 h-3.5 w-3.5" /> Open mini app on selected
+              </Button>
+              <span className="text-[11px] text-muted-foreground">
+                Uses the same accounts selected above. Windows appear in “Open Mini App on many accounts”.
+              </span>
+            </div>
           </div>
 
           {parsed?.username && (
@@ -1837,7 +1889,12 @@ function BotFlowPage() {
         </CollapsibleSection>
 
         {/* ── Mini App launcher ─────────────────────────────────────── */}
-        <CollapsibleSection storageKey="botflow.miniapp" title="Open Mini App on many accounts" defaultOpen={false}>
+        <CollapsibleSection
+          storageKey="botflow.miniapp"
+          title="Open Mini App on many accounts"
+          defaultOpen={false}
+          openSignal={miniOpenSignal}
+        >
           <p className="text-xs text-muted-foreground">
             Paste a Telegram mini app link (e.g. <code>https://t.me/wormcupbot?startapp=R84L82W</code>).
             Each selected account gets its own live mini app window below — use them independently.
@@ -1848,7 +1905,7 @@ function BotFlowPage() {
             <Input
               value={miniLink}
               onChange={(e) => setMiniLink(e.target.value)}
-              placeholder="https://t.me/somebot?startapp=YOUR_REF"
+              placeholder="https://t.me/somebot?startapp=YOUR_REF or @somebot"
             />
             {miniParsed?.username && (
               <div className="mt-2 text-xs text-muted-foreground">
@@ -2910,7 +2967,7 @@ function BulkVerifyFrame({
   const [blocked, setBlocked] = useState<{ text?: string } | null>(null);
   const [slowFallback, setSlowFallback] = useState(false);
   const { url: proxied } = useMiniAppProxyUrl(url, accountId, { fpSeed: retrySeed });
-  useTelegramWebviewBridge(localRef, { onBlocked: (details) => setBlocked({ text: details.text }) });
+  const bridge = useTelegramWebviewBridge(localRef, { onBlocked: (details) => setBlocked({ text: details.text }) });
   useEffect(() => {
     const src = directMode ? url : proxied;
     if (!src) return;
@@ -2934,6 +2991,7 @@ function BulkVerifyFrame({
         referrerPolicy="no-referrer-when-downgrade"
         onLoad={() => { setSlowFallback(false); onLoaded?.(); }}
       />
+      <MiniAppChrome bridge={bridge} />
       {slowFallback && !blocked && (
         <div className="absolute inset-x-2 bottom-2 rounded-lg border border-yellow-500/40 bg-background/95 p-2 text-[11px] shadow-lg backdrop-blur">
           <div className="mb-1 font-semibold">No response in embedded view</div>
@@ -2970,7 +3028,7 @@ function MiniAppFrameImpl({ url, title, accountId, botUsername }: { url: string;
     | { status: "error"; url: string; error: string }
     | null
   >(null);
-  useTelegramWebviewBridge(ref, {
+  const bridge = useTelegramWebviewBridge(ref, {
     onBlocked: (details) => setOverlay({ status: "error", url, error: details.text || "Verification blocked in embedded view" }),
     onClose: () => {
       if (!botUsername) return false;
@@ -3028,6 +3086,7 @@ function MiniAppFrameImpl({ url, title, accountId, botUsername }: { url: string;
         sandbox="allow-scripts allow-same-origin allow-forms allow-modals allow-popups allow-popups-to-escape-sandbox allow-storage-access-by-user-activation allow-top-navigation-by-user-activation"
         referrerPolicy="no-referrer-when-downgrade"
       />
+      <MiniAppChrome bridge={bridge} />
       {overlay && (
         <div className="absolute inset-0 flex flex-col bg-background">
           <div className="flex items-center gap-2 border-b px-2 py-1.5 text-xs">
