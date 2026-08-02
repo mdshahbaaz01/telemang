@@ -1,4 +1,4 @@
-import { useEffect, useRef } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 
 // Minimal Telegram Mini App host bridge. Real telegram-web-app.js posts events
 // to `window.parent` (or window.TelegramWebviewProxy / window.external). In a
@@ -6,6 +6,32 @@ import { useEffect, useRef } from "react";
 // We answer the handful of events every mini app waits for on boot.
 
 type ThemeParams = Record<string, string>;
+
+export type MiniAppPopupButton = { id?: string; type?: string; text?: string };
+export type MiniAppPopup = {
+  kind: "popup" | "write_access" | "contact" | "qr";
+  title?: string;
+  message: string;
+  buttons: MiniAppPopupButton[];
+};
+export type MiniAppButtonState = {
+  isVisible: boolean;
+  isActive?: boolean;
+  text?: string;
+  color?: string;
+  textColor?: string;
+  isProgressVisible?: boolean;
+};
+
+export type MiniAppBridge = {
+  popup: MiniAppPopup | null;
+  answerPopup: (buttonId: string) => void;
+  mainButton: MiniAppButtonState | null;
+  secondaryButton: MiniAppButtonState | null;
+  backButtonVisible: boolean;
+  settingsButtonVisible: boolean;
+  press: (kind: "main" | "secondary" | "back" | "settings") => void;
+};
 
 const DEFAULT_THEME: ThemeParams = {
   bg_color: "#ffffff",
@@ -32,7 +58,7 @@ export function useTelegramWebviewBridge(
     onClose?: () => boolean | void;
     onBlocked?: (details: { reason?: string; text?: string; url?: string }) => void;
   } = {},
-) {
+): MiniAppBridge {
   const theme = opts.theme ?? DEFAULT_THEME;
   const viewportHeight = opts.viewportHeight;
   const themeRef = useRef(theme);
@@ -43,6 +69,65 @@ export function useTelegramWebviewBridge(
   onCloseRef.current = opts.onClose;
   const onBlockedRef = useRef(opts.onBlocked);
   onBlockedRef.current = opts.onBlocked;
+
+  const [popup, setPopup] = useState<MiniAppPopup | null>(null);
+  const [mainButton, setMainButton] = useState<MiniAppButtonState | null>(null);
+  const [secondaryButton, setSecondaryButton] = useState<MiniAppButtonState | null>(null);
+  const [backButtonVisible, setBackButtonVisible] = useState(false);
+  const [settingsButtonVisible, setSettingsButtonVisible] = useState(false);
+
+  const postToApp = useCallback(
+    (eventType: string, eventData: unknown = {}) => {
+      const win = iframeRef.current?.contentWindow;
+      if (!win) return;
+      try {
+        win.postMessage(JSON.stringify({ eventType, eventData }), "*");
+      } catch {}
+    },
+    [iframeRef],
+  );
+
+  const answerPopup = useCallback(
+    (buttonId: string) => {
+      const current = popup;
+      setPopup(null);
+      if (!current) return;
+      if (current.kind === "write_access") {
+        postToApp("write_access_requested", {
+          status: buttonId === "allow" ? "allowed" : "cancelled",
+        });
+        return;
+      }
+      if (current.kind === "contact") {
+        postToApp("phone_requested", {
+          status: buttonId === "allow" ? "sent" : "cancelled",
+        });
+        return;
+      }
+      if (current.kind === "qr") {
+        postToApp("scan_qr_popup_closed", {});
+        return;
+      }
+      postToApp("popup_closed", { button_id: buttonId });
+    },
+    [popup, postToApp],
+  );
+
+  const press = useCallback(
+    (kind: "main" | "secondary" | "back" | "settings") => {
+      postToApp(
+        kind === "main"
+          ? "main_button_pressed"
+          : kind === "secondary"
+            ? "secondary_button_pressed"
+            : kind === "back"
+              ? "back_button_pressed"
+              : "settings_button_pressed",
+        {},
+      );
+    },
+    [postToApp],
+  );
 
   useEffect(() => {
     function post(target: Window, eventType: string, eventData: unknown = {}) {
@@ -150,11 +235,117 @@ export function useTelegramWebviewBridge(
             });
           } catch {}
           break;
+        case "web_app_open_popup": {
+          const rawButtons: MiniAppPopupButton[] = Array.isArray(eventData?.buttons)
+            ? eventData.buttons
+            : [];
+          const buttons = rawButtons.length
+            ? rawButtons.map((b, i) => ({
+                id: b.id ?? String(i),
+                type: b.type ?? "default",
+                text: b.text ?? (b.type === "close" ? "Close" : b.type === "cancel" ? "Cancel" : "OK"),
+              }))
+            : [{ id: "", type: "close", text: "OK" }];
+          setPopup({
+            kind: "popup",
+            title: eventData?.title,
+            message: String(eventData?.message ?? ""),
+            buttons,
+          });
+          break;
+        }
         case "web_app_request_write_access":
-          post(source, "write_access_requested", { status: "allowed" });
+          setPopup({
+            kind: "write_access",
+            title: "Allow messaging",
+            message: "Allow this bot to send you messages?",
+            buttons: [
+              { id: "deny", type: "cancel", text: "Don't Allow" },
+              { id: "allow", type: "default", text: "Allow" },
+            ],
+          });
           break;
         case "web_app_request_phone":
-          post(source, "phone_requested", { status: "cancelled" });
+          setPopup({
+            kind: "contact",
+            title: "Share phone number",
+            message: "Share your phone number with this bot?",
+            buttons: [
+              { id: "deny", type: "cancel", text: "Cancel" },
+              { id: "allow", type: "default", text: "Share" },
+            ],
+          });
+          break;
+        case "web_app_open_scan_qr_popup":
+          setPopup({
+            kind: "qr",
+            title: "QR scanner",
+            message: eventData?.text || "QR scanning is not available in the embedded viewer.",
+            buttons: [{ id: "close", type: "close", text: "Close" }],
+          });
+          break;
+        case "web_app_close_scan_qr_popup":
+          setPopup((p) => (p?.kind === "qr" ? null : p));
+          break;
+        case "web_app_read_text_from_clipboard":
+          post(source, "clipboard_text_received", {
+            req_id: eventData?.req_id,
+            data: null,
+          });
+          break;
+        case "web_app_invoke_custom_method":
+          post(source, "custom_method_invoked", {
+            req_id: eventData?.req_id,
+            error: "UNSUPPORTED_METHOD",
+          });
+          break;
+        case "web_app_setup_main_button":
+          setMainButton({
+            isVisible: !!(eventData?.is_visible ?? eventData?.isVisible),
+            isActive: eventData?.is_active ?? eventData?.isActive ?? true,
+            text: eventData?.text,
+            color: eventData?.color,
+            textColor: eventData?.text_color ?? eventData?.textColor,
+            isProgressVisible:
+              eventData?.is_progress_visible ?? eventData?.isProgressVisible ?? false,
+          });
+          break;
+        case "web_app_setup_secondary_button":
+          setSecondaryButton({
+            isVisible: !!(eventData?.is_visible ?? eventData?.isVisible),
+            isActive: eventData?.is_active ?? eventData?.isActive ?? true,
+            text: eventData?.text,
+            color: eventData?.color,
+            textColor: eventData?.text_color ?? eventData?.textColor,
+          });
+          break;
+        case "web_app_setup_back_button":
+          setBackButtonVisible(!!(eventData?.is_visible ?? eventData?.isVisible));
+          break;
+        case "web_app_setup_settings_button":
+          setSettingsButtonVisible(!!(eventData?.is_visible ?? eventData?.isVisible));
+          break;
+        case "web_app_request_fullscreen":
+          post(source, "fullscreen_changed", { is_fullscreen: true });
+          break;
+        case "web_app_exit_fullscreen":
+          post(source, "fullscreen_changed", { is_fullscreen: false });
+          break;
+        case "web_app_request_emoji_status_access":
+          post(source, "emoji_status_access_requested", { status: "cancelled" });
+          break;
+        case "web_app_request_file_download":
+          post(source, "file_download_requested", { status: "cancelled" });
+          break;
+        case "web_app_send_prepared_message":
+          post(source, "prepared_message_failed", { error: "UNSUPPORTED" });
+          break;
+        case "web_app_start_accelerometer":
+        case "web_app_start_gyroscope":
+        case "web_app_start_device_orientation":
+          post(source, `${eventType.replace("web_app_start_", "")}_failed`, {
+            error: "UNSUPPORTED",
+          });
           break;
         case "web_app_check_home_screen":
           post(source, "home_screen_checked", { status: "unsupported" });
@@ -162,10 +353,6 @@ export function useTelegramWebviewBridge(
         case "web_app_biometry_get_info":
           post(source, "biometry_info_received", { available: false });
           break;
-        case "web_app_setup_main_button":
-        case "web_app_setup_secondary_button":
-        case "web_app_setup_back_button":
-        case "web_app_setup_settings_button":
         case "web_app_setup_closing_behavior":
         case "web_app_setup_swipe_behavior":
         case "web_app_set_background_color":
@@ -174,7 +361,6 @@ export function useTelegramWebviewBridge(
         case "web_app_trigger_haptic_feedback":
         case "web_app_data_send":
         case "web_app_switch_inline_query":
-        case "web_app_read_text_from_clipboard":
         case "web_app_share_to_story":
         case "web_app_add_to_home_screen":
           // Acknowledge silently — enough for apps to keep booting.
@@ -187,4 +373,14 @@ export function useTelegramWebviewBridge(
     window.addEventListener("message", onMessage);
     return () => window.removeEventListener("message", onMessage);
   }, [iframeRef, viewportHeight]);
+
+  return {
+    popup,
+    answerPopup,
+    mainButton,
+    secondaryButton,
+    backButtonVisible,
+    settingsButtonVisible,
+    press,
+  };
 }
