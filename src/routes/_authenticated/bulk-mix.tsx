@@ -14,6 +14,7 @@ import { Switch } from "@/components/ui/switch";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { Loader2, Smile, Eye, Trash2, Plus, X } from "lucide-react";
+import { AccountIdPaste } from "@/components/AccountIdPaste";
 import { requireAdminBeforeLoad } from "@/lib/access-guard";
 
 export const Route = createFileRoute("/_authenticated/bulk-mix")({
@@ -92,6 +93,16 @@ function AccountsPopover({
             </label>
           ))}
         </div>
+      )}
+      {open && (
+        <AccountIdPaste
+          accounts={accounts}
+          onSelect={(ids) => {
+            const n = new Set(selected);
+            for (const id of ids) n.add(id);
+            setSelected(n);
+          }}
+        />
       )}
     </div>
   );

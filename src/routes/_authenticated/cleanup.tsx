@@ -334,6 +334,19 @@ function CleanupPanelInner({ mode, kind }: { mode: "chats" | "personal"; kind?: 
     setMaxDelay(defaultDelays.max);
   }, [defaultDelays]);
   const [selectedByAcc, setSelectedByAcc] = useState<Record<string, Set<string>>>({});
+  // Keys currently visible (after search + kind filters) per account, reported by each column.
+  const [filteredByAcc, setFilteredByAcc] = useState<Record<string, string[]>>({});
+  const totalsFor = (ids: string[]) => {
+    let shown = 0;
+    let sel = 0;
+    for (const id of ids) {
+      const keys = filteredByAcc[id] ?? [];
+      shown += keys.length;
+      const s = selectedByAcc[id];
+      if (s) for (const k of keys) if (s.has(k)) sel++;
+    }
+    return { shown, sel };
+  };
   const [logs, setLogs] = useState<LogEntry[]>([]);
   const [running, setRunning] = useState(false);
   const [doneByAcc, setDoneByAcc] = useState<Record<string, { ok: number; fail: number }>>({});
@@ -458,6 +471,7 @@ function CleanupPanelInner({ mode, kind }: { mode: "chats" | "personal"; kind?: 
   };
 
   const idsArr = Array.from(accountIds);
+  const { shown: totalShown, sel: totalSelected } = totalsFor(idsArr);
 
   return (
     <div className="space-y-4">
@@ -593,6 +607,57 @@ function CleanupPanelInner({ mode, kind }: { mode: "chats" | "personal"; kind?: 
         {running && <span className="text-xs text-muted-foreground">Streaming live logs…</span>}
       </div>
 
+      {/* Global chat selection across every open account column */}
+      {idsArr.length > 0 && (
+        <div className="flex flex-wrap items-center gap-2 rounded-lg border border-border bg-card p-3">
+          <span className="text-xs text-muted-foreground">
+            All accounts{query ? ` · matching “${query}”` : ""}:
+            {" "}
+            <span className="font-mono text-foreground">{totalShown}</span> shown ·{" "}
+            <span className="font-mono text-foreground">{totalSelected}</span> selected
+          </span>
+          <Button
+            size="sm"
+            variant="outline"
+            disabled={running || !totalShown}
+            onClick={() =>
+              setSelectedByAcc((prev) => {
+                const next = { ...prev };
+                for (const id of idsArr) {
+                  const n = new Set(next[id] ?? []);
+                  for (const k of filteredByAcc[id] ?? []) n.add(k);
+                  next[id] = n;
+                }
+                return next;
+              })
+            }
+          >
+            Select all shown
+          </Button>
+          <Button
+            size="sm"
+            variant="outline"
+            disabled={running || !totalShown}
+            onClick={() =>
+              setSelectedByAcc((prev) => {
+                const next = { ...prev };
+                for (const id of idsArr) {
+                  const n = new Set(next[id] ?? []);
+                  for (const k of filteredByAcc[id] ?? []) n.delete(k);
+                  next[id] = n;
+                }
+                return next;
+              })
+            }
+          >
+            Deselect all shown
+          </Button>
+          <Button size="sm" variant="ghost" disabled={running || !totalSelected} onClick={() => setSelectedByAcc({})}>
+            Clear every selection
+          </Button>
+        </div>
+      )}
+
       {/* Per-account columns */}
       {idsArr.length === 0 ? (
         <p className="text-sm text-muted-foreground">Pick one or more accounts above.</p>
@@ -609,6 +674,7 @@ function CleanupPanelInner({ mode, kind }: { mode: "chats" | "personal"; kind?: 
               query={query}
               selected={selectedByAcc[id] ?? new Set()}
               setSelected={(next) => setSelectedByAcc((p) => ({ ...p, [id]: next }))}
+              onFilteredChange={(keys) => setFilteredByAcc((p) => ({ ...p, [id]: keys }))}
               done={doneByAcc[id]}
               running={running}
             />
@@ -655,6 +721,7 @@ function AccountColumn({
   query,
   selected,
   setSelected,
+  onFilteredChange,
   done,
   running,
 }: {
@@ -666,6 +733,7 @@ function AccountColumn({
   query: string;
   selected: Set<string>;
   setSelected: (n: Set<string>) => void;
+  onFilteredChange?: (keys: string[]) => void;
   done?: { ok: number; fail: number };
   running: boolean;
 }) {
@@ -698,10 +766,18 @@ function AccountColumn({
   }, [dialogs?.data, action, query, mode, kind]);
 
   const allSelected = filtered.length > 0 && filtered.every((r) => selected.has(r.key));
+  // Only touch what's currently shown, so a search never wipes earlier picks.
   const toggleAll = () => {
-    if (allSelected) setSelected(new Set());
-    else setSelected(new Set(filtered.map((r) => r.key)));
+    const n = new Set(selected);
+    if (allSelected) for (const r of filtered) n.delete(r.key);
+    else for (const r of filtered) n.add(r.key);
+    setSelected(n);
   };
+  const filteredKeys = useMemo(() => filtered.map((r) => r.key), [filtered]);
+  useEffect(() => {
+    onFilteredChange?.(filteredKeys);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [filteredKeys]);
   const toggle = (key: string) => {
     const n = new Set(selected);
     n.has(key) ? n.delete(key) : n.add(key);
