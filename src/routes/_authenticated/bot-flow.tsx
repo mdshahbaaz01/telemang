@@ -526,10 +526,15 @@ function BotFlowPage() {
     const t = raw.trim();
     if (!t) return "";
     if (/^[ucg]:\d+$/.test(t)) return t;
+    if (/^invite:/i.test(t)) return t;
     const cleaned = t
       .replace(/^https?:\/\/(t\.me|telegram\.me)\//i, "")
       .replace(/^@/, "")
       .split(/[/?]/)[0];
+    // Private invite links: t.me/+hash or t.me/joinchat/hash → join then send.
+    const inviteSrc = t.replace(/^https?:\/\/(t\.me|telegram\.me)\//i, "");
+    if (/^\+/.test(inviteSrc)) return `invite:+${inviteSrc.slice(1).split(/[/?]/)[0]}`;
+    if (/^joinchat\//i.test(inviteSrc)) return `invite:joinchat/${inviteSrc.split("/")[1]?.split(/[?]/)[0] ?? ""}`;
     return cleaned ? `@${cleaned}` : "";
   };
   const vxTargetKey = useMemo(() => normalizeVxTarget(vxTarget), [vxTarget]);
@@ -1810,12 +1815,14 @@ function BotFlowPage() {
                   <Input
                     value={vxTarget}
                     onChange={(e) => setVxTarget(e.target.value)}
-                    placeholder="@mychannel  ·  https://t.me/mychannel  ·  c:123456789"
+                    placeholder="@mychannel · https://t.me/+AbCdEf... · t.me/joinchat/... · c:123456789"
                   />
                   <p className="mt-1 text-xs text-muted-foreground">
                     {vxTargetKey
-                      ? <>Sends as <span className="font-mono text-foreground">{vxTargetKey}</span> — each account must already be a member.</>
-                      : "Public @username, t.me link, or a peer key (u:/g:/c:)."}
+                      ? vxTargetKey.startsWith("invite:")
+                        ? <>Private invite <span className="font-mono text-foreground">{vxTargetKey.replace(/^invite:/, "")}</span> — each account joins automatically (or peeks if already a member) before sending.</>
+                        : <>Sends as <span className="font-mono text-foreground">{vxTargetKey}</span> — each account must already be a member.</>
+                      : "Public @username, private invite link (t.me/+… or /joinchat/…), t.me link, or a peer key (u:/g:/c:)."}
                   </p>
                 </div>
                 <div>
