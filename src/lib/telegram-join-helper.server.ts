@@ -442,8 +442,47 @@ async function joinTelegramTargetCore(args: {
   }
 
   try {
-    const imported: any = await client.invoke(new Api.messages.ImportChatInvite({ hash: inviteHash }));
-    const importedChat = firstChatFrom(imported);
+    let imported: any;
+    try {
+      imported = await client.invoke(new Api.messages.ImportChatInvite({ hash: inviteHash }));
+    } catch (error) {
+      const msg = textOf(error);
+      // Short FLOOD_WAIT on an invite import: wait it out once instead of
+      // failing the whole target (these links are often hit by many accounts).
+      const flood = msg.match(/FLOOD_WAIT_(\d+)/i);
+      if (flood && Number(flood[1]) <= 30) {
+        log?.("info", `Invite import hit FLOOD_WAIT_${flood[1]}; waiting and retrying once…`);
+        await new Promise((r) => setTimeout(r, (Number(flood[1]) + 1) * 1000));
+        imported = await client.invoke(new Api.messages.ImportChatInvite({ hash: inviteHash }));
+      } else if (/USER_ALREADY_PARTICIPANT/i.test(msg)) {
+        // Telegram refuses the import because we're already inside. Resolve the
+        // real chat through the peek (works for both channels and legacy groups).
+        const peekChat = firstChatFrom(peekInfo) ?? firstChatFrom(
+          await client.invoke(new Api.messages.CheckChatInvite({ hash: inviteHash })).catch(() => null),
+        );
+        return {
+          status: "already",
+          path: "import_invite",
+          message: `Already member of ${peekChat?.title || `+${inviteHash.slice(0, 8)}…`}`,
+          note: null,
+          canonicalTarget: peekChat?.username ?? null,
+          errorCode: null,
+          verified: peekChat ? await waitForMembership(client, Api, peekChat) : false,
+          canonicalChannelId: peekChat ? idOf(peekChat) : null,
+        };
+      } else {
+        throw error;
+      }
+    }
+    let importedChat = firstChatFrom(imported);
+    // Legacy "group chat" invites sometimes come back with the chat only inside
+    // updates.chats of a nested update — fall back to the freshest dialog list.
+    if (!importedChat) {
+      try {
+        const peeked: any = await client.invoke(new Api.messages.CheckChatInvite({ hash: inviteHash }));
+        importedChat = firstChatFrom(peeked);
+      } catch { /* ignore */ }
+    }
     if (importedChat?.username) {
       const entity = await client.getEntity(importedChat.username);
       return joinEntityVerified(client, Api, entity, `@${importedChat.username}`, "import_username", log);
