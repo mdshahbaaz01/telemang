@@ -595,6 +595,57 @@ function CleanupPanelInner({ mode, kind }: { mode: "chats" | "personal"; kind?: 
         {running && <span className="text-xs text-muted-foreground">Streaming live logs…</span>}
       </div>
 
+      {/* Global chat selection across every open account column */}
+      {idsArr.length > 0 && (
+        <div className="flex flex-wrap items-center gap-2 rounded-lg border border-border bg-card p-3">
+          <span className="text-xs text-muted-foreground">
+            All accounts{query ? ` · matching “${query}”` : ""}:
+            {" "}
+            <span className="font-mono text-foreground">{totalShown}</span> shown ·{" "}
+            <span className="font-mono text-foreground">{totalSelected}</span> selected
+          </span>
+          <Button
+            size="sm"
+            variant="outline"
+            disabled={running || !totalShown}
+            onClick={() =>
+              setSelectedByAcc((prev) => {
+                const next = { ...prev };
+                for (const id of idsArr) {
+                  const n = new Set(next[id] ?? []);
+                  for (const k of filteredByAcc[id] ?? []) n.add(k);
+                  next[id] = n;
+                }
+                return next;
+              })
+            }
+          >
+            Select all shown
+          </Button>
+          <Button
+            size="sm"
+            variant="outline"
+            disabled={running || !totalShown}
+            onClick={() =>
+              setSelectedByAcc((prev) => {
+                const next = { ...prev };
+                for (const id of idsArr) {
+                  const n = new Set(next[id] ?? []);
+                  for (const k of filteredByAcc[id] ?? []) n.delete(k);
+                  next[id] = n;
+                }
+                return next;
+              })
+            }
+          >
+            Deselect all shown
+          </Button>
+          <Button size="sm" variant="ghost" disabled={running || !totalSelected} onClick={() => setSelectedByAcc({})}>
+            Clear every selection
+          </Button>
+        </div>
+      )}
+
       {/* Per-account columns */}
       {idsArr.length === 0 ? (
         <p className="text-sm text-muted-foreground">Pick one or more accounts above.</p>
@@ -611,6 +662,7 @@ function CleanupPanelInner({ mode, kind }: { mode: "chats" | "personal"; kind?: 
               query={query}
               selected={selectedByAcc[id] ?? new Set()}
               setSelected={(next) => setSelectedByAcc((p) => ({ ...p, [id]: next }))}
+              onFilteredChange={(keys) => setFilteredByAcc((p) => ({ ...p, [id]: keys }))}
               done={doneByAcc[id]}
               running={running}
             />
