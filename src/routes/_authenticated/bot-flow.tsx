@@ -4,6 +4,7 @@ import { useServerFn } from "@tanstack/react-start";
 import { useQuery } from "@tanstack/react-query";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useTelegramWebviewBridge } from "@/lib/telegram-webview-bridge";
+import { MiniAppChrome } from "@/components/MiniAppChrome";
 import { supabase } from "@/integrations/supabase/client";
 import { listAccounts } from "@/lib/accounts.functions";
 import {
@@ -2910,7 +2911,7 @@ function BulkVerifyFrame({
   const [blocked, setBlocked] = useState<{ text?: string } | null>(null);
   const [slowFallback, setSlowFallback] = useState(false);
   const { url: proxied } = useMiniAppProxyUrl(url, accountId, { fpSeed: retrySeed });
-  useTelegramWebviewBridge(localRef, { onBlocked: (details) => setBlocked({ text: details.text }) });
+  const bridge = useTelegramWebviewBridge(localRef, { onBlocked: (details) => setBlocked({ text: details.text }) });
   useEffect(() => {
     const src = directMode ? url : proxied;
     if (!src) return;
@@ -2934,6 +2935,7 @@ function BulkVerifyFrame({
         referrerPolicy="no-referrer-when-downgrade"
         onLoad={() => { setSlowFallback(false); onLoaded?.(); }}
       />
+      <MiniAppChrome bridge={bridge} />
       {slowFallback && !blocked && (
         <div className="absolute inset-x-2 bottom-2 rounded-lg border border-yellow-500/40 bg-background/95 p-2 text-[11px] shadow-lg backdrop-blur">
           <div className="mb-1 font-semibold">No response in embedded view</div>
