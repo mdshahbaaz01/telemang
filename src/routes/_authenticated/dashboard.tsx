@@ -11,6 +11,7 @@ import {
   startAccountLogin,
   verifyAccountLogin,
   deleteAccount,
+  refreshAccountInfo,
 } from "@/lib/accounts.functions";
 import {
   listTaskGroups,
@@ -50,7 +51,41 @@ function Dashboard() {
   const resetGroupFn = useServerFn(resetGroupItems);
   const clearHistoryFn = useServerFn(clearTaskHistory);
   const delAcc = useServerFn(deleteAccount);
+  const refreshInfoFn = useServerFn(refreshAccountInfo);
   const [email, setEmail] = useState<string>("");
+  const [refreshingId, setRefreshingId] = useState<string | null>(null);
+  const [syncingAll, setSyncingAll] = useState(false);
+
+  const refreshOne = async (id: string) => {
+    setRefreshingId(id);
+    try {
+      const r = await refreshInfoFn({ data: { ids: [id] } });
+      const res = r.results[0];
+      if (res?.ok) toast.success(`Updated: ${res.name || "profile synced"}`);
+      else toast.error(res?.message ?? "Refresh failed");
+      qc.invalidateQueries({ queryKey: ["accounts"] });
+    } catch (err) {
+      toast.error((err as Error).message);
+    } finally {
+      setRefreshingId(null);
+    }
+  };
+
+  const syncAllNames = async () => {
+    const ids = (accountsQ.data ?? []).map((a) => a.id);
+    if (!ids.length) return;
+    setSyncingAll(true);
+    try {
+      const r = await refreshInfoFn({ data: { ids: ids.slice(0, 200) } });
+      const ok = r.results.filter((x) => x.ok).length;
+      toast.success(`Synced ${ok}/${r.results.length} accounts`);
+      qc.invalidateQueries({ queryKey: ["accounts"] });
+    } catch (err) {
+      toast.error((err as Error).message);
+    } finally {
+      setSyncingAll(false);
+    }
+  };
 
   useEffect(() => {
     supabase.auth.getUser().then(({ data }) => setEmail(data.user?.email ?? ""));
@@ -125,7 +160,18 @@ function Dashboard() {
                 Every admin sees and can use every account added here.
               </p>
             </div>
-            <AddAccountDialog onDone={() => qc.invalidateQueries({ queryKey: ["accounts"] })} />
+            <div className="flex items-center gap-2">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={syncAllNames}
+                disabled={syncingAll || !accountsQ.data?.length}
+              >
+                <RefreshCw className={`mr-1 h-4 w-4 ${syncingAll ? "animate-spin" : ""}`} />
+                {syncingAll ? "Syncing…" : "Sync names"}
+              </Button>
+              <AddAccountDialog onDone={() => qc.invalidateQueries({ queryKey: ["accounts"] })} />
+            </div>
           </div>
 
           {accountsQ.isLoading ? (
@@ -170,8 +216,16 @@ function Dashboard() {
                           <MessageSquare className="mr-1 h-3.5 w-3.5" /> Open
                         </Link>
                       </Button>
-                      <Button variant="outline" size="sm" onClick={soon}>
-                        <RefreshCw className="mr-1 h-3.5 w-3.5" /> Check
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => refreshOne(a.id)}
+                        disabled={refreshingId === a.id}
+                      >
+                        <RefreshCw
+                          className={`mr-1 h-3.5 w-3.5 ${refreshingId === a.id ? "animate-spin" : ""}`}
+                        />
+                        {refreshingId === a.id ? "Checking…" : "Check"}
                       </Button>
                       <Button
                         variant="outline"
