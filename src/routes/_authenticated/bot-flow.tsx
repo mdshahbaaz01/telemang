@@ -779,6 +779,30 @@ function BotFlowPage() {
     async (label: string) => {
       const entries = Object.entries(botBtnState.perAccount);
       if (!entries.length) return toast.error("Refresh bot buttons first");
+      // Mini app / URL buttons: launch the mini app for every account that has it.
+      const btnsForLabel = entries
+        .map(([accountId, v]) => ({ accountId, btn: v.buttons.find((b) => b.label === label) }))
+        .filter((x) => !!x.btn) as { accountId: string; btn: BroadcastBtn }[];
+      const isMini = btnsForLabel.some(
+        (x) => x.btn.kind === "webapp" || (x.btn.kind === "url" && !!x.btn.url),
+      );
+      const anyCallback = btnsForLabel.some((x) => x.btn.kind === "callback" || x.btn.kind === "reply");
+      if (isMini && !anyCallback) {
+        const withUrl = btnsForLabel.find((x) => x.btn.url);
+        const raw = withUrl?.btn.url ?? "";
+        let username = parsed?.username ?? "";
+        let startParam = "";
+        try {
+          const u = new URL(raw);
+          if (/(^|\.)(t\.me|telegram\.me|telegram\.dog)$/i.test(u.hostname)) {
+            username = u.pathname.split("/").filter(Boolean)[0] ?? username;
+            startParam =
+              u.searchParams.get("startapp") || u.searchParams.get("start") || "";
+          }
+        } catch { /* not an absolute t.me link — fall back to the bot itself */ }
+        if (!username) return toast.error("Could not resolve the mini app from this button");
+        return openMiniFromBot(username, startParam, btnsForLabel.map((x) => x.accountId));
+      }
       setPressingLabel(label);
       let ok = 0, fail = 0, skip = 0;
       await Promise.all(
