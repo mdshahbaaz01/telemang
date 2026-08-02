@@ -136,8 +136,6 @@ function Dashboard() {
     }
   };
 
-  const soon = () => toast.info("Coming soon");
-
   return (
     <main className="min-h-screen bg-background">
       <div className="mx-auto flex max-w-7xl items-center justify-between gap-3 px-4 pt-6 md:px-8">
