@@ -15,6 +15,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { Loader2, Smile, Eye, Trash2, Plus, X } from "lucide-react";
 import { AccountIdPaste } from "@/components/AccountIdPaste";
+import { AccountRangeControls } from "@/components/AccountRangeControls";
 import { requireAdminBeforeLoad } from "@/lib/access-guard";
 
 export const Route = createFileRoute("/_authenticated/bulk-mix")({
@@ -77,6 +78,27 @@ function AccountsPopover({
           </Button>
         </div>
       </div>
+      {open && (
+        <div className="flex flex-wrap items-center gap-2 rounded border border-dashed p-2">
+          <AccountRangeControls
+            total={accounts.length}
+            onApply={(s, e, order) => {
+              const list = order === "asc" ? accounts : [...accounts].reverse();
+              const picked = list.slice(s - 1, e).map((a) => a.id);
+              setSelected(new Set(picked));
+            }}
+          />
+          <Button size="sm" variant="outline" className="h-8 text-xs"
+            onClick={() => setSelected(new Set(accounts.map((a) => a.id)))}>
+            Select all
+          </Button>
+          <Button size="sm" variant="ghost" className="h-8 text-xs"
+            disabled={selected.size === 0}
+            onClick={() => setSelected(new Set())}>
+            Deselect all
+          </Button>
+        </div>
+      )}
       {open && (
         <div className="max-h-40 space-y-1 overflow-y-auto rounded border p-2">
           {accounts.map((a) => (
