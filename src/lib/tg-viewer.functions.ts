@@ -19,6 +19,14 @@ function normalizePeerKey(peerAny: any): string | null {
 }
 
 async function resolvePeerFromKey(client: any, Api: any, key: string) {
+  // Invite links to private groups/channels: "https://t.me/+hash", "t.me/joinchat/x",
+  // "+hash", or "invite:<link>". Peeks the invite and joins when not a member yet.
+  const inviteRaw = key.startsWith("invite:") ? key.slice("invite:".length).trim() : key.trim();
+  const inviteCleaned = inviteRaw.replace(/^https?:\/\/(t\.me|telegram\.me)\//i, "");
+  if (/^\+/.test(inviteCleaned) || /^joinchat\//i.test(inviteCleaned)) {
+    const { resolveTargetEntity } = await import("./telegram-target-resolver.server");
+    return await resolveTargetEntity(client, Api, inviteCleaned);
+  }
   // Allow @username as a peer key — resolve to entity directly.
   if (key.startsWith("@")) {
     return await client.getEntity(key.slice(1));
