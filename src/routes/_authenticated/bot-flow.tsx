@@ -2972,7 +2972,7 @@ function MiniAppFrameImpl({ url, title, accountId, botUsername }: { url: string;
     | { status: "error"; url: string; error: string }
     | null
   >(null);
-  useTelegramWebviewBridge(ref, {
+  const bridge = useTelegramWebviewBridge(ref, {
     onBlocked: (details) => setOverlay({ status: "error", url, error: details.text || "Verification blocked in embedded view" }),
     onClose: () => {
       if (!botUsername) return false;
@@ -3030,6 +3030,7 @@ function MiniAppFrameImpl({ url, title, accountId, botUsername }: { url: string;
         sandbox="allow-scripts allow-same-origin allow-forms allow-modals allow-popups allow-popups-to-escape-sandbox allow-storage-access-by-user-activation allow-top-navigation-by-user-activation"
         referrerPolicy="no-referrer-when-downgrade"
       />
+      <MiniAppChrome bridge={bridge} />
       {overlay && (
         <div className="absolute inset-0 flex flex-col bg-background">
           <div className="flex items-center gap-2 border-b px-2 py-1.5 text-xs">
