@@ -1094,6 +1094,7 @@ function ActionsPageInner() {
 
   return (
     <main className="min-h-screen bg-background">
+
       <header className="border-b border-border bg-card">
         <div className="mx-auto flex max-w-7xl items-center gap-3 px-4 py-3 md:px-8">
           <h1 className="mr-auto text-xl font-semibold">Actions</h1>
