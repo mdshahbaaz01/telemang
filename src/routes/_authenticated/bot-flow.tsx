@@ -394,6 +394,10 @@ function BotFlowPage() {
   const miniParsed = useMemo(() => {
     const raw = miniLink.trim();
     if (!raw) return null;
+    // Bare bot handle ("@somebot" / "somebot") — open that bot's main mini app.
+    if (/^@?[A-Za-z0-9_]{3,64}$/.test(raw)) {
+      return { username: raw.replace(/^@/, ""), startParam: "", appShortName: "" };
+    }
     try {
       const url = new URL(raw.startsWith("http") ? raw : `https://${raw}`);
       const path = url.pathname.replace(/^\/+/, "").split("/");
