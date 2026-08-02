@@ -1486,6 +1486,8 @@ function BotFlowPage() {
                           {botBtnState.labels.map((b) => {
                             const supported =
                               b.kinds.includes("callback") || b.kinds.includes("reply");
+                            const miniable = b.kinds.includes("webapp") || b.kinds.includes("url");
+                            const clickable = supported || miniable;
                             const cover = Object.values(botBtnState.perAccount).filter((v) =>
                               v.buttons.some((x) => x.label === b.label),
                             ).length;
@@ -1495,22 +1497,29 @@ function BotFlowPage() {
                               <button
                                 key={b.label}
                                 type="button"
-                                disabled={!supported || busy}
+                                disabled={!clickable || busy}
                                 onClick={() => broadcastPress(b.label)}
                                 title={
                                   supported
                                     ? `Press "${b.label}" on ${cover}/${total} accounts`
-                                    : `Not broadcastable (${b.kinds.join(", ")})`
+                                    : miniable
+                                      ? `Open this mini app on ${cover}/${total} accounts`
+                                      : `Not broadcastable (${b.kinds.join(", ")})`
                                 }
                                 className={
                                   "inline-flex items-center gap-1 rounded-md border px-2 py-1 text-[11px] " +
                                   (supported
                                     ? "border-primary/40 bg-primary/10 hover:bg-primary/20"
-                                    : "border-border bg-muted text-muted-foreground opacity-70") +
+                                    : miniable
+                                      ? "border-accent/50 bg-accent/10 hover:bg-accent/20"
+                                      : "border-border bg-muted text-muted-foreground opacity-70") +
                                   (busy ? " animate-pulse" : "")
                                 }
                               >
-                                <span className="max-w-[220px] truncate">{b.label || "(unnamed)"}</span>
+                                <span className="max-w-[220px] truncate">
+                                  {miniable && !supported ? "▶ " : ""}
+                                  {b.label || "(unnamed)"}
+                                </span>
                                 <span className="rounded bg-background/70 px-1 text-[10px] font-mono">
                                   {cover}/{total}
                                 </span>
@@ -1519,8 +1528,8 @@ function BotFlowPage() {
                           })}
                         </div>
                         <div className="text-[10px] text-muted-foreground">
-                          Callback + reply-text buttons broadcast automatically. URL / WebApp
-                          buttons stay per-account (open them inside each chat).
+                          Callback + reply-text buttons broadcast automatically. Mini app
+                          (WebApp / URL) buttons open the mini app on every account that has them.
                         </div>
                       </>
                     )}
