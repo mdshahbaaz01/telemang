@@ -13,6 +13,8 @@ import { Eye, RefreshCw, Trash2 } from "lucide-react";
 import { listWatchlists, saveWatchlist, deleteWatchlist, scanWatchlist } from "@/lib/watchlists.functions";
 import { listAccounts } from "@/lib/accounts.functions";
 import { requireAdminBeforeLoad } from "@/lib/access-guard";
+import { AccountRangeControls, pickRange } from "@/components/AccountRangeControls";
+import { AccountIdPaste } from "@/components/AccountIdPaste";
 
 export const Route = createFileRoute("/_authenticated/watchlists")({
   beforeLoad: requireAdminBeforeLoad,
@@ -129,6 +131,35 @@ function WatchlistsPage() {
           </div>
           <div>
             <Label>Accounts</Label>
+            <div className="mt-1 flex flex-wrap items-center gap-2">
+              <AccountRangeControls
+                total={(aQ.data ?? []).length}
+                onApply={(s, e, order) =>
+                  setForm((f) => ({
+                    ...f,
+                    accountIds: pickRange(aQ.data ?? [], s, e, order).map((a) => a.id),
+                  }))
+                }
+              />
+              <Button
+                size="sm"
+                variant="outline"
+                className="h-8"
+                onClick={() => setForm((f) => ({ ...f, accountIds: (aQ.data ?? []).map((a) => a.id) }))}
+              >
+                Select all
+              </Button>
+              <Button size="sm" variant="ghost" className="h-8" onClick={() => setForm((f) => ({ ...f, accountIds: [] }))}>
+                Deselect all
+              </Button>
+            </div>
+            <AccountIdPaste
+              accounts={(aQ.data ?? []) as any}
+              className="mt-2"
+              onSelect={(ids) =>
+                setForm((f) => ({ ...f, accountIds: Array.from(new Set([...f.accountIds, ...ids])) }))
+              }
+            />
             <div className="mt-2 max-h-40 overflow-y-auto rounded border p-2">
               {(aQ.data ?? []).map((a, i) => (
                 <label key={a.id} className="flex cursor-pointer items-center gap-2 py-1 text-sm">
