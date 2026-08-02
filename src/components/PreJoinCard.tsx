@@ -6,6 +6,8 @@ import { toast } from "sonner";
 import { Play, Square, ChevronDown, ChevronUp, History, Trash2 } from "lucide-react";
 import { Link } from "@tanstack/react-router";
 import { friendlyJoinReason } from "@/lib/telegram/errors";
+import { AccountRangeControls, pickRange } from "@/components/AccountRangeControls";
+import { AccountIdPaste } from "@/components/AccountIdPaste";
 
 type Account = { id: string; first_name?: string | null; username?: string | null; phone?: string | null };
 
@@ -332,12 +334,22 @@ export function PreJoinCard({ accounts }: { accounts: Account[] }) {
               <div className="text-sm font-medium mr-auto">
                 {selectedIds.length} / {allIds.length} accounts selected
               </div>
+              <AccountRangeControls
+                total={accounts.length}
+                onApply={(s, e, order) =>
+                  setSelectedIds(pickRange(accounts, s, e, order).map((a) => a.id))
+                }
+              />
               <Button size="sm" variant="outline" onClick={() => setSelectorOpen((v) => !v)}>
                 {selectorOpen ? "Close select" : "Select"}
               </Button>
               <Button size="sm" variant="outline" onClick={() => setSelectedIds(allIds)}>All</Button>
               <Button size="sm" variant="outline" onClick={() => setSelectedIds([])}>None</Button>
             </div>
+            <AccountIdPaste
+              accounts={accounts as any}
+              onSelect={(ids) => setSelectedIds((prev) => Array.from(new Set([...prev, ...ids])))}
+            />
             {selectorOpen && (
               <div className="grid grid-cols-1 gap-1 sm:grid-cols-2 lg:grid-cols-3 max-h-56 overflow-auto rounded-md border border-border p-2">
                 {accounts.map((a) => {

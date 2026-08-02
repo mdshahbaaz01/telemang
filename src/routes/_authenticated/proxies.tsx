@@ -15,6 +15,8 @@ import {
   bulkSetAccountProxy,
   testAccountProxy,
 } from "@/lib/proxy.functions";
+import { AccountRangeControls, pickRange } from "@/components/AccountRangeControls";
+import { AccountIdPaste } from "@/components/AccountIdPaste";
 
 export const Route = createFileRoute("/_authenticated/proxies")({
   head: () => ({ meta: [{ title: "Proxies · TeleManager Pro" }] }),
@@ -127,11 +129,25 @@ function ProxiesPage() {
       <div className="rounded-md border border-border p-3 bg-card space-y-2">
         <div className="flex items-center justify-between">
           <Label className="text-sm font-medium">Bulk apply to selected ({selected.size})</Label>
-          <div className="flex gap-1">
-            <Button size="sm" variant="ghost" onClick={() => setSelected(new Set(rows.map((r) => r.id)))}>All</Button>
-            <Button size="sm" variant="ghost" onClick={() => setSelected(new Set())}>None</Button>
+          <div className="flex flex-wrap items-center gap-1">
+            <AccountRangeControls
+              total={rows.length}
+              onApply={(s, e, order) => setSelected(new Set(pickRange(rows, s, e, order).map((r) => r.id)))}
+            />
+            <Button size="sm" variant="outline" className="h-8" onClick={() => setSelected(new Set(rows.map((r) => r.id)))}>Select all</Button>
+            <Button size="sm" variant="ghost" className="h-8" onClick={() => setSelected(new Set())}>Deselect all</Button>
           </div>
         </div>
+        <AccountIdPaste
+          accounts={rows.map((r: any) => ({
+            id: r.id,
+            phone: r.phone ?? r.label,
+            username: r.username ?? r.label,
+            first_name: r.first_name ?? r.label,
+            telegram_user_id: r.telegram_user_id ?? null,
+          }))}
+          onSelect={(ids) => setSelected((prev) => new Set([...prev, ...ids]))}
+        />
         <ProxyForm value={bulkDraft} onChange={setBulkDraft} />
         <div className="flex gap-2">
           <Button size="sm" onClick={() => applyBulk(false)}><Save className="h-3 w-3 mr-1" />Apply to selected</Button>
