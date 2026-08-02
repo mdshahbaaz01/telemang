@@ -721,6 +721,7 @@ function AccountColumn({
   query,
   selected,
   setSelected,
+  onFilteredChange,
   done,
   running,
 }: {
@@ -732,6 +733,7 @@ function AccountColumn({
   query: string;
   selected: Set<string>;
   setSelected: (n: Set<string>) => void;
+  onFilteredChange?: (keys: string[]) => void;
   done?: { ok: number; fail: number };
   running: boolean;
 }) {
@@ -764,10 +766,18 @@ function AccountColumn({
   }, [dialogs?.data, action, query, mode, kind]);
 
   const allSelected = filtered.length > 0 && filtered.every((r) => selected.has(r.key));
+  // Only touch what's currently shown, so a search never wipes earlier picks.
   const toggleAll = () => {
-    if (allSelected) setSelected(new Set());
-    else setSelected(new Set(filtered.map((r) => r.key)));
+    const n = new Set(selected);
+    if (allSelected) for (const r of filtered) n.delete(r.key);
+    else for (const r of filtered) n.add(r.key);
+    setSelected(n);
   };
+  const filteredKeys = useMemo(() => filtered.map((r) => r.key), [filtered]);
+  useEffect(() => {
+    onFilteredChange?.(filteredKeys);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [filteredKeys]);
   const toggle = (key: string) => {
     const n = new Set(selected);
     n.has(key) ? n.delete(key) : n.add(key);
