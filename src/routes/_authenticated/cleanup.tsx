@@ -334,6 +334,8 @@ function CleanupPanelInner({ mode, kind }: { mode: "chats" | "personal"; kind?: 
     setMaxDelay(defaultDelays.max);
   }, [defaultDelays]);
   const [selectedByAcc, setSelectedByAcc] = useState<Record<string, Set<string>>>({});
+  // Keys currently visible (after search + kind filters) per account, reported by each column.
+  const [filteredByAcc, setFilteredByAcc] = useState<Record<string, string[]>>({});
   const [logs, setLogs] = useState<LogEntry[]>([]);
   const [running, setRunning] = useState(false);
   const [doneByAcc, setDoneByAcc] = useState<Record<string, { ok: number; fail: number }>>({});
