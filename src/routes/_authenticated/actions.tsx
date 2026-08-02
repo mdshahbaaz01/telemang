@@ -484,11 +484,17 @@ function ActionsPageInner() {
   const [running, setRunning] = useState(false);
   const [totals, setTotals] = useState<{ ok: number; fail: number } | null>(null);
   const abortRef = useRef<AbortController | null>(null);
+  // When true, schedule helpers run the job on the server "right now" so it
+  // keeps going after the tab/browser/internet is gone.
+  const bgRef = useRef(false);
+  const [bgBusy, setBgBusy] = useState(false);
 
   const [scheduledAt, setScheduledAt] = useState<string>("");
   const [scheduling, setScheduling] = useState(false);
   const listSchedFn = useServerFn(listScheduledBroadcasts);
-  const createSchedFn = useServerFn(createScheduledBroadcast);
+  const createSchedRaw = useServerFn(createScheduledBroadcast);
+  const createSchedFn = (args: { data: any }) =>
+    createSchedRaw({ data: { ...args.data, ...(bgRef.current ? { spread: true } : {}) } });
   const cancelSchedFn = useServerFn(cancelScheduledBroadcast);
   const clearSchedHistoryFn = useServerFn(clearScheduledHistory);
   const deleteSchedFn = useServerFn(deleteScheduledBroadcast);
