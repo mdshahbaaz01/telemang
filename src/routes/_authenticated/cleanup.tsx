@@ -336,6 +336,17 @@ function CleanupPanelInner({ mode, kind }: { mode: "chats" | "personal"; kind?: 
   const [selectedByAcc, setSelectedByAcc] = useState<Record<string, Set<string>>>({});
   // Keys currently visible (after search + kind filters) per account, reported by each column.
   const [filteredByAcc, setFilteredByAcc] = useState<Record<string, string[]>>({});
+  const totalsFor = (ids: string[]) => {
+    let shown = 0;
+    let sel = 0;
+    for (const id of ids) {
+      const keys = filteredByAcc[id] ?? [];
+      shown += keys.length;
+      const s = selectedByAcc[id];
+      if (s) for (const k of keys) if (s.has(k)) sel++;
+    }
+    return { shown, sel };
+  };
   const [logs, setLogs] = useState<LogEntry[]>([]);
   const [running, setRunning] = useState(false);
   const [doneByAcc, setDoneByAcc] = useState<Record<string, { ok: number; fail: number }>>({});
