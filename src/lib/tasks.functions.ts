@@ -31,7 +31,13 @@ function parseTargets(raw: string): string[] {
         .replace(/^@/, "")
         .replace(/^(?:https?:\/\/)?(?:www\.)?(?:t\.me|telegram\.me)\//i, "")
         .replace(/[?#].*$/, "")
-    );
+        // t.me/joinchat/HASH is the older form of t.me/+HASH — normalize it so
+        // the join engine takes the private-invite path (case is preserved:
+        // invite hashes are case-sensitive).
+        .replace(/^joinchat\//i, "+")
+        .replace(/\/+$/, "")
+    )
+    .filter(Boolean);
 }
 export { parseTargets };
 
