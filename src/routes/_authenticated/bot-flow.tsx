@@ -452,6 +452,24 @@ function BotFlowPage() {
     setMiniRuns((prev) => prev.filter((r) => r.accountId !== accountId));
   const clearMini = () => setMiniRuns([]);
 
+  // Launch a mini app straight from any bot chat (Run-a-bot section).
+  const [miniOpenSignal, setMiniOpenSignal] = useState(0);
+  const [botChatMini, setBotChatMini] = useState("");
+  const openMiniFromBot = async (rawBot: string, startParam: string, ids: string[]) => {
+    const username = rawBot
+      .trim()
+      .replace(/^https?:\/\/(t\.me|telegram\.me|telegram\.dog)\//i, "")
+      .replace(/^@/, "")
+      .split(/[/?]/)[0];
+    if (!username) return toast.error("Enter a bot @username or t.me link");
+    if (!ids.length) return toast.error("Select at least one account");
+    setMiniLink(startParam ? `https://t.me/${username}?startapp=${startParam}` : `@${username}`);
+    setMiniSelected(ids);
+    setMiniOpenSignal((n) => n + 1);
+    setMiniRuns(ids.map((id) => ({ accountId: id, status: "loading" as const })));
+    await Promise.all(ids.map((id) => resolveOne(id, username, startParam)));
+  };
+
   // ─── Verify-link extractor ───────────────────────────────────────
   const [vxLink, setVxLink] = useState("");
   const [vxButtonText, setVxButtonText] = useState("verify");
