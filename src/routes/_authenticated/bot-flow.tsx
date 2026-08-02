@@ -475,6 +475,7 @@ function BotFlowPage() {
   const [vxButtonText, setVxButtonText] = useState("verify");
   const [vxSelected, setVxSelected] = useState<string[]>([]);
   const [vxRunning, setVxRunning] = useState(false);
+  const vxStopRef = useRef(false);
   // Optional: auto-send each extracted link to a target chat from the SAME account
   const [vxAutoSend, setVxAutoSend] = useState(false);
   const [vxTarget, setVxTarget] = useState("");
@@ -578,11 +579,22 @@ function BotFlowPage() {
     const ids = vxSelected.length ? vxSelected : allIds;
     if (!ids.length) return toast.error("Select at least one account");
     if (vxAutoSend && !vxTargetKey) return toast.error("Enter a target chat for auto-send");
+    vxStopRef.current = false;
     setVxRunning(true);
     setVxResults(ids.map((id) => ({ accountId: id, status: "loading" as const })));
     await Promise.all(
       ids.map(async (accountId) => {
         try {
+          if (vxStopRef.current) {
+            setVxResults((prev) =>
+              prev.map((r) =>
+                r.accountId === accountId && r.status === "loading"
+                  ? { ...r, status: "error", error: "Stopped" }
+                  : r,
+              ),
+            );
+            return;
+          }
           const res = await extractVerifyFn({
             data: {
               accountId,
@@ -600,6 +612,7 @@ function BotFlowPage() {
             ),
           );
           if (vxAutoSend && vxTargetKey && res.url) {
+            if (vxStopRef.current) return;
             let peerKey = vxTargetKey;
             if (vxJoinUrl) {
               setVxResults((prev) =>
