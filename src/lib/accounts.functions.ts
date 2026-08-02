@@ -195,6 +195,67 @@ export const deleteAccount = createServerFn({ method: "POST" })
     return { ok: true };
   });
 
+const refreshSchema = z.object({ ids: z.array(z.string().uuid()).min(1).max(200) });
+
+/** Pull fresh first/last name + username from Telegram and store them. */
+export const refreshAccountInfo = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((d: unknown) => refreshSchema.parse(d))
+  .handler(async ({ data, context }) => {
+    const { openClientForAccount } = await import("./cleanup.server");
+    const results: Array<{ id: string; ok: boolean; name?: string; message?: string }> = [];
+    for (const id of data.ids) {
+      try {
+        const client = await openClientForAccount(context.supabase, id);
+        try {
+          const me = (await client.getMe()) as {
+            firstName?: string;
+            lastName?: string;
+            username?: string;
+            id?: { toString: () => string } | string | number | bigint;
+          };
+          const tgId =
+            me?.id != null ? Number(typeof me.id === "object" ? me.id.toString() : me.id) : null;
+          const { error } = await context.supabase
+            .from("telegram_accounts")
+            .update({
+              first_name: me.firstName ?? null,
+              last_name: me.lastName ?? null,
+              username: me.username ?? null,
+              ...(tgId != null && Number.isFinite(tgId) ? { telegram_user_id: tgId } : {}),
+              status: "active",
+              last_error: null,
+              updated_at: new Date().toISOString(),
+            })
+            .eq("id", id);
+          if (error) throw new Error(error.message);
+          results.push({
+            id,
+            ok: true,
+            name: [me.firstName, me.lastName].filter(Boolean).join(" ") || me.username || "",
+          });
+        } finally {
+          await client.disconnect().catch(() => {});
+        }
+      } catch (e) {
+        results.push({ id, ok: false, message: (e as Error).message });
+      }
+    }
+    return { results };
+  });
+
+const _unusedDeleteAccount = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((d: unknown) => z.object({ id: z.string().uuid() }).parse(d))
+  .handler(async ({ data, context }) => {
+    const { error } = await context.supabase
+      .from("telegram_accounts")
+      .delete()
+      .eq("id", data.id);
+    if (error) throw new Error(error.message);
+    return { ok: true };
+  });
+
 export const backfillTelegramIds = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .handler(async ({ context }) => {
