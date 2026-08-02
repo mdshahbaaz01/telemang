@@ -1889,7 +1889,12 @@ function BotFlowPage() {
         </CollapsibleSection>
 
         {/* ── Mini App launcher ─────────────────────────────────────── */}
-        <CollapsibleSection storageKey="botflow.miniapp" title="Open Mini App on many accounts" defaultOpen={false}>
+        <CollapsibleSection
+          storageKey="botflow.miniapp"
+          title="Open Mini App on many accounts"
+          defaultOpen={false}
+          openSignal={miniOpenSignal}
+        >
           <p className="text-xs text-muted-foreground">
             Paste a Telegram mini app link (e.g. <code>https://t.me/wormcupbot?startapp=R84L82W</code>).
             Each selected account gets its own live mini app window below — use them independently.
@@ -1900,7 +1905,7 @@ function BotFlowPage() {
             <Input
               value={miniLink}
               onChange={(e) => setMiniLink(e.target.value)}
-              placeholder="https://t.me/somebot?startapp=YOUR_REF"
+              placeholder="https://t.me/somebot?startapp=YOUR_REF or @somebot"
             />
             {miniParsed?.username && (
               <div className="mt-2 text-xs text-muted-foreground">
