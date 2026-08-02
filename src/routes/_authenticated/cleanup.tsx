@@ -471,6 +471,7 @@ function CleanupPanelInner({ mode, kind }: { mode: "chats" | "personal"; kind?: 
   };
 
   const idsArr = Array.from(accountIds);
+  const { shown: totalShown, sel: totalSelected } = totalsFor(idsArr);
 
   return (
     <div className="space-y-4">
