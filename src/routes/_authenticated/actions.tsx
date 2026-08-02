@@ -916,14 +916,15 @@ function ActionsPageInner() {
   };
 
   const scheduleBroadcast = async () => {
-    if (!scheduledAt) {
+    const bg = bgRef.current;
+    if (!bg && !scheduledAt) {
       toast.error("Pick a schedule time (with seconds)");
       return;
     }
     // datetime-local returns a wall-clock string with no timezone. Always
     // treat it as IST so scheduling works the same whether the user's
     // device is in India or elsewhere.
-    const when = istWallClockToDate(scheduledAt);
+    const when = bg ? new Date(Date.now() + 15_000) : istWallClockToDate(scheduledAt);
     if (Number.isNaN(when.getTime())) return toast.error("Invalid schedule time");
     if (when.getTime() < Date.now() + 5_000) {
       return toast.error("Schedule at least 5 seconds in the future");
@@ -956,6 +957,7 @@ function ActionsPageInner() {
   };
 
   const parseScheduledAt = () => {
+    if (bgRef.current) return new Date(Date.now() + 15_000);
     if (!scheduledAt) {
       toast.error("Pick a schedule time (with seconds)");
       return null;
