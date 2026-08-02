@@ -15,6 +15,8 @@ import { Play, Plus, Save, Trash2, ChefHat } from "lucide-react";
 import { listRecipes, saveRecipe, deleteRecipe, type RecipeStep } from "@/lib/recipes.functions";
 import { listAccounts } from "@/lib/accounts.functions";
 import { requireAdminBeforeLoad } from "@/lib/access-guard";
+import { AccountRangeControls, pickRange } from "@/components/AccountRangeControls";
+import { AccountIdPaste } from "@/components/AccountIdPaste";
 
 export const Route = createFileRoute("/_authenticated/recipes")({
   beforeLoad: requireAdminBeforeLoad,
@@ -340,6 +342,34 @@ function RecipesPage() {
                     </div>
                     <div>
                       <Label className="text-xs">Accounts (empty = all)</Label>
+                      <div className="mt-1 flex flex-wrap items-center gap-2">
+                        <AccountRangeControls
+                          total={(aQ.data ?? []).length}
+                          onApply={(st, en, order) =>
+                            patchStep(idx, {
+                              accountIds: pickRange(aQ.data ?? [], st, en, order).map((a) => a.id),
+                            })
+                          }
+                        />
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          className="h-8"
+                          onClick={() => patchStep(idx, { accountIds: (aQ.data ?? []).map((a) => a.id) })}
+                        >
+                          Select all
+                        </Button>
+                        <Button size="sm" variant="ghost" className="h-8" onClick={() => patchStep(idx, { accountIds: [] })}>
+                          Deselect all
+                        </Button>
+                      </div>
+                      <AccountIdPaste
+                        accounts={(aQ.data ?? []) as any}
+                        className="mt-2"
+                        onSelect={(ids) =>
+                          patchStep(idx, { accountIds: Array.from(new Set([...s.accountIds, ...ids])) })
+                        }
+                      />
                       <div className="mt-1 max-h-32 overflow-y-auto rounded border p-2">
                         {(aQ.data ?? []).map((a, i) => (
                           <label key={a.id} className="flex cursor-pointer items-center gap-2 py-0.5 text-xs">
