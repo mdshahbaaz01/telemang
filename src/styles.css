@@ -367,3 +367,26 @@
   30%, 36% { width: 8px; height: 8px; margin-left: -5px; margin-top: 49px; border-radius: 8px; }
   63%, 69% { width: 16px; height: 4px; margin-left: -8px; margin-top: -37px; border-radius: 10px; }
 }
+
+/* Hide the Lovable "Made with Lovable" / "Edit with Lovable" badge */
+.lovable-badge,
+[class*="lovable-badge"],
+[id*="lovable-badge"],
+a[href*="lovable.app"][target="_blank"],
+iframe[src*="lovable.app"],
+iframe[src*="lovable-badge"],
+.lovable-branding,
+[class*="lovable-branding"],
+[id*="lovable-branding"] {
+  display: none !important;
+  visibility: hidden !important;
+  opacity: 0 !important;
+  pointer-events: none !important;
+  position: absolute !important;
+  width: 0 !important;
+  height: 0 !important;
+  margin: 0 !important;
+  padding: 0 !important;
+  border: 0 !important;
+  overflow: hidden !important;
+}
