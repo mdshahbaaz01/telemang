@@ -1143,6 +1143,35 @@ function BotFlowPage() {
             )}
           </div>
 
+          <div className="rounded-md border border-border bg-muted/20 p-2 space-y-2">
+            <div className="text-xs font-medium">Open a mini app from a bot chat</div>
+            <div className="flex flex-wrap items-center gap-2">
+              <Input
+                value={botChatMini}
+                onChange={(e) => setBotChatMini(e.target.value)}
+                placeholder={parsed?.username ? `@${parsed.username}` : "@somebot or https://t.me/somebot"}
+                className="h-8 w-64 text-xs"
+              />
+              <Button
+                size="sm"
+                onClick={() =>
+                  openMiniFromBot(
+                    botChatMini || parsed?.username || "",
+                    parsed?.startParam || "",
+                    selectedIds.length ? selectedIds : allIds,
+                  )
+                }
+                disabled={!botChatMini && !parsed?.username}
+                title="Open this bot's mini app on every selected account"
+              >
+                <Play className="mr-1 h-3.5 w-3.5" /> Open mini app on selected
+              </Button>
+              <span className="text-[11px] text-muted-foreground">
+                Uses the same accounts selected above. Windows appear in “Open Mini App on many accounts”.
+              </span>
+            </div>
+          </div>
+
           {parsed?.username && (
             <div className="rounded-md border border-border bg-muted/20 p-2 space-y-2">
               <div className="flex flex-wrap items-center gap-2">
