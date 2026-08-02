@@ -630,7 +630,32 @@ function buildOverrideScript(accountId: string, upstreamUrl: string, token: stri
         const parsedTheme = themeRaw ? parseMaybeJson(themeRaw) : null;
         const themeParams = parsedTheme && typeof parsedTheme === 'object' ? parsedTheme : (TG_DEFAULTS.themeParams || {});
         const callbacks = {};
+        // Pending host round-trips (popups, permissions, custom methods).
+        // Telegram resolves these asynchronously; resolving them instantly
+        // used to make apps skip their own confirmation flows.
+        const pending = { popup: null, write: null, phone: null, custom: {}, clipboard: {} };
+        let reqSeq = 0;
+        const nextReqId = () => 'lv' + (++reqSeq) + '_' + Date.now();
         const emit = (eventType, eventData) => {
+          try {
+            const d = eventData || {};
+            if (eventType === 'popup_closed' && pending.popup) {
+              const cb = pending.popup; pending.popup = null;
+              try { cb(d.button_id != null ? String(d.button_id) : ''); } catch {}
+            } else if (eventType === 'write_access_requested' && pending.write) {
+              const cb = pending.write; pending.write = null;
+              try { cb(d.status === 'allowed'); } catch {}
+            } else if (eventType === 'phone_requested' && pending.phone) {
+              const cb = pending.phone; pending.phone = null;
+              try { cb(d.status === 'sent'); } catch {}
+            } else if (eventType === 'custom_method_invoked' && d.req_id && pending.custom[d.req_id]) {
+              const cb = pending.custom[d.req_id]; delete pending.custom[d.req_id];
+              try { cb(d.error || null, d.result); } catch {}
+            } else if (eventType === 'clipboard_text_received' && d.req_id && pending.clipboard[d.req_id]) {
+              const cb = pending.clipboard[d.req_id]; delete pending.clipboard[d.req_id];
+              try { cb(d.data ?? null); } catch {}
+            }
+          } catch {}
           const names = [eventType, toWebAppEvent(eventType)];
           names.forEach((name) => (callbacks[name] || []).slice().forEach((cb) => {
             try { cb(eventData || {}); } catch {}
@@ -695,9 +720,42 @@ function buildOverrideScript(accountId: string, upstreamUrl: string, token: stri
           openLink(url) { hostPost('web_app_open_link', { url: String(url || '') }); },
           openTelegramLink(url) { hostPost('web_app_open_tg_link', { url: String(url || '') }); },
           openInvoice(url) { hostPost('web_app_open_invoice', { slug: String(url || '') }); },
-          showPopup(params, cb) { if (cb) setTimeout(() => cb('ok'), 0); return hostPost('web_app_open_popup', params || {}); },
-          showAlert(message, cb) { if (cb) setTimeout(cb, 0); return hostPost('web_app_open_popup', { message: String(message || '') }); },
-          showConfirm(message, cb) { if (cb) setTimeout(() => cb(true), 0); return hostPost('web_app_open_popup', { message: String(message || '') }); },
+          showPopup(params, cb) {
+            pending.popup = (buttonId) => { if (cb) cb(buttonId); };
+            return hostPost('web_app_open_popup', params || {});
+          },
+          showAlert(message, cb) {
+            pending.popup = () => { if (cb) cb(); };
+            return hostPost('web_app_open_popup', {
+              message: String(message || ''),
+              buttons: [{ id: 'ok', type: 'close', text: 'OK' }],
+            });
+          },
+          showConfirm(message, cb) {
+            pending.popup = (buttonId) => { if (cb) cb(buttonId === 'ok'); };
+            return hostPost('web_app_open_popup', {
+              message: String(message || ''),
+              buttons: [
+                { id: 'cancel', type: 'cancel', text: 'Cancel' },
+                { id: 'ok', type: 'default', text: 'OK' },
+              ],
+            });
+          },
+          showScanQrPopup(params, cb) {
+            if (cb) setTimeout(() => cb(''), 0);
+            return hostPost('web_app_open_scan_qr_popup', params || {});
+          },
+          closeScanQrPopup() { hostPost('web_app_close_scan_qr_popup', {}); },
+          readTextFromClipboard(cb) {
+            const req_id = nextReqId();
+            if (cb) pending.clipboard[req_id] = cb;
+            hostPost('web_app_read_text_from_clipboard', { req_id });
+          },
+          invokeCustomMethod(method, params, cb) {
+            const req_id = nextReqId();
+            if (cb) pending.custom[req_id] = cb;
+            hostPost('web_app_invoke_custom_method', { req_id, method, params: params || {} });
+          },
           onEvent(eventType, cb) {
             if (typeof cb !== 'function') return this;
             (callbacks[eventType] || (callbacks[eventType] = [])).push(cb);
@@ -709,8 +767,8 @@ function buildOverrideScript(accountId: string, upstreamUrl: string, token: stri
           },
           requestTheme() { hostPost('web_app_request_theme', {}); },
           requestViewport() { hostPost('web_app_request_viewport', {}); },
-          requestWriteAccess(cb) { if (cb) setTimeout(() => cb(true), 0); hostPost('web_app_request_write_access', {}); },
-          requestContact(cb) { if (cb) setTimeout(() => cb(false), 0); hostPost('web_app_request_phone', {}); },
+          requestWriteAccess(cb) { pending.write = (ok) => { if (cb) cb(ok); }; hostPost('web_app_request_write_access', {}); },
+          requestContact(cb) { pending.phone = (ok) => { if (cb) cb(ok); }; hostPost('web_app_request_phone', {}); },
           requestFullscreen() { this.isFullscreen = true; hostPost('web_app_request_fullscreen', {}); },
           exitFullscreen() { this.isFullscreen = false; hostPost('web_app_exit_fullscreen', {}); },
           lockOrientation() { hostPost('web_app_lock_orientation', {}); },
@@ -741,14 +799,35 @@ function buildOverrideScript(accountId: string, upstreamUrl: string, token: stri
           HapticFeedback: {
             impactOccurred() {}, notificationOccurred() {}, selectionChanged() {},
           },
-          CloudStorage: {
-            getItem(_k, cb) { if (cb) cb(null, null); },
-            setItem(_k, _v, cb) { if (cb) cb(null, true); },
-            removeItem(_k, cb) { if (cb) cb(null, true); },
-            getItems(_k, cb) { if (cb) cb(null, {}); },
-            removeItems(_k, cb) { if (cb) cb(null, true); },
-            getKeys(cb) { if (cb) cb(null, []); },
-          },
+          // Real persistence (per account + upstream origin) so apps that
+          // store a session/token in CloudStorage keep working after reloads.
+          CloudStorage: (() => {
+            const PFX = '__lv_cloud_' + ACCT + '_';
+            const rd = (k) => { try { return localStorage.getItem(PFX + k); } catch { return null; } };
+            return {
+              getItem(k, cb) { const v = rd(k); if (cb) cb(null, v); return v; },
+              setItem(k, v, cb) { try { localStorage.setItem(PFX + k, String(v)); } catch {} if (cb) cb(null, true); },
+              removeItem(k, cb) { try { localStorage.removeItem(PFX + k); } catch {} if (cb) cb(null, true); },
+              getItems(keys, cb) {
+                const out = {};
+                (keys || []).forEach((k) => { out[k] = rd(k); });
+                if (cb) cb(null, out);
+                return out;
+              },
+              removeItems(keys, cb) { (keys || []).forEach((k) => { try { localStorage.removeItem(PFX + k); } catch {} }); if (cb) cb(null, true); },
+              getKeys(cb) {
+                const keys = [];
+                try {
+                  for (let i = 0; i < localStorage.length; i++) {
+                    const k = localStorage.key(i);
+                    if (k && k.indexOf(PFX) === 0) keys.push(k.slice(PFX.length));
+                  }
+                } catch {}
+                if (cb) cb(null, keys);
+                return keys;
+              },
+            };
+          })(),
           BiometricManager: { isInited: true, isBiometricAvailable: false, init(cb) { if (cb) cb(); }, authenticate(_p, cb) { if (cb) cb(false); } },
         };
         WebApp.MainButton = buttonApi('main');
