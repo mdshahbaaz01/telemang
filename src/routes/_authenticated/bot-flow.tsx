@@ -3116,16 +3116,12 @@ function OverallProgress({
 
 function BulkVerifyFrame({
   url,
-  accountId,
   fpSeed,
-  directMode,
   iframeRef,
   onLoaded,
 }: {
   url: string;
-  accountId: string;
   fpSeed: string;
-  directMode: boolean;
   iframeRef?: (el: HTMLIFrameElement | null) => void;
   onLoaded?: () => void;
 }) {
@@ -3133,24 +3129,22 @@ function BulkVerifyFrame({
   const [retrySeed, setRetrySeed] = useState(fpSeed);
   const [blocked, setBlocked] = useState<{ text?: string } | null>(null);
   const [slowFallback, setSlowFallback] = useState(false);
-  const { url: proxied } = useMiniAppProxyUrl(url, accountId, { fpSeed: retrySeed });
   const bridge = useTelegramWebviewBridge(localRef, { onBlocked: (details) => setBlocked({ text: details.text }) });
   useEffect(() => {
-    const src = directMode ? url : proxied;
-    if (!src) return;
+    if (!url) return;
     setSlowFallback(false);
-    const t = window.setTimeout(() => setSlowFallback(true), directMode ? 6500 : 8500);
+    const t = window.setTimeout(() => setSlowFallback(true), 7000);
     return () => window.clearTimeout(t);
-  }, [url, proxied, directMode, retrySeed]);
+  }, [url, retrySeed]);
   return (
     <div className="relative h-full w-full flex-1">
       <iframe
-        key={`${directMode ? "direct" : "proxy"}:${retrySeed}`}
+        key={`direct:${retrySeed}`}
         ref={(el) => {
           localRef.current = el;
           iframeRef?.(el);
         }}
-        src={directMode ? url : proxied ?? "about:blank"}
+        src={url}
         title="Bulk verification runner"
         className="h-full w-full flex-1 border-0"
         allow="clipboard-read; clipboard-write; camera; microphone; geolocation; payment"
