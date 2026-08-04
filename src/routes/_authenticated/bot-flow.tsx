@@ -3048,9 +3048,7 @@ function BulkVerifyRunner({
                 <BulkVerifyFrame
                   key={`${r.id}:${r.fpSeed}:${runNonce}`}
                   url={r.url}
-                  accountId={r.accountId}
                   fpSeed={r.fpSeed}
-                  directMode={directMode}
                   iframeRef={(el) => { iframeRefs.current[r.id] = el; }}
                   onLoaded={() =>
                     appendLog(r.id, { ts: Date.now(), level: "info", msg: "iframe loaded" }, "running")
