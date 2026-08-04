@@ -3253,7 +3253,7 @@ function MiniAppFrameImpl({ url, title, accountId, botUsername }: { url: string;
       <iframe
         key={`${url}#${nonce}`}
         ref={ref}
-        src={directMode ? url : proxiedUrl ?? "about:blank"}
+        src={url}
         title={title}
         name={`tgminiapp-${accountId}`}
         className="h-full w-full border-0"
@@ -3292,11 +3292,9 @@ function MiniAppFrameImpl({ url, title, accountId, botUsername }: { url: string;
               <div className="space-y-3 p-3 text-xs">
                 <div className="text-destructive">{overlay.error}</div>
                 <div className="flex flex-wrap gap-2">
-                  {!directMode && (
-                    <Button size="sm" variant="outline" onClick={() => { setDirectMode(true); setOverlay(null); setNonce((n) => n + 1); }}>
-                      Direct device mode
-                    </Button>
-                  )}
+                  <Button size="sm" variant="outline" onClick={() => { setOverlay(null); setNonce((n) => n + 1); }}>
+                    <RefreshCw className="mr-1 h-3.5 w-3.5" /> Reload
+                  </Button>
                   <BrowserPickerButton url={overlay.url} size="sm" variant="outline" />
                 </div>
               </div>
