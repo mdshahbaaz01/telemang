@@ -284,7 +284,21 @@ function AccountViewerPage() {
     if (!activePeer) return;
     if (btn.kind === "url" || btn.kind === "urlAuth" || btn.kind === "webview") {
       const url = (btn as any).url as string | undefined;
-      if (btn.kind === "webview") {
+      // Mini apps arrive either as a real "webview" button or as a plain URL
+      // button pointing at t.me/<bot>?startapp=… (or ?startattach=…). Treat
+      // both as mini apps so tapping them in chat opens the app, not a link
+      // confirmation dialog.
+      const isMiniLink = (() => {
+        if (!url) return false;
+        try {
+          const u = new URL(url);
+          if (!/(^|\.)(t\.me|telegram\.me|telegram\.dog)$/i.test(u.hostname)) return false;
+          return u.searchParams.has("startapp") || u.searchParams.has("startattach");
+        } catch {
+          return false;
+        }
+      })();
+      if (btn.kind === "webview" || isMiniLink) {
         setMiniApp({
           accountId,
           peerKey: activePeer,

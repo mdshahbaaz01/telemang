@@ -4,7 +4,6 @@ import { Button } from "@/components/ui/button";
 import { BrowserPickerButton } from "@/components/BrowserPickerButton";
 import { useTelegramWebviewBridge } from "@/lib/telegram-webview-bridge";
 import { MiniAppChrome } from "@/components/MiniAppChrome";
-import { useMiniAppProxyUrl } from "@/lib/miniapp-proxy-url";
 import { useServerFn } from "@tanstack/react-start";
 import { solveCaptcha } from "@/lib/captcha.functions";
 
@@ -34,7 +33,6 @@ export function MiniAppDrawer({
   const [error, setError] = useState<string | null>(null);
   const [reloadNonce, setReloadNonce] = useState(0);
   const [blocked, setBlocked] = useState<{ text?: string } | null>(null);
-  const [directMode, setDirectMode] = useState(false);
   const [slowFallback, setSlowFallback] = useState(false);
   const iframeRef = useRef<HTMLIFrameElement | null>(null);
   const bridge = useTelegramWebviewBridge(iframeRef, {
@@ -105,15 +103,15 @@ export function MiniAppDrawer({
     return () => window.removeEventListener("message", handler);
   }, [solve, request?.accountId]);
 
-  const { url: proxiedUrl } = useMiniAppProxyUrl(resolvedUrl, request?.accountId ?? "anon", { captcha: true });
-  const iframeUrl = directMode ? resolvedUrl : proxiedUrl;
+  // Mini apps always load straight from their own origin — the server proxy
+  // caused more failures than it solved.
+  const iframeUrl = resolvedUrl;
 
   useEffect(() => {
     if (!open || !request) {
       setResolvedUrl(null);
       setError(null);
       setReloadNonce(0);
-        setDirectMode(false);
         setSlowFallback(false);
       setCapLogs([]);
       return;
@@ -122,7 +120,6 @@ export function MiniAppDrawer({
     setLoading(true);
     setError(null);
     setBlocked(null);
-    setDirectMode(false);
     setSlowFallback(false);
     resolver(request)
       .then((res) => {
@@ -145,9 +142,9 @@ export function MiniAppDrawer({
   useEffect(() => {
     if (!iframeUrl || error) return;
     setSlowFallback(false);
-    const t = window.setTimeout(() => setSlowFallback(true), directMode ? 6500 : 8500);
+    const t = window.setTimeout(() => setSlowFallback(true), 7000);
     return () => window.clearTimeout(t);
-  }, [iframeUrl, reloadNonce, directMode, error]);
+  }, [iframeUrl, reloadNonce, error]);
 
   if (!open) return null;
 
@@ -166,18 +163,6 @@ export function MiniAppDrawer({
               {resolvedUrl ? new URL(resolvedUrl).host : "resolving…"}
             </div>
           </div>
-          {resolvedUrl && (
-            <Button
-              type="button"
-              variant={directMode ? "secondary" : "outline"}
-              size="sm"
-              className="h-8 gap-1 px-2 text-xs"
-              onClick={() => { setDirectMode((v) => !v); setBlocked(null); setReloadNonce((n) => n + 1); }}
-              title="Load from your device instead of the server proxy"
-            >
-              {directMode ? "Direct" : "Proxy"}
-            </Button>
-          )}
           {resolvedUrl && (
             <Button
               type="button"
@@ -232,14 +217,12 @@ export function MiniAppDrawer({
                 <div className="absolute inset-x-3 bottom-3 rounded-lg border border-yellow-500/40 bg-background/95 p-3 text-xs shadow-lg backdrop-blur">
                   <div className="mb-2 font-semibold">Mini app is not responding here</div>
                   <div className="mb-3 text-muted-foreground">
-                    If direct mode shows “Connection Lost” and proxy mode says “refused to connect”, open it in Telegram/System Browser.
+                    Some mini apps refuse to run inside an embedded frame. Reload, or open it in Telegram / your browser.
                   </div>
                   <div className="flex flex-wrap gap-2">
-                    {!directMode && (
-                      <Button size="sm" variant="secondary" onClick={() => { setDirectMode(true); setReloadNonce((n) => n + 1); }}>
-                        Try direct
-                      </Button>
-                    )}
+                    <Button size="sm" variant="secondary" onClick={() => setReloadNonce((n) => n + 1)}>
+                      <RefreshCw className="mr-1 h-3.5 w-3.5" /> Reload
+                    </Button>
                     <BrowserPickerButton url={resolvedUrl} size="sm" variant="outline" />
                   </div>
                 </div>
@@ -247,16 +230,11 @@ export function MiniAppDrawer({
               {blocked && resolvedUrl && (
                 <div className="absolute inset-x-3 bottom-3 rounded-lg border border-border bg-background/95 p-3 text-xs shadow-lg backdrop-blur">
                   <div className="mb-2 font-semibold">Verification blocked in embedded view</div>
-                  <div className="mb-3 line-clamp-2 text-muted-foreground">{blocked.text || "The verification site rejected the proxy session."}</div>
+                  <div className="mb-3 line-clamp-2 text-muted-foreground">{blocked.text || "The verification site rejected this session."}</div>
                   <div className="flex flex-wrap gap-2">
                     <Button size="sm" variant="secondary" onClick={() => { setBlocked(null); setReloadNonce((n) => n + 1); }}>
                       <RefreshCw className="mr-1 h-3.5 w-3.5" /> Retry
                     </Button>
-                    {!directMode && (
-                      <Button size="sm" variant="outline" onClick={() => { setDirectMode(true); setBlocked(null); setReloadNonce((n) => n + 1); }}>
-                        Direct device mode
-                      </Button>
-                    )}
                     <BrowserPickerButton url={resolvedUrl} size="sm" variant="outline" />
                   </div>
                 </div>
