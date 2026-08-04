@@ -2451,33 +2451,30 @@ function VerifyFrame({ url, accountId }: { url: string; accountId: string }) {
   const iframeRef = useRef<HTMLIFrameElement | null>(null);
   const [retrySeed, setRetrySeed] = useState(0);
   const [blocked, setBlocked] = useState<{ text?: string } | null>(null);
-  const [directMode, setDirectMode] = useState(false);
   const [slowFallback, setSlowFallback] = useState(false);
-  const { url: proxied } = useMiniAppProxyUrl(url, accountId, { fpSeed: retrySeed || undefined });
   useTelegramWebviewBridge(iframeRef, { onBlocked: (details) => setBlocked({ text: details.text }) });
   useEffect(() => {
-    const src = directMode ? url : proxied;
-    if (!src) return;
+    if (!url) return;
     setSlowFallback(false);
-    const t = window.setTimeout(() => setSlowFallback(true), directMode ? 6500 : 8500);
+    const t = window.setTimeout(() => setSlowFallback(true), 7000);
     return () => window.clearTimeout(t);
-  }, [url, proxied, directMode, retrySeed]);
+  }, [url, retrySeed]);
   return (
     <div className="relative h-full w-full flex-1">
       <div className="absolute right-2 top-2 z-10 rounded-md border border-border bg-background/95 p-1 shadow-sm backdrop-blur">
         <Button
           size="sm"
-          variant={directMode ? "secondary" : "outline"}
+          variant="outline"
           className="h-7 px-2 text-[11px]"
-          onClick={() => { setDirectMode((v) => !v); setBlocked(null); setRetrySeed(Date.now()); }}
+          onClick={() => { setBlocked(null); setRetrySeed(Date.now()); }}
         >
-          {directMode ? "Direct device" : "Proxy mode"}
+          Reload
         </Button>
       </div>
       <iframe
-        key={`${directMode ? "direct" : "proxy"}:${retrySeed}`}
+        key={`direct:${retrySeed}`}
         ref={iframeRef}
-        src={directMode ? url : proxied ?? "about:blank"}
+        src={url}
         title="Verification runner"
         className="h-full w-full flex-1 border-0"
         allow="clipboard-read; clipboard-write; camera; microphone; geolocation; payment"
@@ -2489,14 +2486,12 @@ function VerifyFrame({ url, accountId }: { url: string; accountId: string }) {
         <div className="absolute inset-x-3 bottom-3 rounded-lg border border-yellow-500/40 bg-background/95 p-3 text-xs shadow-lg backdrop-blur">
           <div className="mb-2 font-semibold">Verification is not responding here</div>
           <div className="mb-3 text-muted-foreground">
-            This provider is rejecting embedded/proxy sessions. Use Telegram/System Browser for this link.
+            This provider is rejecting embedded sessions. Use Telegram/System Browser for this link.
           </div>
           <div className="flex flex-wrap gap-2">
-            {!directMode && (
-              <Button size="sm" variant="secondary" onClick={() => { setDirectMode(true); setRetrySeed(Date.now()); }}>
-                Try direct
-              </Button>
-            )}
+            <Button size="sm" variant="secondary" onClick={() => setRetrySeed(Date.now())}>
+              <RefreshCw className="mr-1 h-3.5 w-3.5" /> Reload
+            </Button>
             <BrowserPickerButton url={url} size="sm" variant="outline" />
           </div>
         </div>
@@ -2504,16 +2499,11 @@ function VerifyFrame({ url, accountId }: { url: string; accountId: string }) {
       {blocked && (
         <div className="absolute inset-x-3 bottom-3 rounded-lg border border-border bg-background/95 p-3 text-xs shadow-lg backdrop-blur">
           <div className="mb-2 font-semibold">Verification blocked in embedded view</div>
-          <div className="mb-3 line-clamp-2 text-muted-foreground">{blocked.text || "The verification site rejected the proxy session."}</div>
+          <div className="mb-3 line-clamp-2 text-muted-foreground">{blocked.text || "The verification site rejected this session."}</div>
           <div className="flex flex-wrap gap-2">
             <Button size="sm" variant="secondary" onClick={() => { setBlocked(null); setRetrySeed(Date.now()); }}>
               <RefreshCw className="mr-1 h-3.5 w-3.5" /> Retry new device
             </Button>
-            {!directMode && (
-              <Button size="sm" variant="outline" onClick={() => { setDirectMode(true); setBlocked(null); setRetrySeed(Date.now()); }}>
-                Direct device mode
-              </Button>
-            )}
             <BrowserPickerButton url={url} size="sm" variant="outline" />
           </div>
         </div>
