@@ -3195,9 +3195,7 @@ function BulkVerifyFrame({
 function MiniAppFrameImpl({ url, title, accountId, botUsername }: { url: string; title: string; accountId: string; botUsername: string }) {
   const ref = useRef<HTMLIFrameElement | null>(null);
   const joinFn = useServerFn(joinFromLink);
-  const { url: proxiedUrl } = useMiniAppProxyUrl(url, accountId);
   const [nonce, setNonce] = useState(0);
-  const [directMode, setDirectMode] = useState(false);
   const [overlay, setOverlay] = useState<
     | { status: "loading"; url: string }
     | { status: "ready"; url: string; peerKey: string; title: string; note: string }
