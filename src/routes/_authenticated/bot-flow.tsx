@@ -17,7 +17,6 @@ import {
 import { sendMediaAs } from "@/lib/tg-viewer.functions";
 import { listMedia } from "@/lib/media-library.functions";
 import { previewChat } from "@/lib/chat-viewer.functions";
-import { useMiniAppProxyUrl } from "@/lib/miniapp-proxy-url";
 import { AdminGate } from "@/components/AdminGate";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -2552,7 +2551,6 @@ function BulkVerifyRunner({
   const [runNonce, setRunNonce] = useState(0);
   const [openLogs, setOpenLogs] = useState<Record<string, boolean>>({});
   const [stableDevice, setStableDevice] = useState(true);
-  const [directMode, setDirectMode] = useState(false);
   const iframeRefs = useRef<Record<string, HTMLIFrameElement | null>>({});
 
   // Stable fingerprint per account: same seed every run for the same account,
@@ -2774,20 +2772,6 @@ function BulkVerifyRunner({
         </span>
       </label>
 
-      <label className="flex items-start gap-2 rounded-md border border-border bg-muted/20 p-2 text-xs">
-        <input
-          type="checkbox"
-          className="mt-0.5"
-          checked={directMode}
-          onChange={(e) => setDirectMode(e.target.checked)}
-        />
-        <span>
-          <span className="font-medium">Direct device mode</span>{" "}
-          <span className="text-muted-foreground">
-            Opens verification URLs from your browser/IP instead of the server proxy for sites that show “Telegram Required” or “Connection Lost”.
-          </span>
-        </span>
-      </label>
 
       <div className="grid gap-3 md:grid-cols-[1fr_260px]">
         <div>
