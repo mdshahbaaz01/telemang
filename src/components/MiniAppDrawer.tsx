@@ -43,6 +43,9 @@ export function MiniAppDrawer({
   // Whether the *current* frame (url + nonce) has fired onLoad. Reset on every
   // reload so the watchdog only runs while a frame is actually pending.
   const [frameLoaded, setFrameLoaded] = useState(false);
+  // Once the user dismisses a fallback card, stop showing these prompts for
+  // this mini-app session.
+  const [nagsOff, setNagsOff] = useState(false);
   const iframeRef = useRef<HTMLIFrameElement | null>(null);
   const bridge = useTelegramWebviewBridge(iframeRef, {
     onBlocked: (details) => setBlocked({ text: details.text }),
@@ -124,6 +127,7 @@ export function MiniAppDrawer({
       setCompat(false);
       setLoadedOnce(false);
       setCapLogs([]);
+      setNagsOff(false);
       return;
     }
     let cancelled = false;
@@ -154,7 +158,7 @@ export function MiniAppDrawer({
   }, [iframeUrl, reloadNonce]);
 
   useEffect(() => {
-    if (!iframeUrl || error || frameLoaded) return;
+    if (!iframeUrl || error || frameLoaded || nagsOff) return;
     setSlowFallback(false);
     const t = window.setTimeout(() => {
       // First failure → auto-switch to compatibility (proxy) mode once.
@@ -166,7 +170,7 @@ export function MiniAppDrawer({
       }
     }, 12000);
     return () => window.clearTimeout(t);
-  }, [iframeUrl, reloadNonce, error, compat, loadedOnce, frameLoaded]);
+  }, [iframeUrl, reloadNonce, error, compat, loadedOnce, frameLoaded, nagsOff]);
 
   if (!open) return null;
 
@@ -245,7 +249,15 @@ export function MiniAppDrawer({
               <MiniAppChrome bridge={bridge} />
               {slowFallback && resolvedUrl && !blocked && (
                 <div className="absolute inset-x-3 bottom-3 rounded-lg border border-yellow-500/40 bg-background/95 p-3 text-xs shadow-lg backdrop-blur">
-                  <div className="mb-2 font-semibold">Mini app is not responding here</div>
+                  <button
+                    type="button"
+                    aria-label="Dismiss"
+                    className="absolute right-1.5 top-1.5 rounded p-1 text-muted-foreground hover:bg-muted hover:text-foreground"
+                    onClick={() => { setSlowFallback(false); setNagsOff(true); }}
+                  >
+                    <X className="h-3.5 w-3.5" />
+                  </button>
+                  <div className="mb-2 pr-6 font-semibold">Mini app is not responding here</div>
                   <div className="mb-3 text-muted-foreground">
                     Some mini apps refuse to run inside an embedded frame. Try compatibility mode, reload, or open it in Telegram / your browser.
                   </div>
@@ -264,9 +276,17 @@ export function MiniAppDrawer({
                   </div>
                 </div>
               )}
-              {blocked && resolvedUrl && (
+              {blocked && resolvedUrl && !nagsOff && (
                 <div className="absolute inset-x-3 bottom-3 rounded-lg border border-border bg-background/95 p-3 text-xs shadow-lg backdrop-blur">
-                  <div className="mb-2 font-semibold">Verification blocked in embedded view</div>
+                  <button
+                    type="button"
+                    aria-label="Dismiss"
+                    className="absolute right-1.5 top-1.5 rounded p-1 text-muted-foreground hover:bg-muted hover:text-foreground"
+                    onClick={() => { setBlocked(null); setNagsOff(true); }}
+                  >
+                    <X className="h-3.5 w-3.5" />
+                  </button>
+                  <div className="mb-2 pr-6 font-semibold">Verification blocked in embedded view</div>
                   <div className="mb-3 line-clamp-2 text-muted-foreground">{blocked.text || "The verification site rejected this session."}</div>
                   <div className="flex flex-wrap gap-2">
                     <Button size="sm" variant="secondary" onClick={() => { setBlocked(null); setReloadNonce((n) => n + 1); }}>
