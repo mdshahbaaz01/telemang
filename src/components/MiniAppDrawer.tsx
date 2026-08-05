@@ -127,6 +127,7 @@ export function MiniAppDrawer({
       setCompat(false);
       setLoadedOnce(false);
       setCapLogs([]);
+      setNagsOff(false);
       return;
     }
     let cancelled = false;
@@ -275,7 +276,7 @@ export function MiniAppDrawer({
                   </div>
                 </div>
               )}
-              {blocked && resolvedUrl && (
+              {blocked && resolvedUrl && !nagsOff && (
                 <div className="absolute inset-x-3 bottom-3 rounded-lg border border-border bg-background/95 p-3 text-xs shadow-lg backdrop-blur">
                   <button
                     type="button"
