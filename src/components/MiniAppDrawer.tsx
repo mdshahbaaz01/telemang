@@ -40,6 +40,9 @@ export function MiniAppDrawer({
   // retry through the header-stripping proxy instead of dead-ending.
   const [compat, setCompat] = useState(false);
   const [loadedOnce, setLoadedOnce] = useState(false);
+  // Whether the *current* frame (url + nonce) has fired onLoad. Reset on every
+  // reload so the watchdog only runs while a frame is actually pending.
+  const [frameLoaded, setFrameLoaded] = useState(false);
   const iframeRef = useRef<HTMLIFrameElement | null>(null);
   const bridge = useTelegramWebviewBridge(iframeRef, {
     onBlocked: (details) => setBlocked({ text: details.text }),
@@ -147,7 +150,11 @@ export function MiniAppDrawer({
   }, [open, request, resolver]);
 
   useEffect(() => {
-    if (!iframeUrl || error) return;
+    setFrameLoaded(false);
+  }, [iframeUrl, reloadNonce]);
+
+  useEffect(() => {
+    if (!iframeUrl || error || frameLoaded) return;
     setSlowFallback(false);
     const t = window.setTimeout(() => {
       // First failure → auto-switch to compatibility (proxy) mode once.
@@ -157,9 +164,9 @@ export function MiniAppDrawer({
       } else {
         setSlowFallback(true);
       }
-    }, 6000);
+    }, 12000);
     return () => window.clearTimeout(t);
-  }, [iframeUrl, reloadNonce, error, compat, loadedOnce]);
+  }, [iframeUrl, reloadNonce, error, compat, loadedOnce, frameLoaded]);
 
   if (!open) return null;
 
