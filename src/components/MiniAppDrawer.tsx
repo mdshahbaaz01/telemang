@@ -231,6 +231,7 @@ export function MiniAppDrawer({
                 onLoad={() => {
                   setSlowFallback(false);
                   setLoadedOnce(true);
+                  setFrameLoaded(true);
                 }}
                 onError={() => {
                   if (!compat) {
