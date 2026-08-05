@@ -43,6 +43,9 @@ export function MiniAppDrawer({
   // Whether the *current* frame (url + nonce) has fired onLoad. Reset on every
   // reload so the watchdog only runs while a frame is actually pending.
   const [frameLoaded, setFrameLoaded] = useState(false);
+  // Once the user dismisses a fallback card, stop showing these prompts for
+  // this mini-app session.
+  const [nagsOff, setNagsOff] = useState(false);
   const iframeRef = useRef<HTMLIFrameElement | null>(null);
   const bridge = useTelegramWebviewBridge(iframeRef, {
     onBlocked: (details) => setBlocked({ text: details.text }),
@@ -154,7 +157,7 @@ export function MiniAppDrawer({
   }, [iframeUrl, reloadNonce]);
 
   useEffect(() => {
-    if (!iframeUrl || error || frameLoaded) return;
+    if (!iframeUrl || error || frameLoaded || nagsOff) return;
     setSlowFallback(false);
     const t = window.setTimeout(() => {
       // First failure → auto-switch to compatibility (proxy) mode once.
@@ -166,7 +169,7 @@ export function MiniAppDrawer({
       }
     }, 12000);
     return () => window.clearTimeout(t);
-  }, [iframeUrl, reloadNonce, error, compat, loadedOnce, frameLoaded]);
+  }, [iframeUrl, reloadNonce, error, compat, loadedOnce, frameLoaded, nagsOff]);
 
   if (!open) return null;
 
