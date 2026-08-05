@@ -6,6 +6,7 @@ import { useTelegramWebviewBridge } from "@/lib/telegram-webview-bridge";
 import { MiniAppChrome } from "@/components/MiniAppChrome";
 import { useServerFn } from "@tanstack/react-start";
 import { solveCaptcha } from "@/lib/captcha.functions";
+import { useMiniAppProxyUrl } from "@/lib/miniapp-proxy-url";
 
 export type MiniAppRequest = {
   accountId: string;
@@ -34,6 +35,11 @@ export function MiniAppDrawer({
   const [reloadNonce, setReloadNonce] = useState(0);
   const [blocked, setBlocked] = useState<{ text?: string } | null>(null);
   const [slowFallback, setSlowFallback] = useState(false);
+  // Many mini apps send X-Frame-Options / CSP frame-ancestors and simply
+  // "refuse to connect" in a plain iframe. When that happens we transparently
+  // retry through the header-stripping proxy instead of dead-ending.
+  const [compat, setCompat] = useState(false);
+  const [loadedOnce, setLoadedOnce] = useState(false);
   const iframeRef = useRef<HTMLIFrameElement | null>(null);
   const bridge = useTelegramWebviewBridge(iframeRef, {
     onBlocked: (details) => setBlocked({ text: details.text }),
@@ -103,9 +109,8 @@ export function MiniAppDrawer({
     return () => window.removeEventListener("message", handler);
   }, [solve, request?.accountId]);
 
-  // Mini apps always load straight from their own origin — the server proxy
-  // caused more failures than it solved.
-  const iframeUrl = resolvedUrl;
+  const proxy = useMiniAppProxyUrl(compat ? resolvedUrl : null, request?.accountId ?? "");
+  const iframeUrl = compat ? proxy.url : resolvedUrl;
 
   useEffect(() => {
     if (!open || !request) {
@@ -113,6 +118,8 @@ export function MiniAppDrawer({
       setError(null);
       setReloadNonce(0);
         setSlowFallback(false);
+      setCompat(false);
+      setLoadedOnce(false);
       setCapLogs([]);
       return;
     }
@@ -142,9 +149,17 @@ export function MiniAppDrawer({
   useEffect(() => {
     if (!iframeUrl || error) return;
     setSlowFallback(false);
-    const t = window.setTimeout(() => setSlowFallback(true), 7000);
+    const t = window.setTimeout(() => {
+      // First failure → auto-switch to compatibility (proxy) mode once.
+      if (!compat && !loadedOnce) {
+        setCompat(true);
+        setReloadNonce((n) => n + 1);
+      } else {
+        setSlowFallback(true);
+      }
+    }, 6000);
     return () => window.clearTimeout(t);
-  }, [iframeUrl, reloadNonce, error]);
+  }, [iframeUrl, reloadNonce, error, compat, loadedOnce]);
 
   if (!open) return null;
 
@@ -161,6 +176,7 @@ export function MiniAppDrawer({
             </div>
             <div className="truncate text-[10px] text-muted-foreground">
               {resolvedUrl ? new URL(resolvedUrl).host : "resolving…"}
+              {compat ? " · compatibility mode" : ""}
             </div>
           </div>
           {resolvedUrl && (
@@ -205,21 +221,34 @@ export function MiniAppDrawer({
                 allow="clipboard-read; clipboard-write; camera; microphone; geolocation; payment"
                 sandbox="allow-scripts allow-same-origin allow-forms allow-modals allow-popups allow-popups-to-escape-sandbox allow-storage-access-by-user-activation allow-top-navigation-by-user-activation"
                 referrerPolicy="no-referrer-when-downgrade"
-                onLoad={() => setSlowFallback(false)}
-                onError={() =>
-                  setError(
-                    "The mini app refused to load in the embedded viewer.",
-                  )
-                }
+                onLoad={() => {
+                  setSlowFallback(false);
+                  setLoadedOnce(true);
+                }}
+                onError={() => {
+                  if (!compat) {
+                    setCompat(true);
+                    setReloadNonce((n) => n + 1);
+                  } else {
+                    setSlowFallback(true);
+                  }
+                }}
               />
               <MiniAppChrome bridge={bridge} />
               {slowFallback && resolvedUrl && !blocked && (
                 <div className="absolute inset-x-3 bottom-3 rounded-lg border border-yellow-500/40 bg-background/95 p-3 text-xs shadow-lg backdrop-blur">
                   <div className="mb-2 font-semibold">Mini app is not responding here</div>
                   <div className="mb-3 text-muted-foreground">
-                    Some mini apps refuse to run inside an embedded frame. Reload, or open it in Telegram / your browser.
+                    Some mini apps refuse to run inside an embedded frame. Try compatibility mode, reload, or open it in Telegram / your browser.
                   </div>
                   <div className="flex flex-wrap gap-2">
+                    <Button
+                      size="sm"
+                      variant={compat ? "outline" : "default"}
+                      onClick={() => { setCompat((v) => !v); setSlowFallback(false); setReloadNonce((n) => n + 1); }}
+                    >
+                      {compat ? "Direct mode" : "Compatibility mode"}
+                    </Button>
                     <Button size="sm" variant="secondary" onClick={() => setReloadNonce((n) => n + 1)}>
                       <RefreshCw className="mr-1 h-3.5 w-3.5" /> Reload
                     </Button>
