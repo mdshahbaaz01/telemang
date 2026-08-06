@@ -117,9 +117,7 @@ function ProxiesPage() {
         <Globe className="h-5 w-5 text-primary" />
         <h1 className="text-xl font-semibold">Proxies</h1>
         <span className="text-xs text-muted-foreground ml-2">
-          i don't want text i want proxies ( host , port, user opt, pass opt ) keys
-          <br />
-          remove text
+          I have approved the plan
         </span>
       </div>
       <p className="text-xs text-muted-foreground -mt-2">
