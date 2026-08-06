@@ -117,7 +117,7 @@ function ProxiesPage() {
         <Globe className="h-5 w-5 text-primary" />
         <h1 className="text-xl font-semibold">Proxies</h1>
         <span className="text-xs text-muted-foreground ml-2">
-          {withProxy}/{rows.length} routed
+          could you build proxy for proxy section?
         </span>
       </div>
       <p className="text-xs text-muted-foreground -mt-2">
