@@ -34,6 +34,7 @@ import { VirtualList } from "@/components/VirtualList";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
 import { requireAdminBeforeLoad } from "@/lib/access-guard";
+import { useMiniAppProxyUrl } from "@/lib/miniapp-proxy-url";
 
 export const Route = createFileRoute("/_authenticated/bot-flow")({
   beforeLoad: requireAdminBeforeLoad,
@@ -3162,6 +3163,9 @@ function MiniAppFrameImpl({ url, title, accountId, botUsername }: { url: string;
   const ref = useRef<HTMLIFrameElement | null>(null);
   const joinFn = useServerFn(joinFromLink);
   const [nonce, setNonce] = useState(0);
+  const [directMode, setDirectMode] = useState(false);
+  const proxy = useMiniAppProxyUrl(url, accountId);
+  const frameUrl = directMode ? url : proxy.url;
   const [overlay, setOverlay] = useState<
     | { status: "loading"; url: string }
     | { status: "ready"; url: string; peerKey: string; title: string; note: string }
@@ -3216,17 +3220,40 @@ function MiniAppFrameImpl({ url, title, accountId, botUsername }: { url: string;
   });
   return (
     <div className="relative h-full w-full">
-      <iframe
-        key={`${url}#${nonce}`}
-        ref={ref}
-        src={url}
-        title={title}
-        name={`tgminiapp-${accountId}`}
-        className="h-full w-full border-0"
-        allow="clipboard-read; clipboard-write; camera; microphone; geolocation; payment"
-        sandbox="allow-scripts allow-same-origin allow-forms allow-modals allow-popups allow-popups-to-escape-sandbox allow-storage-access-by-user-activation allow-top-navigation-by-user-activation"
-        referrerPolicy="no-referrer-when-downgrade"
-      />
+      {!frameUrl && !proxy.error ? (
+        <div className="flex h-full items-center justify-center">
+          <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
+        </div>
+      ) : proxy.error && !directMode ? (
+        <div className="flex h-full flex-col items-center justify-center gap-3 p-4 text-center text-xs">
+          <div className="text-destructive">Compatibility mode could not start.</div>
+          <Button size="sm" variant="outline" onClick={() => setDirectMode(true)}>Try direct mode</Button>
+        </div>
+      ) : (
+        <iframe
+          key={`${frameUrl}#${nonce}`}
+          ref={ref}
+          src={frameUrl ?? undefined}
+          title={title}
+          name={`tgminiapp-${accountId}`}
+          className="h-full w-full border-0"
+          allow="clipboard-read; clipboard-write; camera; microphone; geolocation; payment"
+          sandbox="allow-scripts allow-same-origin allow-forms allow-modals allow-popups allow-popups-to-escape-sandbox allow-storage-access-by-user-activation allow-top-navigation-by-user-activation"
+          referrerPolicy="no-referrer-when-downgrade"
+        />
+      )}
+      {frameUrl && (
+        <Button
+          type="button"
+          size="sm"
+          variant="outline"
+          className="absolute right-2 top-2 z-20 h-7 bg-background/95 px-2 text-[10px] shadow-sm"
+          onClick={() => { setDirectMode((value) => !value); setNonce((value) => value + 1); }}
+          title={directMode ? "Use compatibility mode" : "Use direct mode"}
+        >
+          {directMode ? "Compatibility" : "Direct"}
+        </Button>
+      )}
       <MiniAppChrome bridge={bridge} />
       {overlay && (
         <div className="absolute inset-0 flex flex-col bg-background">
