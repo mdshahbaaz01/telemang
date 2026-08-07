@@ -3166,6 +3166,10 @@ function MiniAppFrameImpl({ url, title, accountId, botUsername }: { url: string;
   const [directMode, setDirectMode] = useState(false);
   const proxy = useMiniAppProxyUrl(url, accountId);
   const frameUrl = directMode ? url : proxy.url;
+  const [frameLoaded, setFrameLoaded] = useState(false);
+  const [blank, setBlank] = useState(false);
+  const autoFellBack = useRef(false);
+  const frameLoadedRef = useRef(false);
   const [overlay, setOverlay] = useState<
     | { status: "loading"; url: string }
     | { status: "ready"; url: string; peerKey: string; title: string; note: string }
@@ -3218,6 +3222,33 @@ function MiniAppFrameImpl({ url, title, accountId, botUsername }: { url: string;
       return true; // handled
     },
   });
+  // Blank-frame watchdog: some hosts return an empty document through the
+  // proxy (or silently refuse). Auto-fall back to direct once, then surface
+  // recovery actions instead of leaving an empty white tile.
+  useEffect(() => {
+    if (!frameUrl) return;
+    setFrameLoaded(false);
+    setBlank(false);
+    const timer = window.setTimeout(() => {
+      let empty = !frameLoadedRef.current;
+      try {
+        const doc = ref.current?.contentDocument;
+        if (doc && !(doc.body?.innerHTML || "").trim()) empty = true;
+      } catch {
+        empty = false; // cross-origin document = it actually rendered
+      }
+      if (!empty) return;
+      if (!directMode && !autoFellBack.current) {
+        autoFellBack.current = true;
+        setDirectMode(true);
+        setNonce((n) => n + 1);
+        return;
+      }
+      setBlank(true);
+    }, 9000);
+    return () => window.clearTimeout(timer);
+  }, [frameUrl, nonce, directMode]);
+  useEffect(() => { frameLoadedRef.current = frameLoaded; }, [frameLoaded]);
   return (
     <div className="relative h-full w-full">
       {!frameUrl && !proxy.error ? (
@@ -3236,11 +3267,33 @@ function MiniAppFrameImpl({ url, title, accountId, botUsername }: { url: string;
           src={frameUrl ?? undefined}
           title={title}
           name={`tgminiapp-${accountId}`}
+          onLoad={() => { setFrameLoaded(true); setBlank(false); }}
           className="h-full w-full border-0"
           allow="clipboard-read; clipboard-write; camera; microphone; geolocation; payment"
           sandbox="allow-scripts allow-same-origin allow-forms allow-modals allow-popups allow-popups-to-escape-sandbox allow-storage-access-by-user-activation allow-top-navigation-by-user-activation"
           referrerPolicy="no-referrer-when-downgrade"
         />
+      )}
+      {blank && (
+        <div className="absolute inset-x-2 top-10 z-20 space-y-2 rounded-md border border-border bg-background/95 p-3 text-xs shadow-md">
+          <div className="flex items-start gap-2">
+            <div className="flex-1 text-muted-foreground">
+              This mini app rendered a blank page in {directMode ? "direct" : "compatibility"} mode.
+            </div>
+            <button type="button" className="rounded p-1 hover:bg-muted" onClick={() => setBlank(false)} title="Dismiss">
+              <X className="h-3.5 w-3.5" />
+            </button>
+          </div>
+          <div className="flex flex-wrap gap-2">
+            <Button size="sm" variant="outline" onClick={() => { setBlank(false); setNonce((n) => n + 1); }}>
+              <RefreshCw className="mr-1 h-3.5 w-3.5" /> Reload
+            </Button>
+            <Button size="sm" variant="outline" onClick={() => { setDirectMode((v) => !v); setBlank(false); setNonce((n) => n + 1); }}>
+              Try {directMode ? "compatibility" : "direct"} mode
+            </Button>
+            <BrowserPickerButton url={url} size="sm" variant="outline" />
+          </div>
+        </div>
       )}
       {frameUrl && (
         <Button
