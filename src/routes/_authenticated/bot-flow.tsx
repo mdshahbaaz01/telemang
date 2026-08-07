@@ -3169,6 +3169,7 @@ function MiniAppFrameImpl({ url, title, accountId, botUsername }: { url: string;
   const [frameLoaded, setFrameLoaded] = useState(false);
   const [blank, setBlank] = useState(false);
   const autoFellBack = useRef(false);
+  const frameLoadedRef = useRef(false);
   const [overlay, setOverlay] = useState<
     | { status: "loading"; url: string }
     | { status: "ready"; url: string; peerKey: string; title: string; note: string }
@@ -3247,7 +3248,6 @@ function MiniAppFrameImpl({ url, title, accountId, botUsername }: { url: string;
     }, 9000);
     return () => window.clearTimeout(timer);
   }, [frameUrl, nonce, directMode]);
-  const frameLoadedRef = useRef(false);
   useEffect(() => { frameLoadedRef.current = frameLoaded; }, [frameLoaded]);
   return (
     <div className="relative h-full w-full">
