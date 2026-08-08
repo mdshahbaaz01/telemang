@@ -69,7 +69,7 @@ export const updateBroadcastMapping = createServerFn({ method: "POST" })
       .parse(d),
   )
   .handler(async ({ data, context }) => {
-    const patch: Record<string, unknown> = {};
+    const patch: { name?: string; format?: string; items?: any } = {};
     if (data.name !== undefined) patch.name = data.name;
     if (data.format !== undefined) patch.format = data.format;
     if (data.items !== undefined) patch.items = JSON.parse(JSON.stringify(data.items));
