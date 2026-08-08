@@ -1,5 +1,4 @@
 import { useRef, useState } from "react";
-import * as XLSX from "xlsx";
 import { useServerFn } from "@tanstack/react-start";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
@@ -46,6 +45,52 @@ const HEADER_ALIASES: Record<string, "message" | "target" | "account"> = {
 
 function normalizeHeader(v: unknown) {
   return String(v ?? "").trim().toLowerCase().replace(/[\s_-]+/g, "");
+}
+
+/** Minimal RFC4180-ish parser for csv / tsv text (handles quotes + newlines). */
+function parseDelimited(text: string): unknown[][] {
+  const src = text.replace(/^\uFEFF/, "");
+  const head = src.split(/\r?\n/)[0] ?? "";
+  const delim = head.includes("\t") ? "\t" : head.split(";").length > head.split(",").length ? ";" : ",";
+  const rows: string[][] = [];
+  let row: string[] = [];
+  let cell = "";
+  let quoted = false;
+  for (let i = 0; i < src.length; i++) {
+    const ch = src[i]!;
+    if (quoted) {
+      if (ch === '"') {
+        if (src[i + 1] === '"') {
+          cell += '"';
+          i++;
+        } else quoted = false;
+      } else cell += ch;
+      continue;
+    }
+    if (ch === '"') quoted = true;
+    else if (ch === delim) {
+      row.push(cell);
+      cell = "";
+    } else if (ch === "\n") {
+      row.push(cell);
+      rows.push(row);
+      row = [];
+      cell = "";
+    } else if (ch !== "\r") cell += ch;
+  }
+  row.push(cell);
+  rows.push(row);
+  return rows;
+}
+
+async function readAnyFile(file: File): Promise<unknown[][]> {
+  const isSheet = /\.(xlsx|xls|ods)$/i.test(file.name);
+  if (!isSheet) return parseDelimited(await file.text());
+  const XLSX = await import("xlsx");
+  const wb = XLSX.read(await file.arrayBuffer(), { type: "array" });
+  const sheet = wb.Sheets[wb.SheetNames[0]!];
+  if (!sheet) throw new Error("Empty workbook");
+  return XLSX.utils.sheet_to_json<unknown[]>(sheet, { header: 1, blankrows: false }) as unknown[][];
 }
 
 function parseSheet(rows: unknown[][], accounts: MapperAccount[]): Item[] {
@@ -99,6 +144,9 @@ export function BroadcastCsvMapper({
   const [busy, setBusy] = useState(false);
   const [showHistory, setShowHistory] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
+  const [dragOver, setDragOver] = useState(false);
+  const [pasteOpen, setPasteOpen] = useState(false);
+  const [pasteText, setPasteText] = useState("");
 
   const saveFn = useServerFn(saveBroadcastMapping);
   const listFn = useServerFn(listBroadcastMappings);
@@ -111,12 +159,8 @@ export function BroadcastCsvMapper({
 
   const handleFile = async (file: File) => {
     try {
-      const buf = await file.arrayBuffer();
-      const wb = XLSX.read(buf, { type: "array" });
-      const sheet = wb.Sheets[wb.SheetNames[0]!];
-      if (!sheet) throw new Error("Empty file");
-      const rows = XLSX.utils.sheet_to_json<unknown[]>(sheet, { header: 1, blankrows: false });
-      const parsed = parseSheet(rows as unknown[][], accounts);
+      const rows = await readAnyFile(file);
+      const parsed = parseSheet(rows, accounts);
       if (!parsed.length) throw new Error("No rows found — need a message and a target per line");
       setItems(parsed);
       setFileName(file.name);
@@ -125,6 +169,22 @@ export function BroadcastCsvMapper({
       toast.success(`${parsed.length} message → ID pair(s) loaded`);
     } catch (e) {
       toast.error((e as Error).message || "Could not read the file");
+    }
+  };
+
+  const handleText = (text: string, label = "Pasted rows") => {
+    try {
+      const parsed = parseSheet(parseDelimited(text), accounts);
+      if (!parsed.length) throw new Error("No rows found — need a message and a target per line");
+      setItems(parsed);
+      setFileName(label);
+      setEditingId(null);
+      if (!name) setName(label);
+      setPasteOpen(false);
+      setPasteText("");
+      toast.success(`${parsed.length} message → ID pair(s) loaded`);
+    } catch (e) {
+      toast.error((e as Error).message || "Could not read the text");
     }
   };
 
@@ -185,21 +245,57 @@ export function BroadcastCsvMapper({
         <input
           ref={fileRef}
           type="file"
-          accept=".csv,.tsv,.xlsx,.xls,text/csv"
-          className="hidden"
+          id="broadcast-csv-input"
+          className="sr-only"
           onChange={(e) => {
             const f = e.target.files?.[0];
             if (f) void handleFile(f);
             e.target.value = "";
           }}
         />
-        <Button type="button" size="sm" variant="outline" onClick={() => fileRef.current?.click()}>
-          <Upload className="mr-1 h-4 w-4" /> Upload file
+        <Button asChild type="button" size="sm" variant="outline">
+          <label htmlFor="broadcast-csv-input" className="cursor-pointer">
+            <Upload className="mr-1 h-4 w-4" /> Upload file
+          </label>
+        </Button>
+        <Button type="button" size="sm" variant="ghost" onClick={() => setPasteOpen((v) => !v)}>
+          Paste rows
         </Button>
         <Button type="button" size="sm" variant="ghost" onClick={() => setShowHistory((v) => !v)}>
           <History className="mr-1 h-4 w-4" /> History ({history.length})
         </Button>
       </div>
+      <div
+        onDragOver={(e) => {
+          e.preventDefault();
+          setDragOver(true);
+        }}
+        onDragLeave={() => setDragOver(false)}
+        onDrop={(e) => {
+          e.preventDefault();
+          setDragOver(false);
+          const f = e.dataTransfer.files?.[0];
+          if (f) void handleFile(f);
+        }}
+        className={`rounded-md border border-dashed p-3 text-center text-xs ${
+          dragOver ? "border-primary bg-primary/5" : "border-border text-muted-foreground"
+        }`}
+      >
+        Drop a .csv / .tsv / .xlsx file here{fileName ? ` · loaded: ${fileName}` : ""}
+      </div>
+      {pasteOpen && (
+        <div className="space-y-2">
+          <Textarea
+            rows={5}
+            placeholder={"message,target\nHello there,@channelone\nHi,@channeltwo"}
+            value={pasteText}
+            onChange={(e) => setPasteText(e.target.value)}
+          />
+          <Button type="button" size="sm" onClick={() => handleText(pasteText)} disabled={!pasteText.trim()}>
+            Parse pasted rows
+          </Button>
+        </div>
+      )}
       <p className="text-xs text-muted-foreground">
         Columns: <code>message</code>, <code>target</code> and optionally <code>account</code> (username / phone / account id).
         Without a header row the 1st column is the message and the 2nd is the target. Each line becomes one row: that
