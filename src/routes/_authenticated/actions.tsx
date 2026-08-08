@@ -1821,6 +1821,21 @@ function ActionsPageInner() {
                     />
                   </div>
                 )}
+                <BroadcastCsvMapper
+                  accounts={accountList}
+                  format={textFormat}
+                  onApply={(items) => {
+                    setBroadcastMode(items.some((i) => i.accountId) ? "per-account" : broadcastMode);
+                    setRows(
+                      items.map((i) => ({
+                        id: crypto.randomUUID(),
+                        message: i.message,
+                        targets: i.target,
+                        ...(i.accountId ? { accountId: i.accountId } : {}),
+                      })),
+                    );
+                  }}
+                />
                 {rows.map((row, idx) => (
                   <div key={row.id} className="rounded-md border border-border p-3 space-y-2">
                     <div className="flex items-center gap-2">
