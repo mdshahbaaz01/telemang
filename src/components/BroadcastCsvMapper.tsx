@@ -368,6 +368,41 @@ export function BroadcastCsvMapper({
         message goes only to that ID.
       </p>
 
+      <label className="flex items-start gap-2 text-xs">
+        <input
+          type="checkbox"
+          className="mt-0.5"
+          checked={messagesOnly}
+          onChange={(e) => setMessagesOnly(e.target.checked)}
+        />
+        <span>
+          <span className="font-medium">Use file as messages only</span> — every line/row becomes a message and you set
+          the targets yourself (below or per row).
+        </span>
+      </label>
+
+      <div className="flex flex-wrap items-center gap-2">
+        <Input
+          className="h-8 max-w-xs"
+          placeholder="Target for all rows (@channel / t.me link / id)"
+          value={bulkTarget}
+          onChange={(e) => setBulkTarget(e.target.value)}
+        />
+        <Button
+          type="button"
+          size="sm"
+          variant="outline"
+          disabled={!bulkTarget.trim() || !items.length}
+          onClick={() => {
+            const t = bulkTarget.trim();
+            setItems((prev) => prev.map((it) => ({ ...it, target: t })));
+            toast.success(`Target set on ${items.length} row(s)`);
+          }}
+        >
+          Set on all rows
+        </Button>
+      </div>
+
       {items.length > 0 && (
         <div className="space-y-2">
           <div className="flex flex-wrap items-center gap-2">
