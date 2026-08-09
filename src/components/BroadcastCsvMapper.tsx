@@ -96,6 +96,26 @@ async function readAnyFile(file: File): Promise<unknown[][]> {
 function parseSheet(rows: unknown[][], accounts: MapperAccount[]): Item[] {
   const clean = rows.filter((r) => Array.isArray(r) && r.some((c) => String(c ?? "").trim()));
   if (!clean.length) return [];
+  return parseSheetInner(clean, accounts);
+}
+
+/** Every non-empty line/row becomes a message; targets are filled in manually. */
+function parseMessagesOnly(rows: unknown[][]): Item[] {
+  return rows
+    .map((r) =>
+      (Array.isArray(r) ? r : [r])
+        .map((c) => String(c ?? "").trim())
+        .filter(Boolean)
+        .join(" ")
+        .trim(),
+    )
+    .filter(Boolean)
+    .map((message) => ({ message, target: "", accountId: null }));
+}
+
+function parseSheetInner(rows: unknown[][], accounts: MapperAccount[]): Item[] {
+  const clean = rows.filter((r) => Array.isArray(r) && r.some((c) => String(c ?? "").trim()));
+  if (!clean.length) return [];
   const first = clean[0]!.map(normalizeHeader);
   const mapped = first.map((h) => HEADER_ALIASES[h]);
   const hasHeader = mapped.includes("message") || mapped.includes("target");
@@ -190,6 +210,8 @@ export function BroadcastCsvMapper({
   const [dragOver, setDragOver] = useState(false);
   const [pasteOpen, setPasteOpen] = useState(false);
   const [pasteText, setPasteText] = useState("");
+  const [messagesOnly, setMessagesOnly] = useState(false);
+  const [bulkTarget, setBulkTarget] = useState("");
 
   const saveFn = useServerFn(saveBroadcastMapping);
   const listFn = useServerFn(listBroadcastMappings);
@@ -203,8 +225,8 @@ export function BroadcastCsvMapper({
   const handleFile = async (file: File) => {
     try {
       const rows = await readAnyFile(file);
-      const parsed = parseSheet(rows, accounts);
-      if (!parsed.length) throw new Error("No rows found — need a message and a target per line");
+      const parsed = messagesOnly ? parseMessagesOnly(rows) : parseSheet(rows, accounts);
+      if (!parsed.length) throw new Error("No rows found in the file");
       setItems(parsed);
       setFileName(file.name);
       setEditingId(null);
@@ -217,8 +239,9 @@ export function BroadcastCsvMapper({
 
   const handleText = (text: string, label = "Pasted rows") => {
     try {
-      const parsed = parseSheet(parseDelimited(text), accounts);
-      if (!parsed.length) throw new Error("No rows found — need a message and a target per line");
+      const rows = parseDelimited(text);
+      const parsed = messagesOnly ? parseMessagesOnly(rows) : parseSheet(rows, accounts);
+      if (!parsed.length) throw new Error("No rows found in the text");
       setItems(parsed);
       setFileName(label);
       setEditingId(null);
@@ -234,9 +257,15 @@ export function BroadcastCsvMapper({
   const patchItem = (i: number, patch: Partial<Item>) =>
     setItems((prev) => prev.map((it, idx) => (idx === i ? { ...it, ...patch } : it)));
 
+  /** Rows ready to use — empty targets fall back to the "target for all rows" box. */
+  const resolvedItems = () =>
+    items
+      .map((it) => ({ ...it, target: it.target.trim() || bulkTarget.trim() }))
+      .filter((it) => it.target.length > 0);
+
   const save = async () => {
-    const valid = items.filter((i) => i.target.trim());
-    if (!valid.length) return toast.error("Nothing to save");
+    const valid = resolvedItems();
+    if (!valid.length) return toast.error("Add a target (per row or for all rows) first");
     if (!name.trim()) return toast.error("Give this list a name");
     setBusy(true);
     try {
@@ -345,6 +374,41 @@ export function BroadcastCsvMapper({
         message goes only to that ID.
       </p>
 
+      <label className="flex items-start gap-2 text-xs">
+        <input
+          type="checkbox"
+          className="mt-0.5"
+          checked={messagesOnly}
+          onChange={(e) => setMessagesOnly(e.target.checked)}
+        />
+        <span>
+          <span className="font-medium">Use file as messages only</span> — every line/row becomes a message and you set
+          the targets yourself (below or per row).
+        </span>
+      </label>
+
+      <div className="flex flex-wrap items-center gap-2">
+        <Input
+          className="h-8 max-w-xs"
+          placeholder="Target for all rows (@channel / t.me link / id)"
+          value={bulkTarget}
+          onChange={(e) => setBulkTarget(e.target.value)}
+        />
+        <Button
+          type="button"
+          size="sm"
+          variant="outline"
+          disabled={!bulkTarget.trim() || !items.length}
+          onClick={() => {
+            const t = bulkTarget.trim();
+            setItems((prev) => prev.map((it) => ({ ...it, target: t })));
+            toast.success(`Target set on ${items.length} row(s)`);
+          }}
+        >
+          Set on all rows
+        </Button>
+      </div>
+
       {items.length > 0 && (
         <div className="space-y-2">
           <div className="flex flex-wrap items-center gap-2">
@@ -361,8 +425,8 @@ export function BroadcastCsvMapper({
               type="button"
               size="sm"
               onClick={() => {
-                const valid = items.filter((i) => i.target.trim());
-                if (!valid.length) return toast.error("Nothing to apply");
+                const valid = resolvedItems();
+                if (!valid.length) return toast.error("Add a target (per row or for all rows) first");
                 onApply(valid);
                 toast.success(`${valid.length} row(s) loaded into the broadcast editor`);
               }}
