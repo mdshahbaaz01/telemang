@@ -100,9 +100,52 @@ function parseSheet(rows: unknown[][], accounts: MapperAccount[]): Item[] {
   const mapped = first.map((h) => HEADER_ALIASES[h]);
   const hasHeader = mapped.includes("message") || mapped.includes("target");
   const body = hasHeader ? clean.slice(1) : clean;
-  const msgIdx = hasHeader ? mapped.indexOf("message") : 0;
-  const tgtIdx = hasHeader ? mapped.indexOf("target") : 1;
   const accIdx = hasHeader ? mapped.indexOf("account") : -1;
+
+  // How many columns does the body actually have?
+  const width = body.reduce((m, r) => Math.max(m, r.length), 0);
+
+  // A cell looks like a Telegram target when it's an @handle, a t.me link,
+  // a numeric chat id, or a single bare token with no spaces.
+  const looksTarget = (v: unknown) => {
+    const s = String(v ?? "").trim();
+    if (!s || /\s/.test(s)) return false;
+    return (
+      s.startsWith("@") ||
+      /t\.me\//i.test(s) ||
+      /^-?\d{5,}$/.test(s) ||
+      /^\+?[A-Za-z0-9_-]{4,64}$/.test(s)
+    );
+  };
+  const targetScore = (idx: number) =>
+    body.reduce((n, r) => n + (looksTarget(r[idx]) ? 1 : 0), 0);
+
+  let msgIdx = hasHeader ? mapped.indexOf("message") : -1;
+  let tgtIdx = hasHeader ? mapped.indexOf("target") : -1;
+
+  if (tgtIdx < 0) {
+    // pick the column that most looks like targets
+    let best = -1;
+    let bestScore = 0;
+    for (let c = 0; c < width; c++) {
+      if (c === msgIdx || c === accIdx) continue;
+      const s = targetScore(c);
+      if (s > bestScore) {
+        bestScore = s;
+        best = c;
+      }
+    }
+    tgtIdx = best >= 0 ? best : width > 1 ? 1 : 0;
+  }
+  if (msgIdx < 0) {
+    // first remaining column that isn't the target / account column
+    msgIdx = -1;
+    for (let c = 0; c < width; c++) {
+      if (c === tgtIdx || c === accIdx) continue;
+      msgIdx = c;
+      break;
+    }
+  }
 
   const findAccount = (raw: string) => {
     const token = raw.trim().replace(/^@/, "").toLowerCase();
@@ -119,8 +162,8 @@ function parseSheet(rows: unknown[][], accounts: MapperAccount[]): Item[] {
 
   return body
     .map((r) => ({
-      message: String(r[msgIdx >= 0 ? msgIdx : 0] ?? "").trim(),
-      target: String(r[tgtIdx >= 0 ? tgtIdx : 1] ?? "").trim(),
+      message: msgIdx >= 0 ? String(r[msgIdx] ?? "").trim() : "",
+      target: String(r[tgtIdx] ?? "").trim(),
       accountId: accIdx >= 0 ? findAccount(String(r[accIdx] ?? "")) : null,
     }))
     .filter((r) => r.target.length > 0);
