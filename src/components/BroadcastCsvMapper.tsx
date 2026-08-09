@@ -96,6 +96,26 @@ async function readAnyFile(file: File): Promise<unknown[][]> {
 function parseSheet(rows: unknown[][], accounts: MapperAccount[]): Item[] {
   const clean = rows.filter((r) => Array.isArray(r) && r.some((c) => String(c ?? "").trim()));
   if (!clean.length) return [];
+  return parseSheetInner(clean, accounts);
+}
+
+/** Every non-empty line/row becomes a message; targets are filled in manually. */
+function parseMessagesOnly(rows: unknown[][]): Item[] {
+  return rows
+    .map((r) =>
+      (Array.isArray(r) ? r : [r])
+        .map((c) => String(c ?? "").trim())
+        .filter(Boolean)
+        .join(" ")
+        .trim(),
+    )
+    .filter(Boolean)
+    .map((message) => ({ message, target: "", accountId: null }));
+}
+
+function parseSheetInner(rows: unknown[][], accounts: MapperAccount[]): Item[] {
+  const clean = rows.filter((r) => Array.isArray(r) && r.some((c) => String(c ?? "").trim()));
+  if (!clean.length) return [];
   const first = clean[0]!.map(normalizeHeader);
   const mapped = first.map((h) => HEADER_ALIASES[h]);
   const hasHeader = mapped.includes("message") || mapped.includes("target");
