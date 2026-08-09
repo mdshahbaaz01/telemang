@@ -1694,6 +1694,52 @@ function BotFlowPage() {
                       Sent as a normal message from each account to @{parsed.username} — chats stay connected and update live.
                     </div>
                   </div>
+                  {/* ── Paste rows: one line per account ──────────── */}
+                  <div className="rounded-md border border-border bg-background/60 p-2 text-xs space-y-2">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <span className="font-medium">Paste rows</span>
+                      <span className="text-muted-foreground">
+                        · line 1 → account #1, line 2 → account #2 …
+                      </span>
+                    </div>
+                    <Textarea
+                      rows={4}
+                      value={rowsText}
+                      onChange={(e) => setRowsText(e.target.value)}
+                      placeholder={"ref-code-1\nref-code-2\nref-code-3"}
+                      className="text-xs"
+                      disabled={sendingRows}
+                    />
+                    <div className="flex flex-wrap items-center gap-2">
+                      <Button
+                        size="sm"
+                        onClick={() => void sendPastedRows()}
+                        disabled={sendingRows || !pastedRows.length || chatOpen.length === 0}
+                      >
+                        {sendingRows ? "Sending…" : `Send ${Math.min(pastedRows.length, chatOpen.length)} row(s)`}
+                      </Button>
+                      <Button size="sm" variant="ghost" onClick={() => setRowsText("")} disabled={sendingRows}>
+                        Clear
+                      </Button>
+                      <span className="text-[10px] text-muted-foreground">
+                        {pastedRows.length} row(s) · {chatOpen.length} open account(s)
+                        {pastedRows.length > chatOpen.length ? " — extra rows are ignored" : ""}
+                      </span>
+                    </div>
+                    {pastedRows.length > 0 && (
+                      <div className="max-h-32 space-y-1 overflow-auto">
+                        {chatOpen.slice(0, pastedRows.length).map((id, i) => {
+                          const a = accountList.find((x) => x.id === id);
+                          return (
+                            <div key={id} className="flex gap-2 text-[10px] text-muted-foreground">
+                              <span className="shrink-0">#{i + 1} {a?.first_name || a?.username || a?.phone || id.slice(0, 6)}</span>
+                              <span className="truncate text-foreground">{pastedRows[i]}</span>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    )}
+                  </div>
                   {/* ── Attachment broadcast ─────────────────────── */}
                   <div className="rounded-md border border-border bg-background/60 p-2 text-xs space-y-2">
                     <div className="flex flex-wrap items-center gap-2">
