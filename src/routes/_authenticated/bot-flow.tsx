@@ -1039,6 +1039,38 @@ function BotFlowPage() {
   }, [mediaItems, mediaId, mediaCaption, chatOpen, resolvePeerKeyFor, sendMediaAsFn, pingOpenChats]);
 
   // ─── Sequence sender (scripted multi-step run) ────────────────────
+  // ─── Paste rows: row N → open account N ───────────────────────────
+  const [rowsText, setRowsText] = useState("");
+  const [sendingRows, setSendingRows] = useState(false);
+  const pastedRows = useMemo(
+    () =>
+      rowsText
+        .split(/\r?\n/)
+        .map((l) => l.trim())
+        .filter(Boolean),
+    [rowsText],
+  );
+  const sendPastedRows = useCallback(async () => {
+    if (!pastedRows.length) return toast.error("Paste at least one row");
+    if (chatOpen.length === 0) return toast.error("No open accounts");
+    setSendingRows(true);
+    let ok = 0, fail = 0;
+    await Promise.all(
+      chatOpen.slice(0, pastedRows.length).map(async (accountId, i) => {
+        try {
+          const peerKey = await resolvePeerKeyFor(accountId);
+          if (!peerKey) { fail++; return; }
+          await sendMessageAsFn({ data: { accountId, peerKey, text: pastedRows[i]! } });
+          ok++;
+        } catch { fail++; }
+      }),
+    );
+    setSendingRows(false);
+    toast[fail && !ok ? "error" : "success"](`Rows sent → ok:${ok} fail:${fail}`);
+    pingOpenChats();
+    setTimeout(pingOpenChats, 2000);
+  }, [pastedRows, chatOpen, resolvePeerKeyFor, sendMessageAsFn, pingOpenChats]);
+
   type SeqStep =
     | { kind: "text"; value: string }
     | { kind: "button"; value: string }
