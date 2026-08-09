@@ -210,6 +210,8 @@ export function BroadcastCsvMapper({
   const [dragOver, setDragOver] = useState(false);
   const [pasteOpen, setPasteOpen] = useState(false);
   const [pasteText, setPasteText] = useState("");
+  const [messagesOnly, setMessagesOnly] = useState(false);
+  const [bulkTarget, setBulkTarget] = useState("");
 
   const saveFn = useServerFn(saveBroadcastMapping);
   const listFn = useServerFn(listBroadcastMappings);
@@ -223,8 +225,8 @@ export function BroadcastCsvMapper({
   const handleFile = async (file: File) => {
     try {
       const rows = await readAnyFile(file);
-      const parsed = parseSheet(rows, accounts);
-      if (!parsed.length) throw new Error("No rows found — need a message and a target per line");
+      const parsed = messagesOnly ? parseMessagesOnly(rows) : parseSheet(rows, accounts);
+      if (!parsed.length) throw new Error("No rows found in the file");
       setItems(parsed);
       setFileName(file.name);
       setEditingId(null);
@@ -237,8 +239,9 @@ export function BroadcastCsvMapper({
 
   const handleText = (text: string, label = "Pasted rows") => {
     try {
-      const parsed = parseSheet(parseDelimited(text), accounts);
-      if (!parsed.length) throw new Error("No rows found — need a message and a target per line");
+      const rows = parseDelimited(text);
+      const parsed = messagesOnly ? parseMessagesOnly(rows) : parseSheet(rows, accounts);
+      if (!parsed.length) throw new Error("No rows found in the text");
       setItems(parsed);
       setFileName(label);
       setEditingId(null);
