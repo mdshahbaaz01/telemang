@@ -257,9 +257,15 @@ export function BroadcastCsvMapper({
   const patchItem = (i: number, patch: Partial<Item>) =>
     setItems((prev) => prev.map((it, idx) => (idx === i ? { ...it, ...patch } : it)));
 
+  /** Rows ready to use — empty targets fall back to the "target for all rows" box. */
+  const resolvedItems = () =>
+    items
+      .map((it) => ({ ...it, target: it.target.trim() || bulkTarget.trim() }))
+      .filter((it) => it.target.length > 0);
+
   const save = async () => {
-    const valid = items.filter((i) => i.target.trim());
-    if (!valid.length) return toast.error("Nothing to save");
+    const valid = resolvedItems();
+    if (!valid.length) return toast.error("Add a target (per row or for all rows) first");
     if (!name.trim()) return toast.error("Give this list a name");
     setBusy(true);
     try {
@@ -419,8 +425,8 @@ export function BroadcastCsvMapper({
               type="button"
               size="sm"
               onClick={() => {
-                const valid = items.filter((i) => i.target.trim());
-                if (!valid.length) return toast.error("Nothing to apply");
+                const valid = resolvedItems();
+                if (!valid.length) return toast.error("Add a target (per row or for all rows) first");
                 onApply(valid);
                 toast.success(`${valid.length} row(s) loaded into the broadcast editor`);
               }}
