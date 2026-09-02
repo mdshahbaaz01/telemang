@@ -113,6 +113,13 @@ function BotFlowPage() {
   const [autoJoinRequired, setAutoJoinRequired] = useState(true);
   const [publicInviteFallback, setPublicInviteFallback] = useState(true);
   const [runParallel, setRunParallel] = useState(false);
+  // Per-account delay before each account runs the bot link. Default 0 = no gap.
+  const [runDelayValue, setRunDelayValue] = useState<number>(0);
+  const [runDelayUnit, setRunDelayUnit] = useState<"sec" | "min">("sec");
+  const runDelaySeconds = Math.max(
+    0,
+    Math.round(runDelayValue * (runDelayUnit === "min" ? 60 : 1)),
+  );
   const [logs, setLogs] = useState<LogEntry[]>([]);
   const [running, setRunning] = useState(false);
   const [totals, setTotals] = useState<{ ok: number; fail: number } | null>(null);
