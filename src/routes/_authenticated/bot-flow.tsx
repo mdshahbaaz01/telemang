@@ -319,8 +319,8 @@ function BotFlowPage() {
         headers: { "content-type": "application/json", authorization: `Bearer ${token}` },
         body: JSON.stringify({
           accountIds,
-          minDelay: 1,
-          maxDelay: 2,
+          minDelay: runDelaySeconds,
+          maxDelay: runDelaySeconds,
           concurrency: runParallel ? Math.max(1, Math.min(20, accountIds.length)) : 1,
           op: {
             kind: "botflow",
