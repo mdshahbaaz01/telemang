@@ -113,6 +113,13 @@ function BotFlowPage() {
   const [autoJoinRequired, setAutoJoinRequired] = useState(true);
   const [publicInviteFallback, setPublicInviteFallback] = useState(true);
   const [runParallel, setRunParallel] = useState(false);
+  // Per-account delay before each account runs the bot link. Default 0 = no gap.
+  const [runDelayValue, setRunDelayValue] = useState<number>(0);
+  const [runDelayUnit, setRunDelayUnit] = useState<"sec" | "min">("sec");
+  const runDelaySeconds = Math.max(
+    0,
+    Math.round(runDelayValue * (runDelayUnit === "min" ? 60 : 1)),
+  );
   const [logs, setLogs] = useState<LogEntry[]>([]);
   const [running, setRunning] = useState(false);
   const [totals, setTotals] = useState<{ ok: number; fail: number } | null>(null);
@@ -312,8 +319,8 @@ function BotFlowPage() {
         headers: { "content-type": "application/json", authorization: `Bearer ${token}` },
         body: JSON.stringify({
           accountIds,
-          minDelay: 1,
-          maxDelay: 2,
+          minDelay: runDelaySeconds,
+          maxDelay: runDelaySeconds,
           concurrency: runParallel ? Math.max(1, Math.min(20, accountIds.length)) : 1,
           op: {
             kind: "botflow",
@@ -1252,6 +1259,32 @@ function BotFlowPage() {
                 <p className="text-xs text-muted-foreground">No accounts yet.</p>
               )}
             </div>
+          </div>
+
+          <div className="flex flex-wrap items-center gap-2">
+            <Label className="text-sm">Delay between accounts</Label>
+            <Input
+              type="number"
+              min={0}
+              className="w-24"
+              value={runDelayValue}
+              onChange={(e) =>
+                setRunDelayValue(Math.max(0, Number(e.target.value) || 0))
+              }
+            />
+            <select
+              className="h-9 rounded-md border border-input bg-background px-2 text-sm"
+              value={runDelayUnit}
+              onChange={(e) => setRunDelayUnit(e.target.value as "sec" | "min")}
+            >
+              <option value="sec">seconds</option>
+              <option value="min">minutes</option>
+            </select>
+            <span className="text-xs text-muted-foreground">
+              {runDelaySeconds > 0
+                ? `Each account waits ${runDelaySeconds}s before running the link.`
+                : "No delay (default 0)."}
+            </span>
           </div>
 
           <div className="flex flex-wrap items-center gap-2">
