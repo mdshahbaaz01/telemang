@@ -1262,6 +1262,32 @@ function BotFlowPage() {
           </div>
 
           <div className="flex flex-wrap items-center gap-2">
+            <Label className="text-sm">Delay between accounts</Label>
+            <Input
+              type="number"
+              min={0}
+              className="w-24"
+              value={runDelayValue}
+              onChange={(e) =>
+                setRunDelayValue(Math.max(0, Number(e.target.value) || 0))
+              }
+            />
+            <select
+              className="h-9 rounded-md border border-input bg-background px-2 text-sm"
+              value={runDelayUnit}
+              onChange={(e) => setRunDelayUnit(e.target.value as "sec" | "min")}
+            >
+              <option value="sec">seconds</option>
+              <option value="min">minutes</option>
+            </select>
+            <span className="text-xs text-muted-foreground">
+              {runDelaySeconds > 0
+                ? `Each account waits ${runDelaySeconds}s before running the link.`
+                : "No delay (default 0)."}
+            </span>
+          </div>
+
+          <div className="flex flex-wrap items-center gap-2">
             <Button onClick={run} disabled={running || allIds.length === 0}>
               <Play className="mr-1 h-4 w-4" /> Run flow
             </Button>
