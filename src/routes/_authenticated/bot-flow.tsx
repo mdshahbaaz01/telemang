@@ -812,6 +812,8 @@ function BotFlowPage() {
     perAccount: Record<string, PerAccountBtn>;
   }>({ loading: false, labels: [], perAccount: {} });
   const [pressingLabel, setPressingLabel] = useState<string | null>(null);
+  const [autoShareContacts, setAutoShareContacts] = useState(true);
+  const autoSharedContactKeys = useRef<Set<string>>(new Set());
   // 0 = latest bot message with buttons, 1 = previous, 2 = older, ...
   const [botBtnOffset, setBotBtnOffset] = useState(0);
 
@@ -869,6 +871,49 @@ function BotFlowPage() {
       kinds: [...kinds],
     }));
     setBotBtnState({ loading: false, labels, perAccount });
+    if (autoShareContacts) {
+      void Promise.all(
+        Object.entries(perAccount).flatMap(([accountId, value]) =>
+          value.buttons
+            .map((button, buttonIndex) => ({ accountId, value, button, buttonIndex }))
+            .filter(({ button }) => button.kind === "requestPhone")
+            .map(async ({ accountId, value, button, buttonIndex }) => {
+              const shareKey = `${accountId}:${value.msgId}:${buttonIndex}`;
+              if (autoSharedContactKeys.current.has(shareKey)) return "skipped" as const;
+              autoSharedContactKeys.current.add(shareKey);
+              try {
+                await sendMessageAsFn({
+                  data: {
+                    accountId,
+                    peerKey: value.peerKey,
+                    text: button.label || "Share contact",
+                    shareContact: true,
+                  },
+                });
+                addLog({
+                  accountId,
+                  level: "success",
+                  message: "Contact shared automatically after a profile request",
+                });
+                return "shared" as const;
+              } catch (error) {
+                autoSharedContactKeys.current.delete(shareKey);
+                addLog({
+                  accountId,
+                  level: "error",
+                  message: `Automatic contact sharing failed: ${(error as Error).message}`,
+                });
+                return "failed" as const;
+              }
+            }),
+        ),
+      ).then((results) => {
+        const shared = results.filter((result) => result === "shared").length;
+        const failed = results.filter((result) => result === "failed").length;
+        if (shared) toast.success(`Contact shared from ${shared} account${shared === 1 ? "" : "s"}`);
+        if (failed) toast.error(`Contact sharing failed for ${failed} account${failed === 1 ? "" : "s"}`);
+      });
+    }
     if (!labels.length)
       toast.info(
         offset > 0
@@ -876,7 +921,15 @@ function BotFlowPage() {
           : "No inline buttons found on the bot's latest messages",
       );
     return perAccount;
-  }, [chatOpen, parsed?.username, previewChatFn, botBtnOffset]);
+  }, [addLog, autoShareContacts, chatOpen, parsed?.username, previewChatFn, botBtnOffset, sendMessageAsFn]);
+
+  useEffect(() => {
+    if (!autoShareContacts || !parsed?.username || chatOpen.length === 0) return;
+    const timer = window.setInterval(() => {
+      void refreshBotButtons();
+    }, 4_000);
+    return () => window.clearInterval(timer);
+  }, [autoShareContacts, chatOpen.length, parsed?.username, refreshBotButtons]);
 
   const broadcastPress = useCallback(
     async (label: string) => {
@@ -921,6 +974,11 @@ function BotFlowPage() {
             } else if (btn.kind === "reply") {
               await sendMessageAsFn({
                 data: { accountId, peerKey: v.peerKey, text: label },
+              });
+              ok++;
+            } else if (btn.kind === "requestPhone") {
+              await sendMessageAsFn({
+                data: { accountId, peerKey: v.peerKey, text: label || "Share contact", shareContact: true },
               });
               ok++;
             } else {
@@ -1609,6 +1667,14 @@ function BotFlowPage() {
                       >
                         {botBtnState.loading ? "Loading…" : botBtnState.labels.length ? "Refresh buttons" : "Load bot buttons"}
                       </Button>
+                      <label className="flex items-center gap-2 text-[11px] text-muted-foreground">
+                        <Switch
+                          checked={autoShareContacts}
+                          onCheckedChange={setAutoShareContacts}
+                          aria-label="Automatically share contact when requested"
+                        />
+                        Auto-share contact requests
+                      </label>
                       <div className="flex items-center gap-1">
                         <Button
                           size="sm"
@@ -1646,7 +1712,9 @@ function BotFlowPage() {
                         <div className="flex flex-wrap gap-1.5">
                           {botBtnState.labels.map((b) => {
                             const supported =
-                              b.kinds.includes("callback") || b.kinds.includes("reply");
+                              b.kinds.includes("callback") ||
+                              b.kinds.includes("reply") ||
+                              b.kinds.includes("requestPhone");
                             const miniable = b.kinds.includes("webapp") || b.kinds.includes("url");
                             const clickable = supported || miniable;
                             const cover = Object.values(botBtnState.perAccount).filter((v) =>
