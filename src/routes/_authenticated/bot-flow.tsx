@@ -812,6 +812,8 @@ function BotFlowPage() {
     perAccount: Record<string, PerAccountBtn>;
   }>({ loading: false, labels: [], perAccount: {} });
   const [pressingLabel, setPressingLabel] = useState<string | null>(null);
+  const [autoShareContacts, setAutoShareContacts] = useState(false);
+  const autoSharedContactKeys = useRef<Set<string>>(new Set());
   // 0 = latest bot message with buttons, 1 = previous, 2 = older, ...
   const [botBtnOffset, setBotBtnOffset] = useState(0);
 
@@ -869,6 +871,53 @@ function BotFlowPage() {
       kinds: [...kinds],
     }));
     setBotBtnState({ loading: false, labels, perAccount });
+    if (autoShareContacts) {
+      void Promise.all(
+        Object.entries(perAccount).flatMap(([accountId, value]) =>
+          value.buttons
+            .map((button, buttonIndex) => ({ accountId, value, button, buttonIndex }))
+            .filter(({ button }) => button.kind === "requestPhone")
+            .map(async ({ accountId, value, button, buttonIndex }) => {
+              const shareKey = `${accountId}:${value.msgId}:${buttonIndex}`;
+              if (autoSharedContactKeys.current.has(shareKey)) return "skipped" as const;
+              autoSharedContactKeys.current.add(shareKey);
+              try {
+                await sendMessageAsFn({
+                  data: {
+                    accountId,
+                    peerKey: value.peerKey,
+                    text: button.label || "Share contact",
+                    shareContact: true,
+                  },
+                });
+                addLog({
+                  accountId,
+                  level: "success",
+                  message: "Contact shared automatically after a profile request",
+                });
+                return "shared" as const;
+              } catch (error) {
+                autoSharedContactKeys.current.delete(shareKey);
+                addLog({
+                  accountId,
+                  level: "error",
+                  message: `Automatic contact sharing failed: ${(error as Error).message}`,
+                });
+                return "failed" as const;
+              }
+            }),
+        ),
+      ).then((results) => {
+        const shared = results.filter((result) => result === "shared").length;
+        const failed = results.filter((result) => result === "failed").length;
+        if (shared) toast.success(`Contact shared from ${shared} account${shared === 1 ? "" : "s"}`);
+        if (failed) toast.error(`Contact sharing failed for ${failed} account${failed === 1 ? "" : "s"}`);
+        if (shared) {
+          pingOpenChats();
+          setTimeout(pingOpenChats, 1500);
+        }
+      });
+    }
     if (!labels.length)
       toast.info(
         offset > 0
@@ -876,7 +925,7 @@ function BotFlowPage() {
           : "No inline buttons found on the bot's latest messages",
       );
     return perAccount;
-  }, [chatOpen, parsed?.username, previewChatFn, botBtnOffset]);
+  }, [addLog, autoShareContacts, chatOpen, parsed?.username, previewChatFn, botBtnOffset, sendMessageAsFn, pingOpenChats]);
 
   const broadcastPress = useCallback(
     async (label: string) => {
@@ -921,6 +970,11 @@ function BotFlowPage() {
             } else if (btn.kind === "reply") {
               await sendMessageAsFn({
                 data: { accountId, peerKey: v.peerKey, text: label },
+              });
+              ok++;
+            } else if (btn.kind === "requestPhone") {
+              await sendMessageAsFn({
+                data: { accountId, peerKey: v.peerKey, text: label || "Share contact", shareContact: true },
               });
               ok++;
             } else {
