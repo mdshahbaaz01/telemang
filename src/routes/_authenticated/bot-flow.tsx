@@ -912,10 +912,6 @@ function BotFlowPage() {
         const failed = results.filter((result) => result === "failed").length;
         if (shared) toast.success(`Contact shared from ${shared} account${shared === 1 ? "" : "s"}`);
         if (failed) toast.error(`Contact sharing failed for ${failed} account${failed === 1 ? "" : "s"}`);
-        if (shared) {
-          pingOpenChats();
-          setTimeout(pingOpenChats, 1500);
-        }
       });
     }
     if (!labels.length)
@@ -925,7 +921,15 @@ function BotFlowPage() {
           : "No inline buttons found on the bot's latest messages",
       );
     return perAccount;
-  }, [addLog, autoShareContacts, chatOpen, parsed?.username, previewChatFn, botBtnOffset, sendMessageAsFn, pingOpenChats]);
+  }, [addLog, autoShareContacts, chatOpen, parsed?.username, previewChatFn, botBtnOffset, sendMessageAsFn]);
+
+  useEffect(() => {
+    if (!autoShareContacts || !parsed?.username || chatOpen.length === 0) return;
+    const timer = window.setInterval(() => {
+      void refreshBotButtons();
+    }, 4_000);
+    return () => window.clearInterval(timer);
+  }, [autoShareContacts, chatOpen.length, parsed?.username, refreshBotButtons]);
 
   const broadcastPress = useCallback(
     async (label: string) => {
@@ -1663,6 +1667,14 @@ function BotFlowPage() {
                       >
                         {botBtnState.loading ? "Loading…" : botBtnState.labels.length ? "Refresh buttons" : "Load bot buttons"}
                       </Button>
+                      <label className="flex items-center gap-2 text-[11px] text-muted-foreground">
+                        <Switch
+                          checked={autoShareContacts}
+                          onCheckedChange={setAutoShareContacts}
+                          aria-label="Automatically share contact when requested"
+                        />
+                        Auto-share contact requests
+                      </label>
                       <div className="flex items-center gap-1">
                         <Button
                           size="sm"
