@@ -812,7 +812,7 @@ function BotFlowPage() {
     perAccount: Record<string, PerAccountBtn>;
   }>({ loading: false, labels: [], perAccount: {} });
   const [pressingLabel, setPressingLabel] = useState<string | null>(null);
-  const [autoShareContacts, setAutoShareContacts] = useState(false);
+  const [autoShareContacts, setAutoShareContacts] = useState(true);
   const autoSharedContactKeys = useRef<Set<string>>(new Set());
   // 0 = latest bot message with buttons, 1 = previous, 2 = older, ...
   const [botBtnOffset, setBotBtnOffset] = useState(0);
@@ -1712,7 +1712,9 @@ function BotFlowPage() {
                         <div className="flex flex-wrap gap-1.5">
                           {botBtnState.labels.map((b) => {
                             const supported =
-                              b.kinds.includes("callback") || b.kinds.includes("reply");
+                              b.kinds.includes("callback") ||
+                              b.kinds.includes("reply") ||
+                              b.kinds.includes("requestPhone");
                             const miniable = b.kinds.includes("webapp") || b.kinds.includes("url");
                             const clickable = supported || miniable;
                             const cover = Object.values(botBtnState.perAccount).filter((v) =>
